@@ -1,0 +1,7 @@
+[package]
+name = "slp"
+version = "0.1.0"
+authors = ["Trark"]
+
+[dependencies]
+nom = "1.0.0"
