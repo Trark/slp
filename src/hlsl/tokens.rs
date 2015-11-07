@@ -28,9 +28,9 @@ pub enum Token {
     Eof, // Marks the end of a stream
 
     Id(Identifier),
-    LiteralUint(u32),
-    LiteralInt(i32),
-    LiteralLong(i64),
+    LiteralInt(u64), // Int (Hlsl ints do not have sign, the - is an operator on the literal)
+    LiteralUint(u64), // Int with explicit unsigned type
+    LiteralLong(u64), // Int with explicit long type
     LiteralFloat(f32),
     LiteralDouble(f64),
 

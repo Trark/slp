@@ -2,7 +2,7 @@ use super::tokens::*;
 use nom::{IResult,Needed,Err,ErrorKind};
 use std::str;
 
-named!(digit<i64>, alt!(
+named!(digit<u64>, alt!(
     tag!("0") => { |_| { 0 } } |
     tag!("1") => { |_| { 1 } } |
     tag!("2") => { |_| { 2 } } |
@@ -15,10 +15,10 @@ named!(digit<i64>, alt!(
     tag!("9") => { |_| { 9 } }
 ));
 
-named!(digits<i64>, chain!(
+named!(digits<u64>, chain!(
     digits: many1!(digit),
     || {
-        let mut value = 0i64;
+        let mut value = 0u64;
         for digit in digits {
             value = value * 10;
             value += digit;
@@ -36,18 +36,12 @@ named!(int_type<IntType>, alt!(
 ));
 
 named!(literal_int<Token>, chain!(
-    negate: opt!(tag!("-")) ~
-    digits: digits ~
+    value: digits ~
     int_type_opt: opt!(int_type),
     || {
-        let mut value = digits;
-        match negate {
-            Some(_) => value = -value,
-            None => { }
-        };
         match int_type_opt {
-            None => Token::LiteralInt(value as i32),
-            Some(IntType::Uint) => Token::LiteralUint(value as u32),
+            None => Token::LiteralInt(value),
+            Some(IntType::Uint) => Token::LiteralUint(value),
             Some(IntType::Long) => Token::LiteralLong(value),
         }
     }
@@ -250,12 +244,9 @@ fn test_token() {
     assert_eq!(token(&b"name"[..]), IResult::Done(&b""[..], Token::Id(Identifier("name".to_string()))));
 
     assert_eq!(token(&b"12"[..]), IResult::Done(&b""[..], Token::LiteralInt(12)));
-    assert_eq!(token(&b"-12"[..]), IResult::Done(&b""[..], Token::LiteralInt(-12)));
     assert_eq!(token(&b"12u"[..]), IResult::Done(&b""[..], Token::LiteralUint(12)));
     assert_eq!(token(&b"12l"[..]), IResult::Done(&b""[..], Token::LiteralLong(12)));
     assert_eq!(token(&b"12L"[..]), IResult::Done(&b""[..], Token::LiteralLong(12)));
-    assert_eq!(token(&b"-12l"[..]), IResult::Done(&b""[..], Token::LiteralLong(-12)));
-    assert_eq!(token(&b"-12L"[..]), IResult::Done(&b""[..], Token::LiteralLong(-12)));
 
     assert_eq!(token(&b"{"[..]), IResult::Done(&b""[..], Token::LeftBrace));
     assert_eq!(token(&b"}"[..]), IResult::Done(&b""[..], Token::RightBrace));
@@ -314,6 +305,19 @@ fn test_token_stream() {
         Token::LeftParen,
         Token::RightParen,
         Token::Semicolon,
+    ])));
+
+    assert_eq!(token_stream(&b"-12"[..]), IResult::Done(&b""[..], TokenStream(vec![
+        Token::Minus,
+        Token::LiteralInt(12),
+    ])));
+    assert_eq!(token_stream(&b"-12l"[..]), IResult::Done(&b""[..], TokenStream(vec![
+        Token::Minus,
+        Token::LiteralLong(12),
+    ])));
+    assert_eq!(token_stream(&b"-12L"[..]), IResult::Done(&b""[..], TokenStream(vec![
+        Token::Minus,
+        Token::LiteralLong(12),
     ])));
 
     assert_eq!(token_stream(&b"<<"[..]), IResult::Done(&b""[..], TokenStream(vec![

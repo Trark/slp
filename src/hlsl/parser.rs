@@ -23,6 +23,18 @@ macro_rules! token (
             res
         }
     );
+    ($i:expr, $inp: pat => $res: expr) => (
+        {
+            if $i.len() == 0 {
+                IResult::Incomplete(Needed::Size(1))
+            } else {
+                match $i[0] {
+                    $inp => IResult::Done(&$i[1..], $res),
+                    _ => IResult::Error(Err::Position(ErrorKind::Custom(ParseError::WrongToken), $i))
+                }
+            }
+        }
+    );
 );
 
 fn parse_variablename(input: &[Token]) -> IResult<&[Token], String, ParseError> {
@@ -47,11 +59,11 @@ fn expr_paren(input: &[Token]) -> IResult<&[Token], Expression, ParseError> {
     alt!(input,
         delimited!(token!(Token::LeftParen), expr, token!(Token::RightParen)) |
         parse_variablename => { |name| { Expression::Variable(name) } } |
-        token!(Token::LiteralUint(_)) => { |tok: Token| { match tok { Token::LiteralUint(value) => Expression::LiteralUint(value), _ => unreachable!() } } } |
-        token!(Token::LiteralInt(_)) => { |tok: Token| { match tok { Token::LiteralInt(value) => Expression::LiteralInt(value), _ => unreachable!() } } } |
-        token!(Token::LiteralLong(_)) => { |tok: Token| { match tok { Token::LiteralLong(value) => Expression::LiteralLong(value), _ => unreachable!() } } } |
-        token!(Token::LiteralFloat(_)) => { |tok: Token| { match tok { Token::LiteralFloat(value) => Expression::LiteralFloat(value), _ => unreachable!() } } } |
-        token!(Token::LiteralDouble(_)) => { |tok: Token| { match tok { Token::LiteralDouble(value) => Expression::LiteralDouble(value), _ => unreachable!() } } }
+        token!(Token::LiteralInt(i) => Expression::LiteralInt(i)) |
+        token!(Token::LiteralUint(i) => Expression::LiteralUint(i)) |
+        token!(Token::LiteralLong(i) => Expression::LiteralLong(i)) |
+        token!(Token::LiteralFloat(i) => Expression::LiteralFloat(i)) |
+        token!(Token::LiteralDouble(i) => Expression::LiteralDouble(i))
     )
 }
 
@@ -335,6 +347,27 @@ fn globalvariable(input: &[Token]) -> IResult<&[Token], GlobalVariable, ParseErr
     )
 }
 
+fn functionattribute(input: &[Token]) -> IResult<&[Token], FunctionAttribute, ParseError> {
+    chain!(input,
+        token!(Token::LeftSquareBracket) ~
+        attr: alt!(
+            chain!(
+                map_res!(token!(Token::Id(_)), |tok| { if let Token::Id(Identifier(name)) = tok { match &name[..] { "numthreads" => Ok(name.clone()), _ => Err(()) } } else { Err(()) } }) ~
+                token!(Token::LeftParen) ~
+                x: token!(Token::LiteralInt(x) => x) ~
+                token!(Token::Comma) ~
+                y: token!(Token::LiteralInt(y) => y) ~
+                token!(Token::Comma) ~
+                z: token!(Token::LiteralInt(z) => z) ~
+                token!(Token::RightParen),
+                || { FunctionAttribute::NumThreads(x, y, z) }
+            )
+        ) ~
+        token!(Token::RightSquareBracket),
+        || { attr }
+    )
+}
+
 fn functionparam(input: &[Token]) -> IResult<&[Token], FunctionParam, ParseError> {
     chain!(input,
         typename: parse_typename ~
@@ -350,6 +383,7 @@ fn functionparam(input: &[Token]) -> IResult<&[Token], FunctionParam, ParseError
 
 fn functiondefinition(input: &[Token]) -> IResult<&[Token], FunctionDefinition, ParseError> {
     chain!(input,
+        attributes: many0!(functionattribute) ~
         ret: parse_typename ~
         func_name: parse_variablename ~
         params: delimited!(
@@ -362,36 +396,17 @@ fn functiondefinition(input: &[Token]) -> IResult<&[Token], FunctionDefinition, 
             many0!(statement),
             token!(Token::RightBrace)
         ),
-        || { FunctionDefinition { name: func_name, returntype: ret, params: params, body: body } }
+        || { FunctionDefinition { name: func_name, returntype: ret, params: params, body: body, attributes: attributes } }
     )
 }
 
-
-
-// Todo: Attribute parsing
-fn attribute(input: &[Token]) -> IResult<&[Token], Vec<()>, ParseError> {
-
-    fn not_end(input: &[Token]) -> IResult<&[Token], (), ParseError> {
-        if input.len() == 0 {
-            IResult::Incomplete(Needed::Size(1))
-        } else {
-            match input[0] {
-                Token::RightSquareBracket => IResult::Error(Err::Position(ErrorKind::Custom(ParseError::WrongToken), input)),
-                _ => IResult::Done(&input[1..], ()),
-            }
-        }
-    }
-
-    delimited!(input, token!(Token::LeftSquareBracket), many0!(not_end), token!(Token::RightSquareBracket))
-}
-
 fn rootdefinition(input: &[Token]) -> IResult<&[Token], RootDefinition, ParseError> {
-    chain!(input, many0!(attribute) ~ def: alt!(
+    alt!(input,
         structdefinition => { |structdef| { RootDefinition::Struct(structdef) } } |
         cbuffer => { |cbuffer| { RootDefinition::ConstantBuffer(cbuffer) } } |
         globalvariable => { |globalvariable| { RootDefinition::GlobalVariable(globalvariable) } } |
         functiondefinition => { |funcdef| { RootDefinition::Function(funcdef) } }
-    ), || { def })
+    )
 }
 
 pub fn module(input: &[Token]) -> IResult<&[Token], Vec<RootDefinition>, ParseError> {
@@ -691,14 +706,16 @@ fn test_rootdefinition() {
         returntype: TypeName("void".to_string()),
         params: vec![FunctionParam { name: "x".to_string(), typename: TypeName("float".to_string()) }],
         body: vec![],
+        attributes: vec![],
     };
     assert_eq!(functiondefinition_str(test_func_str), test_func_ast.clone());
     assert_eq!(rootdefinition_str(test_func_str), RootDefinition::Function(test_func_ast.clone()));
-    assert_eq!(rootdefinition_str("[numthreads(1, 1, 1)] void func(float x) { }"), RootDefinition::Function(FunctionDefinition {
+    assert_eq!(rootdefinition_str("[numthreads(16, 16, 1)] void func(float x) { }"), RootDefinition::Function(FunctionDefinition {
         name: "func".to_string(),
         returntype: TypeName("void".to_string()),
         params: vec![FunctionParam { name: "x".to_string(), typename: TypeName("float".to_string()) }],
         body: vec![],
+        attributes: vec![FunctionAttribute::NumThreads(16, 16, 1)],
     }));
 
     let constantvariable_str = parse_from_str(Box::new(constantvariable));

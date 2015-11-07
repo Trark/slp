@@ -26,9 +26,9 @@ pub enum UnaryOp {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
-    LiteralUint(u32),
-    LiteralInt(i32),
-    LiteralLong(i64),
+    LiteralInt(u64),
+    LiteralUint(u64),
+    LiteralLong(u64),
     LiteralFloat(f32),
     LiteralDouble(f64),
     Variable(String),
@@ -134,6 +134,11 @@ pub struct GlobalVariable {
 }
 
 #[derive(PartialEq, Debug, Clone)]
+pub enum FunctionAttribute {
+    NumThreads(u64, u64, u64),
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub struct FunctionParam {
     pub name: String,
     pub typename: TypeName,
@@ -145,6 +150,7 @@ pub struct FunctionDefinition {
     pub returntype: TypeName,
     pub params: Vec<FunctionParam>,
     pub body: Vec<Statement>,
+    pub attributes: Vec<FunctionAttribute>,
 }
 
 #[derive(PartialEq, Debug, Clone)]
