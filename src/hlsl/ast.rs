@@ -9,6 +9,7 @@ pub enum BinOp {
     Multiply,
     Divide,
     Modulus,
+    Assignment,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -25,7 +26,11 @@ pub enum UnaryOp {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
+    LiteralUint(u32),
     LiteralInt(i32),
+    LiteralLong(i64),
+    LiteralFloat(f32),
+    LiteralDouble(f64),
     Variable(String),
     UnaryOperation(UnaryOp, Box<Expression>),
     BinaryOperation(BinOp, Box<Expression>, Box<Expression>),
@@ -116,6 +121,19 @@ pub struct ReadResourceSlot(pub u32);
 pub struct ReadWriteResourceSlot(pub u32);
 
 #[derive(PartialEq, Debug, Clone)]
+pub enum GlobalSlot {
+    ReadSlot(u32),
+    ReadWriteSlot(u32),
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct GlobalVariable {
+    pub name: String,
+    pub typename: TypeName,
+    pub slot: Option<GlobalSlot>,
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub struct FunctionParam {
     pub name: String,
     pub typename: TypeName,
@@ -134,6 +152,7 @@ pub enum RootDefinition {
     Struct(StructDefinition),
     SamplerState,
     ConstantBuffer(ConstantBuffer),
+    GlobalVariable(GlobalVariable),
     Function(FunctionDefinition),
 }
 
