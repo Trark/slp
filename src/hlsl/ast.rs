@@ -70,11 +70,16 @@ pub enum ObjectType {
 }
 
 #[derive(PartialEq, Debug, Clone)]
+pub struct FunctionType(pub Box<Type>, pub Vec<Type>);
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum Type {
     Void,
     Structured(StructuredType),
     SamplerState,
     Object(ObjectType),
+    Array(Box<Type>),
+    Function(FunctionType),
 }
 
 impl Type {
@@ -82,7 +87,9 @@ impl Type {
 
     pub fn uint() -> Type { Type::from_scalar(ScalarType::UInt) }
     pub fn int() -> Type { Type::from_scalar(ScalarType::Int) }
+    pub fn long() -> Type { Type::from_scalar(ScalarType::Int) }
     pub fn float() -> Type { Type::from_scalar(ScalarType::Float) }
+    pub fn double() -> Type { Type::from_scalar(ScalarType::Double) }
     pub fn float4x4() -> Type { Type::Structured(StructuredType::Data(DataType::Matrix(ScalarType::Float, 4, 4))) }
     pub fn custom(name: &str) -> Type { Type::Structured(StructuredType::Custom(name.to_string())) }
 }
@@ -163,7 +170,7 @@ pub struct StructMember {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct StructDefinition {
-    pub name: Type,
+    pub name: String,
     pub members: Vec<StructMember>,
 }
 
@@ -198,12 +205,6 @@ pub struct ConstantBuffer {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct SamplerSlot(pub u32);
-
-#[derive(PartialEq, Debug, Clone)]
-pub struct ReadResourceSlot(pub u32);
-
-#[derive(PartialEq, Debug, Clone)]
-pub struct ReadWriteResourceSlot(pub u32);
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum GlobalSlot {

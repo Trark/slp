@@ -580,7 +580,7 @@ fn structmember(input: &[Token]) -> IResult<&[Token], StructMember, ParseError> 
 fn structdefinition(input: &[Token]) -> IResult<&[Token], StructDefinition, ParseError> {
     chain!(input,
         token!(Token::Struct) ~
-        structname: parse_typename ~
+        structname: parse_variablename ~
         token!(Token::LeftBrace) ~
         members: many0!(chain!(
             member: structmember,
@@ -989,7 +989,7 @@ fn test_rootdefinition() {
 
     let test_struct_str = "struct MyStruct { uint a; float b; };";
     let test_struct_ast = StructDefinition {
-        name: Type::custom("MyStruct"),
+        name: "MyStruct".to_string(),
         members: vec![
             StructMember { name: "a".to_string(), typename: Type::uint() },
             StructMember { name: "b".to_string(), typename: Type::float() },

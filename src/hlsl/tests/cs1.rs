@@ -5,6 +5,7 @@ use super::super::tokens::Token;
 use super::super::tokens::FollowedBy;
 use super::super::tokens::RegisterSlot;
 use super::super::lexer::token_stream;
+use super::super::parser::parse;
 use nom::IResult;
 
 fn token_id(name: &'static str) -> Token { Token::Id(Identifier(name.to_string())) }
@@ -15,7 +16,8 @@ fn cs1() {
     // Test a small compute shader (A simplified form of one the basic hlsl compute examples)
     let cs1 = include_bytes!("cs1.hlsl");
 
-    assert_eq!(token_stream(cs1), IResult::Done(&b""[..], TokenStream(vec![
+    let tokens_res = token_stream(cs1);
+    assert_eq!(tokens_res, IResult::Done(&b""[..], TokenStream(vec![
         Token::Struct,
         token_id("BufType"),
         Token::LeftBrace,
@@ -126,4 +128,8 @@ fn cs1() {
         Token::Semicolon,
         Token::RightBrace,
     ])));
+
+    let tokens = match tokens_res { IResult::Done(_, TokenStream(toks)) => toks, _ => panic!() };
+    let parse_result = parse("CSMAIN".to_string(), &tokens[..]);
+    assert!(!parse_result.is_none());
 }
