@@ -28,6 +28,8 @@ pub enum ParseError {
 
     FunctionPassedToAnotherFunction(String),
     FunctionArgumentTypeMismatch(Vec<FunctionType>, Vec<ir::Type>),
+
+    BinaryOperationArgumentTypeMismatch(ir::BinOp, ExpressionType, ExpressionType)
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -149,9 +151,13 @@ fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpressio
             Ok(TypedExpression(ir::Expression::UnaryOperation(op.clone(), Box::new(expr_ir.0)), expr_ir.1.clone()))
         },
         &ast::Expression::BinaryOperation(ref op, ref lhs, ref rhs) => {
-            let lhs_ir = try!(parse_expr(lhs, context));
-            let rhs_ir = try!(parse_expr(rhs, context));
-            Ok(TypedExpression(ir::Expression::BinaryOperation(op.clone(), Box::new(lhs_ir.0), Box::new(rhs_ir.0)), lhs_ir.1.clone()))
+            let TypedExpression(lhs_ir, lhs_type) = try!(parse_expr(lhs, context));
+            let TypedExpression(rhs_ir, rhs_type) = try!(parse_expr(rhs, context));
+            if lhs_type != rhs_type {
+                Err(ParseError::BinaryOperationArgumentTypeMismatch(op.clone(), lhs_type.clone(), rhs_type.clone()))
+            } else {
+                Ok(TypedExpression(ir::Expression::BinaryOperation(op.clone(), Box::new(lhs_ir), Box::new(rhs_ir)), lhs_type.clone()))
+            }
         },
         &ast::Expression::ArraySubscript(ref array, ref subscript) => {
             let array_ir = try!(parse_expr(array, context));
@@ -409,7 +415,7 @@ fn test_parse() {
         root_definitions: vec![
             ast::RootDefinition::GlobalVariable(ast::GlobalVariable {
                 name: "g_myInBuffer".to_string(),
-                typename: ast::Type::Object(ast::ObjectType::Buffer(ast::DataType::Vector(ast::ScalarType::Float, 4))),
+                typename: ast::Type::Object(ast::ObjectType::Buffer(ast::DataType::Scalar(ast::ScalarType::Int))),
                 slot: Some(ast::GlobalSlot::ReadSlot(0)),
             }),
             ast::RootDefinition::Function(ast::FunctionDefinition {
