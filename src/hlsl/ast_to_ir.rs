@@ -1,5 +1,6 @@
 
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use super::ir;
 use super::ast;
 
@@ -7,10 +8,9 @@ use super::ast;
 pub enum ParseError {
     Unimplemented,
 
-    ValueAlreadyDefined(String),
+    ValueAlreadyDefined(String, ExpressionType, ExpressionType),
     StructAlreadyDefined(String),
 
-    VariableNameAlreadyUsed(String),
     ConstantSlotAlreadyUsed(String, String),
     ReadResourceSlotAlreadyUsed(String, String),
     ReadWriteResourceSlotAlreadyUsed(String, String),
@@ -23,12 +23,24 @@ pub enum ParseError {
 
     CallOnNonFunction(String),
 
-    FunctionArgumentTypeMismatch(Vec<ir::Type>, Vec<ir::Type>),
+    FunctionPassedToAnotherFunction(String),
+    FunctionArgumentTypeMismatch(Vec<FunctionType>, Vec<ir::Type>),
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct FunctionType(pub Box<ir::Type>, pub Vec<ir::Type>);
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum ExpressionType {
+    Value(ir::Type),
+    Function(Vec<FunctionType>),
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Context {
     structs: HashMap<String, ir::StructDefinition>,
+
+    functions: HashMap<String, Vec<FunctionType>>,
 
     // Variables (and functions) visible in the current context. Maps names to types
     // One map per scope level (nearer the front is a wider scope)
@@ -37,19 +49,47 @@ pub struct Context {
 
 impl Context {
     pub fn new() -> Context {
-        Context { structs: HashMap::new(), variables: vec![HashMap::new()] }
+        Context { structs: HashMap::new(), functions: HashMap::new(), variables: vec![HashMap::new()] }
     }
 
-    pub fn insert_variable(&mut self, name: String, typename: ir::Type) -> Option<ir::Type> {
+    pub fn insert_variable(&mut self, name: String, typename: ir::Type) -> Result<(), ParseError> {
         assert!(self.variables.len() > 0);
+        if let Some(ety) = self.find_variable(&name) {
+            return Err(ParseError::ValueAlreadyDefined(name, ety, ExpressionType::Value(typename)))
+        };
         let last = self.variables.len() - 1;
-        self.variables[last].insert(name, typename)
+        match self.variables[last].entry(name.clone()) {
+            Entry::Occupied(occupied) => Err(ParseError::ValueAlreadyDefined(name, ExpressionType::Value(occupied.get().clone()), ExpressionType::Value(typename))),
+            Entry::Vacant(vacant) => { vacant.insert(typename); Ok(()) },
+        }
     }
 
-    pub fn find_variable(&self, name: &String) -> Option<ir::Type> {
+    pub fn insert_function(&mut self, name: String, function_type: FunctionType) -> Result<(), ParseError> {
+        if let Some(ExpressionType::Value(ty)) = self.find_variable(&name) {
+            return Err(ParseError::ValueAlreadyDefined(name, ExpressionType::Value(ty), ExpressionType::Function(vec![function_type])))
+        };
+        match self.functions.entry(name.clone()) {
+            Entry::Occupied(mut occupied) => {
+                for &FunctionType(_, ref args) in occupied.get() {
+                    if *args == function_type.1 {
+                        return Err(ParseError::ValueAlreadyDefined(name, ExpressionType::Function(occupied.get().clone()), ExpressionType::Function(vec![function_type])))
+                    }
+                };
+                occupied.get_mut().push(function_type);
+                Ok(())
+            },
+            Entry::Vacant(vacant) => { vacant.insert(vec![function_type]); Ok(()) },
+        }
+    }
+
+    pub fn find_variable(&self, name: &String) -> Option<ExpressionType> {
+        match self.functions.get(name) {
+            Some(tys) => return Some(ExpressionType::Function(tys.clone())),
+            None => { },
+        }
         for map in self.variables.iter().rev() {
             match map.get(name) {
-                Some(ty) => return Some(ty.clone()),
+                Some(ty) => return Some(ExpressionType::Value(ty.clone())),
                 None => { },
             }
         }
@@ -61,20 +101,42 @@ impl Context {
         scoped_vars.push(HashMap::new());
         Context {
             structs: self.structs.clone(),
+            functions: self.functions.clone(),
             variables: scoped_vars,
         }
     }
 }
 
-struct TypedExpression(ir::Expression, ir::Type);
+struct TypedExpression(ir::Expression, ExpressionType);
+
+fn get_function_debug_name(expr: &ir::Expression) -> String {
+    match expr {
+        &ir::Expression::Variable(ref s) => s.clone(),
+        _ => "<unknown>".to_string()
+    }
+}
+
+fn find_function_type(func_expr: &ir::Expression, overloads: ExpressionType, actual_params: Vec<ir::Type>) -> Result<ir::Type, ParseError> {
+    match overloads {
+        ExpressionType::Function(fts) => {
+            for ft in &fts {
+                if ft.1 == actual_params {
+                    return Ok(*ft.0.clone())
+                };
+            };
+            Err(ParseError::FunctionArgumentTypeMismatch(fts, actual_params))
+        },
+        _ => Err(ParseError::CallOnNonFunction(get_function_debug_name(func_expr))),
+    }
+}
 
 fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpression, ParseError> {
     match ast {
-        &ast::Expression::LiteralInt(i) => Ok(TypedExpression(ir::Expression::LiteralInt(i), ir::Type::int())),
-        &ast::Expression::LiteralUint(i) => Ok(TypedExpression(ir::Expression::LiteralUint(i), ir::Type::uint())),
-        &ast::Expression::LiteralLong(i) => Ok(TypedExpression(ir::Expression::LiteralLong(i), ir::Type::long())),
-        &ast::Expression::LiteralFloat(f) => Ok(TypedExpression(ir::Expression::LiteralFloat(f), ir::Type::float())),
-        &ast::Expression::LiteralDouble(f) => Ok(TypedExpression(ir::Expression::LiteralDouble(f), ir::Type::double())),
+        &ast::Expression::LiteralInt(i) => Ok(TypedExpression(ir::Expression::LiteralInt(i), ExpressionType::Value(ir::Type::int()))),
+        &ast::Expression::LiteralUint(i) => Ok(TypedExpression(ir::Expression::LiteralUint(i), ExpressionType::Value(ir::Type::uint()))),
+        &ast::Expression::LiteralLong(i) => Ok(TypedExpression(ir::Expression::LiteralLong(i), ExpressionType::Value(ir::Type::long()))),
+        &ast::Expression::LiteralFloat(f) => Ok(TypedExpression(ir::Expression::LiteralFloat(f), ExpressionType::Value(ir::Type::float()))),
+        &ast::Expression::LiteralDouble(f) => Ok(TypedExpression(ir::Expression::LiteralDouble(f), ExpressionType::Value(ir::Type::double()))),
         &ast::Expression::Variable(ref s) => {
             match context.find_variable(s) {
                 Some(ty) => Ok(TypedExpression(ir::Expression::Variable(s.clone()), ty.clone())),
@@ -94,50 +156,45 @@ fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpressio
             let array_ir = try!(parse_expr(array, context));
             let subscript_ir = try!(parse_expr(subscript, context));
             let indexed_type = match array_ir.1 {
-                ir::Type::Object(ir::ObjectType::Buffer(data_type)) |
-                ir::Type::Object(ir::ObjectType::RWBuffer(data_type)) => {
+                ExpressionType::Value(ir::Type::Object(ir::ObjectType::Buffer(data_type))) |
+                ExpressionType::Value(ir::Type::Object(ir::ObjectType::RWBuffer(data_type))) => {
                     ir::Type::Structured(ir::StructuredType::Data(data_type))
                 },
-                ir::Type::Object(ir::ObjectType::StructuredBuffer(structured_type)) |
-                ir::Type::Object(ir::ObjectType::RWStructuredBuffer(structured_type)) => {
+                ExpressionType::Value(ir::Type::Object(ir::ObjectType::StructuredBuffer(structured_type))) |
+                ExpressionType::Value(ir::Type::Object(ir::ObjectType::RWStructuredBuffer(structured_type))) => {
                     ir::Type::Structured(structured_type)
                 },
                 _ => return Err(ParseError::ArrayIndexingNonArrayType),
             };
             match subscript_ir.1 {
-                ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(ir::ScalarType::Int))) |
-                ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(ir::ScalarType::UInt))) => { },
+                ExpressionType::Value(ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(ir::ScalarType::Int)))) |
+                ExpressionType::Value(ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(ir::ScalarType::UInt)))) => { },
                 _ => return Err(ParseError::ArraySubscriptIndexNotInteger),
             };
-            Ok(TypedExpression(ir::Expression::ArraySubscript(Box::new(array_ir.0), Box::new(subscript_ir.0)), indexed_type))
+            Ok(TypedExpression(ir::Expression::ArraySubscript(Box::new(array_ir.0), Box::new(subscript_ir.0)), ExpressionType::Value(indexed_type)))
         },
         &ast::Expression::Member(ref composite, ref member) => {
             let composite_ir = try!(parse_expr(composite, context));
-            Ok(TypedExpression(ir::Expression::Member(Box::new(composite_ir.0), member.clone()), ir::Type::Void))
+            Ok(TypedExpression(ir::Expression::Member(Box::new(composite_ir.0), member.clone()), ExpressionType::Value(ir::Type::Void)))
         },
         &ast::Expression::Call(ref func, ref params) => {
             let func_ir = try!(parse_expr(func, context));
-            let mut params_ir = vec![];
-            let mut params_types = vec![];
+            let mut params_ir: Vec<ir::Expression> = vec![];
+            let mut params_types: Vec<ir::Type> = vec![];
             for param in params {
                 let TypedExpression(expr_ir, expr_type) = try!(parse_expr(param, context));
                 params_ir.push(expr_ir);
-                params_types.push(expr_type);
+                match expr_type {
+                    ExpressionType::Value(ty) => params_types.push(ty),
+                    ExpressionType::Function(_) => return Err(ParseError::FunctionPassedToAnotherFunction(get_function_debug_name(&func_ir.0)))
+                };
             };
-            let ty: ir::Type = match func_ir.1 {
-                ir::Type::Function(a) => {
-                    if a.1 != params_types {
-                        return Err(ParseError::FunctionArgumentTypeMismatch(a.1, params_types))
-                    };
-                    *a.0
-                },
-                _ => return Err(ParseError::CallOnNonFunction(match func_ir.0 { ir::Expression::Variable(s) => s.clone(), _ => "<unknown>".to_string() })),
-            };
-            Ok(TypedExpression(ir::Expression::Call(Box::new(func_ir.0), params_ir), ty))
+            let ty = try!(find_function_type(&func_ir.0, func_ir.1, params_types));
+            Ok(TypedExpression(ir::Expression::Call(Box::new(func_ir.0), params_ir), ExpressionType::Value(ty)))
         },
         &ast::Expression::Cast(ref ty, ref expr) => {
             let expr_ir = try!(parse_expr(expr, context));
-            Ok(TypedExpression(ir::Expression::Cast(ty.clone(), Box::new(expr_ir.0)), ir::Type::Void))
+            Ok(TypedExpression(ir::Expression::Cast(ty.clone(), Box::new(expr_ir.0)), ExpressionType::Value(ir::Type::Void)))
         },
     }
 }
@@ -149,10 +206,8 @@ fn parse_vardef(ast: &ast::VarDef, context: Context) -> Result<(ir::VarDef, Cont
     };
     let vd_ir = ir::VarDef { name: ast.name.clone(), typename: ast.typename.clone(), assignment: assign_ir };
     let mut context = context;
-    match context.insert_variable(vd_ir.name.clone(), vd_ir.typename.clone()) {
-        Some(_) => Err(ParseError::VariableNameAlreadyUsed(vd_ir.name.clone())),
-        None => Ok((vd_ir, context)),
-    }
+    try!(context.insert_variable(vd_ir.name.clone(), vd_ir.typename.clone()));
+    Ok((vd_ir, context))
 }
 
 fn parse_condition(ast: &ast::Condition, context: Context) -> Result<(ir::Condition, Context), ParseError> {
@@ -237,10 +292,7 @@ fn parse_rootdefinition(ast: &ast::RootDefinition, context: Context, globals: &m
         &ast::RootDefinition::SamplerState => ir::RootDefinition::SamplerState,
         &ast::RootDefinition::ConstantBuffer(ref cb) => {
             let cb_ir = ir::ConstantBuffer { name: cb.name.clone(), members: cb.members.clone() };
-            match next_context.insert_variable(cb_ir.name.clone(), ir::Type::custom(&cb_ir.name[..])) {
-                Some(_) => return Err(ParseError::VariableNameAlreadyUsed(cb_ir.name.clone())),
-                None => { },
-            };
+            try!(next_context.insert_variable(cb_ir.name.clone(), ir::Type::custom(&cb_ir.name[..])));
             match cb.slot {
                 Some(ast::ConstantSlot(slot)) => {
                     match globals.constants.insert(slot, cb_ir.name.clone()) {
@@ -254,10 +306,7 @@ fn parse_rootdefinition(ast: &ast::RootDefinition, context: Context, globals: &m
         },
         &ast::RootDefinition::GlobalVariable(ref gv) => {
             let gv_ir = ir::GlobalVariable { name: gv.name.clone(), typename: gv.typename.clone() };
-            match next_context.insert_variable(gv_ir.name.clone(), gv_ir.typename.clone()) {
-                Some(_) => return Err(ParseError::VariableNameAlreadyUsed(gv_ir.name.clone())),
-                None => { },
-            };
+            try!(next_context.insert_variable(gv_ir.name.clone(), gv_ir.typename.clone()));
             let entry = ir::GlobalEntry { name: gv_ir.name.clone(), typename: gv_ir.typename.clone() };
             match gv.slot {
                 Some(ast::GlobalSlot::ReadSlot(slot)) => {
@@ -280,10 +329,7 @@ fn parse_rootdefinition(ast: &ast::RootDefinition, context: Context, globals: &m
             let body_ir = {
                 let mut scoped_context = next_context.scoped();
                 for param in &fd.params {
-                    match scoped_context.insert_variable(param.name.clone(), param.typename.clone()) {
-                        Some(_) => return Err(ParseError::VariableNameAlreadyUsed(param.name.clone())),
-                        None => { },
-                    }
+                    try!(scoped_context.insert_variable(param.name.clone(), param.typename.clone()));
                 }
                 try!(parse_statement_vec(&fd.body, scoped_context))
             };
@@ -294,14 +340,11 @@ fn parse_rootdefinition(ast: &ast::RootDefinition, context: Context, globals: &m
                 body: body_ir,
                 attributes: fd.attributes.clone(),
             };
-            let func_type = ir::Type::Function(ir::FunctionType(
+            let func_type = FunctionType(
                 Box::new(fd_ir.returntype.clone()),
                 fd_ir.params.iter().map(|p| { p.typename.clone() }).collect()
-            ));
-            match next_context.insert_variable(fd_ir.name.clone(), func_type) {
-                Some(_) => return Err(ParseError::ValueAlreadyDefined(fd_ir.name.clone())),
-                None => { },
-            };
+            );
+            try!(next_context.insert_function(fd_ir.name.clone(), func_type));
             ir::RootDefinition::Function(fd_ir)
         }
 
@@ -337,6 +380,13 @@ fn test_parse() {
                 name: "myFunc".to_string(),
                 returntype: ast::Type::Void,
                 params: vec![ast::FunctionParam { name: "x".to_string(), typename: ast::Type::uint() }],
+                body: vec![],
+                attributes: vec![],
+            }),
+            ast::RootDefinition::Function(ast::FunctionDefinition {
+                name: "myFunc".to_string(),
+                returntype: ast::Type::Void,
+                params: vec![ast::FunctionParam { name: "x".to_string(), typename: ast::Type::float() }],
                 body: vec![],
                 attributes: vec![],
             }),

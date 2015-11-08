@@ -6,7 +6,6 @@ pub use super::ast::ScalarType as ScalarType;
 pub use super::ast::DataType as DataType;
 pub use super::ast::StructuredType as StructuredType;
 pub use super::ast::ObjectType as ObjectType;
-pub use super::ast::FunctionType as FunctionType;
 pub use super::ast::Type as Type;
 pub use super::ast::BinOp as BinOp;
 pub use super::ast::UnaryOp as UnaryOp;

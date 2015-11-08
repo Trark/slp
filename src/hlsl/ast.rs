@@ -70,16 +70,12 @@ pub enum ObjectType {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct FunctionType(pub Box<Type>, pub Vec<Type>);
-
-#[derive(PartialEq, Debug, Clone)]
 pub enum Type {
     Void,
     Structured(StructuredType),
     SamplerState,
     Object(ObjectType),
     Array(Box<Type>),
-    Function(FunctionType),
 }
 
 impl Type {
