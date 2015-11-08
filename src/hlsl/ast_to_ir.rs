@@ -15,8 +15,7 @@ pub enum ParseError {
     ReadResourceSlotAlreadyUsed(String, String),
     ReadWriteResourceSlotAlreadyUsed(String, String),
 
-    UnknownVariable(String),
-    UnknownFunction(String),
+    UnknownIdentifier(String),
 
     ArrayIndexingNonArrayType,
     ArraySubscriptIndexNotInteger,
@@ -54,7 +53,7 @@ impl Context {
 
     pub fn insert_variable(&mut self, name: String, typename: ir::Type) -> Result<(), ParseError> {
         assert!(self.variables.len() > 0);
-        if let Some(ety) = self.find_variable(&name) {
+        if let Ok(ety) = self.find_variable(&name) {
             return Err(ParseError::ValueAlreadyDefined(name, ety, ExpressionType::Value(typename)))
         };
         let last = self.variables.len() - 1;
@@ -65,7 +64,7 @@ impl Context {
     }
 
     pub fn insert_function(&mut self, name: String, function_type: FunctionType) -> Result<(), ParseError> {
-        if let Some(ExpressionType::Value(ty)) = self.find_variable(&name) {
+        if let Ok(ExpressionType::Value(ty)) = self.find_variable(&name) {
             return Err(ParseError::ValueAlreadyDefined(name, ExpressionType::Value(ty), ExpressionType::Function(vec![function_type])))
         };
         match self.functions.entry(name.clone()) {
@@ -82,18 +81,18 @@ impl Context {
         }
     }
 
-    pub fn find_variable(&self, name: &String) -> Option<ExpressionType> {
+    pub fn find_variable(&self, name: &String) -> Result<ExpressionType, ParseError> {
         match self.functions.get(name) {
-            Some(tys) => return Some(ExpressionType::Function(tys.clone())),
+            Some(tys) => return Ok(ExpressionType::Function(tys.clone())),
             None => { },
         }
         for map in self.variables.iter().rev() {
             match map.get(name) {
-                Some(ty) => return Some(ExpressionType::Value(ty.clone())),
+                Some(ty) => return Ok(ExpressionType::Value(ty.clone())),
                 None => { },
             }
         }
-        None
+        Err(ParseError::UnknownIdentifier(name.clone()))
     }
 
     pub fn scoped(&self) -> Context {
@@ -138,10 +137,8 @@ fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpressio
         &ast::Expression::LiteralFloat(f) => Ok(TypedExpression(ir::Expression::LiteralFloat(f), ExpressionType::Value(ir::Type::float()))),
         &ast::Expression::LiteralDouble(f) => Ok(TypedExpression(ir::Expression::LiteralDouble(f), ExpressionType::Value(ir::Type::double()))),
         &ast::Expression::Variable(ref s) => {
-            match context.find_variable(s) {
-                Some(ty) => Ok(TypedExpression(ir::Expression::Variable(s.clone()), ty.clone())),
-                None => Err(ParseError::UnknownVariable(s.clone())),
-            }
+            let var_type = try!(context.find_variable(s));
+            Ok(TypedExpression(ir::Expression::Variable(s.clone()), var_type))
         },
         &ast::Expression::UnaryOperation(ref op, ref expr) => {
             let expr_ir = try!(parse_expr(expr, context));
