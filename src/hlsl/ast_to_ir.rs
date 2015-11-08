@@ -16,6 +16,10 @@ pub enum ParseError {
     ReadWriteResourceSlotAlreadyUsed(String, String),
 
     UnknownIdentifier(String),
+    UnknownType(ExpressionType),
+
+    TypeDoesNotHaveMembers(ExpressionType),
+    UnknownTypeMember(ExpressionType, String),
 
     ArrayIndexingNonArrayType,
     ArraySubscriptIndexNotInteger,
@@ -171,8 +175,43 @@ fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpressio
             Ok(TypedExpression(ir::Expression::ArraySubscript(Box::new(array_ir.0), Box::new(subscript_ir.0)), ExpressionType::Value(indexed_type)))
         },
         &ast::Expression::Member(ref composite, ref member) => {
-            let composite_ir = try!(parse_expr(composite, context));
-            Ok(TypedExpression(ir::Expression::Member(Box::new(composite_ir.0), member.clone()), ExpressionType::Value(ir::Type::Void)))
+            let TypedExpression(composite_ir, composite_type) = try!(parse_expr(composite, context));
+            let ety = match &composite_type {
+                &ExpressionType::Value(ir::Type::Structured(ir::StructuredType::Custom(ref user_defined_name))) => {
+                    match context.structs.get(user_defined_name) {
+                        Some(struct_def) => {
+                            fn find_struct_member(struct_def: &ir::StructDefinition, member: &String, struct_type: &ExpressionType) -> Result<ExpressionType, ParseError> {
+                                for struct_member in &struct_def.members {
+                                    if &struct_member.name == member {
+                                        return Ok(ExpressionType::Value(struct_member.typename.clone()))
+                                    }
+                                }
+                                Err(ParseError::UnknownTypeMember(struct_type.clone(), member.clone()))
+                            }
+                            try!(find_struct_member(struct_def, member, &composite_type))
+                        },
+                        None => return Err(ParseError::UnknownType(composite_type.clone())),
+                    }
+                }
+                &ExpressionType::Value(ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Vector(ref scalar, ref x)))) => {
+                    // Todo: Swizzling
+                    let exists = match &member[..] {
+                        "x" | "r" if *x >= 1 => true,
+                        "y" | "g" if *x >= 2 => true,
+                        "z" | "b" if *x >= 3 => true,
+                        "w" | "a" if *x >= 4 => true,
+                        _ => false,
+                    };
+                    if exists {
+                        ExpressionType::Value(ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(scalar.clone()))))
+                    } else {
+                        return Err(ParseError::UnknownTypeMember(composite_type.clone(), member.clone()));
+                    }
+                }
+                // Todo: Matrix components + Object members
+                _ => return Err(ParseError::TypeDoesNotHaveMembers(composite_type.clone())),
+            };
+            Ok(TypedExpression(ir::Expression::Member(Box::new(composite_ir), member.clone()), ety))
         },
         &ast::Expression::Call(ref func, ref params) => {
             let func_ir = try!(parse_expr(func, context));

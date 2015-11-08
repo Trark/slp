@@ -6,6 +6,7 @@ use super::super::tokens::FollowedBy;
 use super::super::tokens::RegisterSlot;
 use super::super::lexer::token_stream;
 use super::super::parser::parse;
+use super::super::ast_to_ir;
 use nom::IResult;
 
 fn token_id(name: &'static str) -> Token { Token::Id(Identifier(name.to_string())) }
@@ -132,4 +133,8 @@ fn cs1() {
     let tokens = match tokens_res { IResult::Done(_, TokenStream(toks)) => toks, _ => panic!() };
     let parse_result = parse("CSMAIN".to_string(), &tokens[..]);
     assert!(!parse_result.is_none());
+
+    let ast = match parse_result { Some(ast) => ast, _ => panic!() };
+    let ir_result = ast_to_ir::parse(&ast);
+    assert!(ir_result.is_ok());
 }
