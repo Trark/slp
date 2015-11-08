@@ -54,6 +54,7 @@ pub enum Statement {
     If(Condition, Box<Statement>),
     For(Condition, Condition, Condition, Box<Statement>),
     While(Condition, Box<Statement>),
+    Return(Expression),
 }
 
 pub use super::ast::StructMember as StructMember;

@@ -64,6 +64,7 @@ pub enum Token {
     For,
     While,
     Switch,
+    Return,
 
     Struct,
     SamplerState,

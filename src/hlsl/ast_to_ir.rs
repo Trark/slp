@@ -203,6 +203,9 @@ fn parse_statement(ast: &ast::Statement, context: Context) -> Result<(Option<ir:
             let statement_ir = Box::new(match statement_ir_opt { Some(statement_ir) => statement_ir, None => ir::Statement::Block(vec![]) });
             Ok((Some(ir::Statement::While(cond_ir, statement_ir)), context))
         },
+        &ast::Statement::Return(ref expr) => {
+            Ok((Some(ir::Statement::Return(try!(parse_expr(expr, &context)).0)), context))
+        },
     }
 }
 

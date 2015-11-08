@@ -564,6 +564,7 @@ fn statement(input: &[Token]) -> IResult<&[Token], Statement, ParseError> {
         ) |
         chain!(token!(Token::While) ~ token!(Token::LeftParen) ~ cond: condition ~ token!(Token::RightParen) ~ inner: statement, || { Statement::While(cond, Box::new(inner)) }) |
         chain!(var: vardef ~ token!(Token::Semicolon), || { Statement::Var(var) }) |
+        chain!(token!(Token::Return) ~ expression_statement: expr ~ token!(Token::Semicolon), || { Statement::Return(expression_statement) }) |
         chain!(expression_statement: expr ~ token!(Token::Semicolon), || { Statement::Expression(expression_statement) })
     )
 }

@@ -160,6 +160,7 @@ pub enum Statement {
     If(Condition, Box<Statement>),
     For(Condition, Condition, Condition, Box<Statement>),
     While(Condition, Box<Statement>),
+    Return(Expression),
 }
 
 #[derive(PartialEq, Debug, Clone)]

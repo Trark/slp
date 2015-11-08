@@ -123,6 +123,7 @@ named!(reserved_word_if<()>, chain!(tag!("i") ~ tag!("f"), || { }));
 named!(reserved_word_for<()>, chain!(tag!("f") ~ tag!("o") ~ tag!("r"), || { }));
 named!(reserved_word_while<()>, chain!(tag!("w") ~ tag!("h") ~ tag!("i") ~ tag!("l") ~ tag!("e"), || { }));
 named!(reserved_word_switch<()>, chain!(tag!("s") ~ tag!("w") ~ tag!("i") ~ tag!("t") ~ tag!("c") ~ tag!("h"), || { }));
+named!(reserved_word_return<()>, chain!(tag!("r") ~ tag!("e") ~ tag!("t") ~ tag!("u") ~ tag!("r") ~ tag!("n"), || { }));
 named!(reserved_word_struct<()>, chain!(tag!("s") ~ tag!("t") ~ tag!("r") ~ tag!("u") ~ tag!("c") ~ tag!("t"), || { }));
 named!(reserved_word_samplerstate<()>, chain!(tag!("S") ~ tag!("a") ~ tag!("m") ~ tag!("p") ~ tag!("l") ~ tag!("e") ~ tag!("r") ~ tag!("S") ~ tag!("t") ~ tag!("a") ~ tag!("t") ~ tag!("e") , || { }));
 named!(reserved_word_cbuffer<()>, chain!(tag!("c") ~ tag!("b") ~ tag!("u") ~ tag!("f") ~ tag!("f") ~ tag!("e") ~ tag!("r"), || { }));
@@ -133,6 +134,7 @@ named!(reserved_word<()>, alt!(
     reserved_word_for |
     reserved_word_while |
     reserved_word_switch |
+    reserved_word_return |
     reserved_word_struct |
     reserved_word_samplerstate |
     reserved_word_cbuffer |
@@ -222,6 +224,7 @@ named!(token_no_whitespace<Token>, alt!(
     reserved_word_for => { |_| { Token::For } } |
     reserved_word_while => { |_| { Token::While } } |
     reserved_word_switch => { |_| { Token::Switch } } |
+    reserved_word_return => { |_| { Token::Return } } |
 
     reserved_word_struct => { |_| { Token::Struct } } |
     reserved_word_samplerstate => { |_| { Token::SamplerState } } |
