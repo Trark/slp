@@ -1,6 +1,91 @@
 
+/// Basic scalar types
 #[derive(PartialEq, Debug, Clone)]
-pub struct TypeName(pub String);
+pub enum ScalarType {
+    Bool,
+    Int,
+    UInt,
+    Half,
+    Float,
+    Double,
+}
+
+/// A type that can be used in data buffers (Buffer / RWBuffer / etc)
+/// These can interpret data in buffers bound with a format
+/// FormatType might be a better name because they can bind resource
+/// views with a format, but HLSL just called them Buffer and other
+/// apis call them data buffers
+#[derive(PartialEq, Debug, Clone)]
+pub enum DataType {
+    Scalar(ScalarType),
+    Vector(ScalarType, u32),
+    Matrix(ScalarType, u32, u32),
+}
+
+/// A type that can be used in structured buffers
+/// These are the both struct defined types, the format data types
+#[derive(PartialEq, Debug, Clone)]
+pub enum StructuredType {
+    Data(DataType),
+    Custom(String), // Struct + User defined types
+}
+
+/// Hlsl Object Types
+#[derive(PartialEq, Debug, Clone)]
+pub enum ObjectType {
+
+    // Data buffers
+    Buffer(DataType),
+    RWBuffer(DataType),
+
+    // Raw buffers
+    ByteAddressBuffer,
+    RWByteAddressBuffer,
+
+    // Structured buffers
+    StructuredBuffer(StructuredType),
+    RWStructuredBuffer(StructuredType),
+    AppendStructuredBuffer(StructuredType),
+    ConsumeStructuredBuffer(StructuredType),
+
+    // Textures
+    Texture1D(DataType),
+    Texture1DArray(DataType),
+    Texture2D(DataType),
+    Texture2DArray(DataType),
+    Texture2DMS(DataType),
+    Texture2DMSArray(DataType),
+    Texture3D(DataType),
+    TextureCube(DataType),
+    TextureCubeArray(DataType),
+    RWTexture1D(DataType),
+    RWTexture1DArray(DataType),
+    RWTexture2D(DataType),
+    RWTexture2DArray(DataType),
+    RWTexture3D(DataType),
+
+    // Tesselation patches
+    InputPatch,
+    OutputPatch,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum Type {
+    Void,
+    Structured(StructuredType),
+    SamplerState,
+    Object(ObjectType),
+}
+
+impl Type {
+    pub fn from_scalar(scalar: ScalarType) -> Type { Type::Structured(StructuredType::Data(DataType::Scalar(scalar))) }
+
+    pub fn uint() -> Type { Type::from_scalar(ScalarType::UInt) }
+    pub fn int() -> Type { Type::from_scalar(ScalarType::Int) }
+    pub fn float() -> Type { Type::from_scalar(ScalarType::Float) }
+    pub fn float4x4() -> Type { Type::Structured(StructuredType::Data(DataType::Matrix(ScalarType::Float, 4, 4))) }
+    pub fn custom(name: &str) -> Type { Type::Structured(StructuredType::Custom(name.to_string())) }
+}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum BinOp {
@@ -37,18 +122,18 @@ pub enum Expression {
     ArraySubscript(Box<Expression>, Box<Expression>),
     Member(Box<Expression>, String),
     Call(Box<Expression>, Vec<Expression>),
-    Cast(TypeName, Box<Expression>),
+    Cast(Type, Box<Expression>),
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct VarDef {
     pub name: String,
-    pub typename: TypeName,
+    pub typename: Type,
     pub assignment: Option<Expression>,
 }
 
 impl VarDef {
-    pub fn new(name: String, typename: TypeName, assignment: Option<Expression>) -> VarDef {
+    pub fn new(name: String, typename: Type, assignment: Option<Expression>) -> VarDef {
         VarDef { name: name, typename: typename, assignment: assignment }
     }
 }
@@ -73,12 +158,12 @@ pub enum Statement {
 #[derive(PartialEq, Debug, Clone)]
 pub struct StructMember {
     pub name: String,
-    pub typename: TypeName,
+    pub typename: Type,
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct StructDefinition {
-    pub name: TypeName,
+    pub name: Type,
     pub members: Vec<StructMember>,
 }
 
@@ -100,7 +185,7 @@ pub struct PackOffset(pub u32, pub PackSubOffset);
 #[derive(PartialEq, Debug, Clone)]
 pub struct ConstantVariable {
     pub name: String,
-    pub typename: TypeName,
+    pub typename: Type,
     pub offset: Option<PackOffset>,
 }
 
@@ -129,7 +214,7 @@ pub enum GlobalSlot {
 #[derive(PartialEq, Debug, Clone)]
 pub struct GlobalVariable {
     pub name: String,
-    pub typename: TypeName,
+    pub typename: Type,
     pub slot: Option<GlobalSlot>,
 }
 
@@ -141,13 +226,13 @@ pub enum FunctionAttribute {
 #[derive(PartialEq, Debug, Clone)]
 pub struct FunctionParam {
     pub name: String,
-    pub typename: TypeName,
+    pub typename: Type,
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct FunctionDefinition {
     pub name: String,
-    pub returntype: TypeName,
+    pub returntype: Type,
     pub params: Vec<FunctionParam>,
     pub body: Vec<Statement>,
     pub attributes: Vec<FunctionAttribute>,

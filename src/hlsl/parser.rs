@@ -7,6 +7,7 @@ pub enum ParseError {
     WrongToken,
     ExpectingIdentifier,
     WrongSlotType,
+    UnknownType,
 }
 
 macro_rules! token (
@@ -41,17 +42,316 @@ fn parse_variablename(input: &[Token]) -> IResult<&[Token], String, ParseError> 
     map!(input, token!(Token::Id(_)), |tok| { match tok { Token::Id(Identifier(name)) => name.clone(), _ => unreachable!() } })
 }
 
-fn parse_typename(input: &[Token]) -> IResult<&[Token], TypeName, ParseError> {
-    chain!(input,
-        root: token!(Token::Id(_)) ~
-        // Todo: Implement proper type arguments
-        opt!(delimited!(token!(Token::LeftAngleBracket(_)), parse_typename, token!(Token::RightAngleBracket(_)))),
-        || {
-            match &root {
-                &Token::Id(Identifier(ref name)) => TypeName(name.clone()),
-                _ => unreachable!()
+fn parse_datatype(input: &[Token]) -> IResult<&[Token], DataType, ParseError> {
+
+    // Parse a vector dimension as a token
+    fn parse_digit(input: &[Token]) -> IResult<&[Token], u32, ParseError> {
+        token!(input, Token::LiteralInt(i) => i as u32)
+    }
+
+    // Parse scalar type as part of a string
+    fn parse_scalartype_str(input: &[u8]) -> IResult<&[u8], ScalarType> {
+        alt!(input,
+            chain!(tag!("b") ~ tag!("o") ~ tag!("o") ~ tag!("l"), || { ScalarType::Bool }) |
+            chain!(tag!("i") ~ tag!("n") ~ tag!("t"), || { ScalarType::Int }) |
+            chain!(tag!("u") ~ tag!("i") ~ tag!("n") ~ tag!("t"), || { ScalarType::UInt }) |
+            chain!(tag!("d") ~ tag!("w") ~ tag!("o") ~ tag!("r") ~ tag!("d"), || { ScalarType::UInt }) |
+            chain!(tag!("f") ~ tag!("l") ~ tag!("o") ~ tag!("a") ~ tag!("t"), || { ScalarType::Float }) |
+            chain!(tag!("d") ~ tag!("o") ~ tag!("u") ~ tag!("b") ~ tag!("l") ~ tag!("e"), || { ScalarType::Double })
+        )
+    }
+
+    // Parse scalar type as a full token
+    fn parse_scalartype(input: &[Token]) -> IResult<&[Token], ScalarType, ParseError> {
+        if input.len() == 0 {
+            IResult::Incomplete(Needed::Size(1))
+        } else {
+            match &input[0] {
+                &Token::Id(Identifier(ref name)) => {
+                    match parse_scalartype_str(&name[..].as_bytes()) {
+                        IResult::Done(rest, ty) => if rest.len() == 0 {
+                            IResult::Done(&input[1..], ty)
+                        } else {
+                            IResult::Error(Err::Position(ErrorKind::Custom(ParseError::UnknownType), input))
+                        },
+                        IResult::Incomplete(rem) => IResult::Incomplete(rem),
+                        IResult::Error(_) => IResult::Error(Err::Position(ErrorKind::Custom(ParseError::UnknownType), input)),
+                    }
+                },
+                _ => IResult::Error(Err::Position(ErrorKind::Custom(ParseError::WrongToken), input))
             }
         }
+    }
+
+
+    fn parse_datatype_str(typename: &str) -> Option<DataType> {
+
+        fn digit(input: &[u8]) -> IResult<&[u8], u32> {
+            alt!(input,
+                tag!("1") => { |_| { 1 } } |
+                tag!("2") => { |_| { 2 } } |
+                tag!("3") => { |_| { 3 } } |
+                tag!("4") => { |_| { 4 } }
+            )
+        }
+
+        fn parse_str(input: &[u8]) -> IResult<&[u8], DataType> {
+            match parse_scalartype_str(input) {
+                IResult::Incomplete(rem) => IResult::Incomplete(rem),
+                IResult::Error(err) => IResult::Error(err),
+                IResult::Done(rest, ty) => {
+                    if rest.len() == 0 {
+                        IResult::Done(&[], DataType::Scalar(ty))
+                    } else {
+                        match digit(rest) {
+                            IResult::Incomplete(rem) => IResult::Incomplete(rem),
+                            IResult::Error(err) => IResult::Error(err),
+                            IResult::Done(rest, x) => {
+                                if rest.len() == 0 {
+                                    IResult::Done(&[], DataType::Vector(ty, x))
+                                } else {
+                                    match preceded!(rest, tag!("x"), digit) {
+                                        IResult::Incomplete(rem) => IResult::Incomplete(rem),
+                                        IResult::Error(err) => IResult::Error(err),
+                                        IResult::Done(rest, y) => if rest.len() == 0 {
+                                            IResult::Done(&[], DataType::Matrix(ty, x, y))
+                                        } else {
+                                            IResult::Error(Err::Position(ErrorKind::Custom(0), input))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        match parse_str(&typename[..].as_bytes()) {
+            IResult::Done(rest, ty) => { assert_eq!(rest.len(), 0); Some(ty) },
+            IResult::Incomplete(_) | IResult::Error(_) => None,
+        }
+    }
+
+    if input.len() == 0 {
+        IResult::Incomplete(Needed::Size(1))
+    } else {
+        match &input[0] {
+            &Token::Id(Identifier(ref name)) => {
+                match &name[..] {
+                    "vector" => {
+                        chain!(&input[1..],
+                            token!(Token::LeftAngleBracket(_)) ~
+                            scalar: parse_scalartype ~
+                            token!(Token::Comma) ~
+                            x: parse_digit ~
+                            token!(Token::RightAngleBracket(_)),
+                            || { DataType::Vector(scalar, x) }
+                        )
+                    },
+                    "matrix" => {
+                        chain!(&input[1..],
+                            token!(Token::LeftAngleBracket(_)) ~
+                            scalar: parse_scalartype ~
+                            token!(Token::Comma) ~
+                            x: parse_digit ~ 
+                            token!(Token::Comma) ~
+                            y: parse_digit ~
+                            token!(Token::RightAngleBracket(_)),
+                            || { DataType::Matrix(scalar, x, y) }
+                        )
+                    },
+                    _ => match parse_datatype_str(&name[..]) {
+                        Some(ty) => IResult::Done(&input[1..], ty),
+                        None => IResult::Error(Err::Position(ErrorKind::Custom(ParseError::UnknownType), input)),
+                    }
+                }
+            },
+            _ => IResult::Error(Err::Position(ErrorKind::Custom(ParseError::WrongToken), input))
+        }
+    }
+}
+
+fn parse_structuredtype(input: &[Token]) -> IResult<&[Token], StructuredType, ParseError> {
+    alt!(input,
+        parse_datatype => { |ty| { StructuredType::Data(ty) } } |
+        token!(Token::Id(Identifier(ref name)) => StructuredType::Custom(name.clone()))
+    )
+}
+
+fn parse_objecttype(input: &[Token]) -> IResult<&[Token], ObjectType, ParseError> {
+    if input.len() == 0 {
+        return IResult::Incomplete(Needed::Size(1))
+    }
+
+    enum ParseType {
+        Buffer,
+        RWBuffer,
+
+        ByteAddressBuffer,
+        RWByteAddressBuffer,
+
+        StructuredBuffer,
+        RWStructuredBuffer,
+        AppendStructuredBuffer,
+        ConsumeStructuredBuffer,
+
+        Texture1D,
+        Texture1DArray,
+        Texture2D,
+        Texture2DArray,
+        Texture2DMS,
+        Texture2DMSArray,
+        Texture3D,
+        TextureCube,
+        TextureCubeArray,
+        RWTexture1D,
+        RWTexture1DArray,
+        RWTexture2D,
+        RWTexture2DArray,
+        RWTexture3D,
+
+        InputPatch,
+        OutputPatch,
+    }
+
+    let object_type = match &input[0] {
+        &Token::Id(Identifier(ref name)) => {
+            match &name[..] {
+                "Buffer" => ParseType::Buffer,
+                "RWBuffer" => ParseType::RWBuffer,
+
+                "ByteAddressBuffer" => ParseType::ByteAddressBuffer,
+                "RWByteAddressBuffer" => ParseType::RWByteAddressBuffer,
+
+                "StructuredBuffer" => ParseType::StructuredBuffer,
+                "RWStructuredBuffer" => ParseType::RWStructuredBuffer,
+                "AppendStructuredBuffer" => ParseType::AppendStructuredBuffer,
+                "ConsumeStructuredBuffer" => ParseType::ConsumeStructuredBuffer,
+
+                "Texture1D" => ParseType::Texture1D,
+                "Texture1DArray" => ParseType::Texture1DArray,
+                "Texture2D" => ParseType::Texture2D,
+                "Texture2DArray" => ParseType::Texture2DArray,
+                "Texture2DMS" => ParseType::Texture2DMS,
+                "Texture2DMSArray" => ParseType::Texture2DMSArray,
+                "Texture3D" => ParseType::Texture3D,
+                "TextureCube" => ParseType::TextureCube,
+                "TextureCubeArray" => ParseType::TextureCubeArray,
+                "RWTexture1D" => ParseType::RWTexture1D,
+                "RWTexture1DArray" => ParseType::RWTexture1DArray,
+                "RWTexture2D" => ParseType::RWTexture2D,
+                "RWTexture2DArray" => ParseType::RWTexture2DArray,
+                "RWTexture3D" => ParseType::RWTexture3D,
+
+                "InputPatch" => ParseType::InputPatch,
+                "OutputPatch" => ParseType::OutputPatch,
+
+                _ => return IResult::Error(Err::Position(ErrorKind::Custom(ParseError::UnknownType), input))
+            }
+        },
+        _ => return IResult::Error(Err::Position(ErrorKind::Custom(ParseError::UnknownType), input))
+    };
+
+    let rest = &input[1..];
+
+    match object_type {
+
+        ParseType::ByteAddressBuffer => IResult::Done(rest, ObjectType::ByteAddressBuffer),
+        ParseType::RWByteAddressBuffer => IResult::Done(rest, ObjectType::RWByteAddressBuffer),
+
+        ParseType::Buffer |
+        ParseType::RWBuffer |
+        ParseType::Texture1D |
+        ParseType::Texture1DArray |
+        ParseType::Texture2D |
+        ParseType::Texture2DArray |
+        ParseType::Texture2DMS |
+        ParseType::Texture2DMSArray |
+        ParseType::Texture3D |
+        ParseType::TextureCube |
+        ParseType::TextureCubeArray |
+        ParseType::RWTexture1D |
+        ParseType::RWTexture1DArray |
+        ParseType::RWTexture2D |
+        ParseType::RWTexture2DArray |
+        ParseType::RWTexture3D => {
+
+            let (buffer_arg, rest) = match delimited!(rest, token!(Token::LeftAngleBracket(_)), parse_datatype, token!(Token::RightAngleBracket(_))) {
+                IResult::Done(rest, ty) => (ty, rest),
+                IResult::Incomplete(rem) => return IResult::Incomplete(rem),
+                IResult::Error(_) => (DataType::Vector(ScalarType::Float, 4), rest)
+            };
+
+            IResult::Done(rest, match object_type {
+                ParseType::Buffer => ObjectType::Buffer(buffer_arg),
+                ParseType::RWBuffer => ObjectType::RWBuffer(buffer_arg),
+                ParseType::Texture1D => ObjectType::Texture1D(buffer_arg),
+                ParseType::Texture1DArray => ObjectType::Texture1DArray(buffer_arg),
+                ParseType::Texture2D => ObjectType::Texture2D(buffer_arg),
+                ParseType::Texture2DArray => ObjectType::Texture2DArray(buffer_arg),
+                ParseType::Texture2DMS => ObjectType::Texture2DMS(buffer_arg),
+                ParseType::Texture2DMSArray => ObjectType::Texture2DMSArray(buffer_arg),
+                ParseType::Texture3D => ObjectType::Texture3D(buffer_arg),
+                ParseType::TextureCube => ObjectType::TextureCube(buffer_arg),
+                ParseType::TextureCubeArray => ObjectType::TextureCubeArray(buffer_arg),
+                ParseType::RWTexture1D => ObjectType::RWTexture1D(buffer_arg),
+                ParseType::RWTexture1DArray => ObjectType::RWTexture1DArray(buffer_arg),
+                ParseType::RWTexture2D => ObjectType::RWTexture2D(buffer_arg),
+                ParseType::RWTexture2DArray => ObjectType::RWTexture2DArray(buffer_arg),
+                ParseType::RWTexture3D => ObjectType::RWTexture3D(buffer_arg),
+                _ => unreachable!(),
+            })
+        },
+
+        ParseType::StructuredBuffer |
+        ParseType::RWStructuredBuffer |
+        ParseType::AppendStructuredBuffer |
+        ParseType::ConsumeStructuredBuffer => {
+
+            let (buffer_arg, rest) = match delimited!(rest, token!(Token::LeftAngleBracket(_)), parse_structuredtype, token!(Token::RightAngleBracket(_))) {
+                IResult::Done(rest, ty) => (ty, rest),
+                IResult::Incomplete(rem) => return IResult::Incomplete(rem),
+                IResult::Error(_) => (StructuredType::Data(DataType::Vector(ScalarType::Float, 4)), rest)
+            };
+
+            IResult::Done(rest, match object_type {
+                ParseType::StructuredBuffer => ObjectType::StructuredBuffer(buffer_arg),
+                ParseType::RWStructuredBuffer => ObjectType::RWStructuredBuffer(buffer_arg),
+                ParseType::AppendStructuredBuffer => ObjectType::AppendStructuredBuffer(buffer_arg),
+                ParseType::ConsumeStructuredBuffer => ObjectType::ConsumeStructuredBuffer(buffer_arg),
+                _ => unreachable!(),
+            })
+        },
+
+        ParseType::InputPatch => IResult::Done(rest, ObjectType::InputPatch),
+        ParseType::OutputPatch => IResult::Done(rest, ObjectType::OutputPatch),
+    }
+
+}
+
+fn parse_voidtype(input: &[Token]) -> IResult<&[Token], Type, ParseError> {
+    if input.len() == 0 {
+        IResult::Incomplete(Needed::Size(1))
+    } else {
+        match &input[0] {
+            &Token::Id(Identifier(ref name)) => if name == "void" {
+                IResult::Done(&input[1..], Type::Void)
+            } else {
+                IResult::Error(Err::Position(ErrorKind::Custom(ParseError::UnknownType), input))
+            },
+            _ => IResult::Error(Err::Position(ErrorKind::Custom(ParseError::WrongToken), input)),
+        }
+    }
+}
+
+fn parse_typename(input: &[Token]) -> IResult<&[Token], Type, ParseError> {
+    alt!(input,
+        parse_objecttype => { |ty| { Type::Object(ty) } } |
+        parse_voidtype |
+        token!(Token::SamplerState => Type::SamplerState) |
+        // Structured types eat everything as user defined types so must come last
+        parse_structuredtype => { |ty| { Type::Structured(ty) } }
     )
 }
 
@@ -572,7 +872,7 @@ fn test_expr() {
     );
 
     assert_eq!(expr_str("(float) b"),
-        Expression::Cast(TypeName("float".to_string()), bexp_var("b"))
+        Expression::Cast(Type::float(), bexp_var("b"))
     );
 
     assert_eq!(expr_str("a = b"), Expression::BinaryOperation(BinOp::Assignment, bexp_var("a"), bexp_var("b")));
@@ -609,18 +909,18 @@ fn test_statement() {
         Condition::Expr(exp_var("x"))
     );
     assert_eq!(vardef_str("uint x"),
-        VarDef::new("x".to_string(), TypeName("uint".to_string()), None)
+        VarDef::new("x".to_string(), Type::uint(), None)
     );
     assert_eq!(condition_str("uint x"),
-        Condition::Assignment(VarDef::new("x".to_string(), TypeName("uint".to_string()), None))
+        Condition::Assignment(VarDef::new("x".to_string(), Type::uint(), None))
     );
     assert_eq!(condition_str("uint x = y"),
-        Condition::Assignment(VarDef::new("x".to_string(), TypeName("uint".to_string()), Some(exp_var("y"))))
+        Condition::Assignment(VarDef::new("x".to_string(), Type::uint(), Some(exp_var("y"))))
     );
 
     // Variable declarations
     assert_eq!(statement_str("uint x = y;"),
-        Statement::Var(VarDef::new("x".to_string(), TypeName("uint".to_string()), Some(exp_var("y"))))
+        Statement::Var(VarDef::new("x".to_string(), Type::uint(), Some(exp_var("y"))))
     );
 
     // Blocks
@@ -644,7 +944,7 @@ fn test_statement() {
         ])))
     );
     assert_eq!(statement_str("if (uint x = y)\n{\n\tone();\n\ttwo();\n}"),
-        Statement::If(Condition::Assignment(VarDef::new("x".to_string(), TypeName("uint".to_string()), Some(exp_var("y")))), Box::new(Statement::Block(vec![
+        Statement::If(Condition::Assignment(VarDef::new("x".to_string(), Type::uint(), Some(exp_var("y")))), Box::new(Statement::Block(vec![
             Statement::Expression(Expression::Call(bexp_var("one"), vec![])),
             Statement::Expression(Expression::Call(bexp_var("two"), vec![]))
         ])))
@@ -658,7 +958,7 @@ fn test_statement() {
         ])))
     );
     assert_eq!(statement_str("while (int x = y)\n{\n\tone();\n\ttwo();\n}"),
-        Statement::While(Condition::Assignment(VarDef::new("x".to_string(), TypeName("int".to_string()), Some(exp_var("y")))), Box::new(Statement::Block(vec![
+        Statement::While(Condition::Assignment(VarDef::new("x".to_string(), Type::int(), Some(exp_var("y")))), Box::new(Statement::Block(vec![
             Statement::Expression(Expression::Call(bexp_var("one"), vec![])),
             Statement::Expression(Expression::Call(bexp_var("two"), vec![]))
         ])))
@@ -672,7 +972,7 @@ fn test_statement() {
     );
     assert_eq!(statement_str("for (uint i = 0; i; i++) { func(); }"),
         Statement::For(
-            Condition::Assignment(VarDef::new("i".to_string(), TypeName("uint".to_string()), Some(Expression::LiteralInt(0)))),
+            Condition::Assignment(VarDef::new("i".to_string(), Type::uint(), Some(Expression::LiteralInt(0)))),
             Condition::Expr(exp_var("i")),
             Condition::Expr(Expression::UnaryOperation(UnaryOp::PostfixIncrement, bexp_var("i"))),
             Box::new(Statement::Block(vec![Statement::Expression(Expression::Call(bexp_var("func"), vec![]))]))
@@ -689,10 +989,10 @@ fn test_rootdefinition() {
 
     let test_struct_str = "struct MyStruct { uint a; float b; };";
     let test_struct_ast = StructDefinition {
-        name: TypeName("MyStruct".to_string()),
+        name: Type::custom("MyStruct"),
         members: vec![
-            StructMember { name: "a".to_string(), typename: TypeName("uint".to_string()) },
-            StructMember { name: "b".to_string(), typename: TypeName("float".to_string()) },
+            StructMember { name: "a".to_string(), typename: Type::uint() },
+            StructMember { name: "b".to_string(), typename: Type::float() },
         ]
     };
     assert_eq!(structdefinition_str(test_struct_str), test_struct_ast.clone());
@@ -703,8 +1003,8 @@ fn test_rootdefinition() {
     let test_func_str = "void func(float x) { }";
     let test_func_ast = FunctionDefinition { 
         name: "func".to_string(),
-        returntype: TypeName("void".to_string()),
-        params: vec![FunctionParam { name: "x".to_string(), typename: TypeName("float".to_string()) }],
+        returntype: Type::Void,
+        params: vec![FunctionParam { name: "x".to_string(), typename: Type::float() }],
         body: vec![],
         attributes: vec![],
     };
@@ -712,8 +1012,8 @@ fn test_rootdefinition() {
     assert_eq!(rootdefinition_str(test_func_str), RootDefinition::Function(test_func_ast.clone()));
     assert_eq!(rootdefinition_str("[numthreads(16, 16, 1)] void func(float x) { }"), RootDefinition::Function(FunctionDefinition {
         name: "func".to_string(),
-        returntype: TypeName("void".to_string()),
-        params: vec![FunctionParam { name: "x".to_string(), typename: TypeName("float".to_string()) }],
+        returntype: Type::Void,
+        params: vec![FunctionParam { name: "x".to_string(), typename: Type::float() }],
         body: vec![],
         attributes: vec![FunctionAttribute::NumThreads(16, 16, 1)],
     }));
@@ -721,7 +1021,7 @@ fn test_rootdefinition() {
     let constantvariable_str = parse_from_str(Box::new(constantvariable));
 
     let test_cbuffervar_str = "float4x4 wvp;";
-    let test_cbuffervar_ast = ConstantVariable { name: "wvp".to_string(), typename: TypeName("float4x4".to_string()), offset: None };
+    let test_cbuffervar_ast = ConstantVariable { name: "wvp".to_string(), typename: Type::float4x4(), offset: None };
     assert_eq!(constantvariable_str(test_cbuffervar_str), test_cbuffervar_ast.clone());
 
     let cbuffer_str = parse_from_str(Box::new(cbuffer));
@@ -731,7 +1031,7 @@ fn test_rootdefinition() {
         name: "globals".to_string(),
         slot: None,
         members: vec![
-            ConstantVariable { name: "wvp".to_string(), typename: TypeName("float4x4".to_string()), offset: None },
+            ConstantVariable { name: "wvp".to_string(), typename: Type::float4x4(), offset: None },
         ]
     };
     assert_eq!(cbuffer_str(test_cbuffer1_str), test_cbuffer1_ast.clone());
@@ -745,7 +1045,7 @@ fn test_rootdefinition() {
         name: "globals".to_string(),
         slot: Some(ConstantSlot(12)),
         members: vec![
-            ConstantVariable { name: "wvp".to_string(), typename: TypeName("float4x4".to_string()), offset: None },
+            ConstantVariable { name: "wvp".to_string(), typename: Type::float4x4(), offset: None },
         ]
     };
     assert_eq!(cbuffer_str(test_cbuffer2_str), test_cbuffer2_ast.clone());
@@ -756,10 +1056,37 @@ fn test_rootdefinition() {
     let test_buffersrv_str = "Buffer g_myBuffer : register(t1);";
     let test_buffersrv_ast = GlobalVariable {
         name: "g_myBuffer".to_string(),
-        typename: TypeName("Buffer".to_string()),
+        typename: Type::Object(ObjectType::Buffer(DataType::Vector(ScalarType::Float, 4))),
         slot: Some(GlobalSlot::ReadSlot(1)),
     };
     assert_eq!(globalvariable_str(test_buffersrv_str), test_buffersrv_ast.clone());
     assert_eq!(rootdefinition_str(test_buffersrv_str), RootDefinition::GlobalVariable(test_buffersrv_ast.clone()));
+
+    let test_buffersrv2_str = "Buffer<uint4> g_myBuffer : register(t1);";
+    let test_buffersrv2_ast = GlobalVariable {
+        name: "g_myBuffer".to_string(),
+        typename: Type::Object(ObjectType::Buffer(DataType::Vector(ScalarType::UInt, 4))),
+        slot: Some(GlobalSlot::ReadSlot(1)),
+    };
+    assert_eq!(globalvariable_str(test_buffersrv2_str), test_buffersrv2_ast.clone());
+    assert_eq!(rootdefinition_str(test_buffersrv2_str), RootDefinition::GlobalVariable(test_buffersrv2_ast.clone()));
+
+    let test_buffersrv3_str = "Buffer<vector<int, 4>> g_myBuffer : register(t1);";
+    let test_buffersrv3_ast = GlobalVariable {
+        name: "g_myBuffer".to_string(),
+        typename: Type::Object(ObjectType::Buffer(DataType::Vector(ScalarType::Int, 4))),
+        slot: Some(GlobalSlot::ReadSlot(1)),
+    };
+    assert_eq!(globalvariable_str(test_buffersrv3_str), test_buffersrv3_ast.clone());
+    assert_eq!(rootdefinition_str(test_buffersrv3_str), RootDefinition::GlobalVariable(test_buffersrv3_ast.clone()));
+
+    let test_buffersrv4_str = "StructuredBuffer<CustomType> g_myBuffer : register(t1);";
+    let test_buffersrv4_ast = GlobalVariable {
+        name: "g_myBuffer".to_string(),
+        typename: Type::Object(ObjectType::StructuredBuffer(StructuredType::Custom("CustomType".to_string()))),
+        slot: Some(GlobalSlot::ReadSlot(1)),
+    };
+    assert_eq!(globalvariable_str(test_buffersrv4_str), test_buffersrv4_ast.clone());
+    assert_eq!(rootdefinition_str(test_buffersrv4_str), RootDefinition::GlobalVariable(test_buffersrv4_ast.clone()));
 }
 
