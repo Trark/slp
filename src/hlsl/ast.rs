@@ -117,6 +117,7 @@ pub enum Expression {
     LiteralInt(u64),
     LiteralUint(u64),
     LiteralLong(u64),
+    LiteralHalf(f32),
     LiteralFloat(f32),
     LiteralDouble(f64),
     Variable(String),

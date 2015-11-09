@@ -12,7 +12,10 @@ pub use super::ast::UnaryOp as UnaryOp;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Intrinsic {
-    Texture2DLoad,
+    Float4(Box<Expression>, Box<Expression>, Box<Expression>, Box<Expression>),
+
+    BufferLoad(Box<Expression>, Box<Expression>),
+    StructuredBufferLoad(Box<Expression>, Box<Expression>),
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -20,6 +23,7 @@ pub enum Expression {
     LiteralInt(u64),
     LiteralUint(u64),
     LiteralLong(u64),
+    LiteralHalf(f32),
     LiteralFloat(f32),
     LiteralDouble(f64),
     Variable(String),

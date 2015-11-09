@@ -33,7 +33,15 @@ pub enum ParseError {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct FunctionType(pub Box<ir::Type>, pub Vec<ir::Type>);
+pub enum IntrinsicType {
+    Float4,
+
+    BufferLoad,
+    StructuredBufferLoad,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct FunctionType(pub ir::Type, pub Vec<ir::Type>, Option<IntrinsicType>);
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum ExpressionType {
@@ -54,7 +62,7 @@ pub struct Context {
 
 impl Context {
     pub fn new() -> Context {
-        Context { structs: HashMap::new(), functions: HashMap::new(), variables: vec![HashMap::new()] }
+        Context { structs: HashMap::new(), functions: get_intrinsics(), variables: vec![HashMap::new()] }
     }
 
     pub fn insert_variable(&mut self, name: String, typename: ir::Type) -> Result<(), ParseError> {
@@ -75,7 +83,7 @@ impl Context {
         };
         match self.functions.entry(name.clone()) {
             Entry::Occupied(mut occupied) => {
-                for &FunctionType(_, ref args) in occupied.get() {
+                for &FunctionType(_, ref args, _) in occupied.get() {
                     if *args == function_type.1 {
                         return Err(ParseError::ValueAlreadyDefined(name, ExpressionType::Function(occupied.get().clone()), ExpressionType::Function(vec![function_type])))
                     }
@@ -114,6 +122,19 @@ impl Context {
 
 struct TypedExpression(ir::Expression, ExpressionType);
 
+fn get_intrinsics() -> HashMap<String,  Vec<FunctionType>> {
+    let mut map = HashMap::new();
+
+    fn t_float() -> ir::Type { ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(ir::ScalarType::Float))) };
+    fn t_float4() -> ir::Type { ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Vector(ir::ScalarType::Float, 4))) };
+
+    map.insert("float4".to_string(), vec![
+        FunctionType(t_float4(), vec![t_float(), t_float(), t_float(), t_float()], Some(IntrinsicType::Float4))
+    ]);
+
+    map
+}
+
 fn get_function_debug_name(expr: &ir::Expression) -> String {
     match expr {
         &ir::Expression::Variable(ref s) => s.clone(),
@@ -121,12 +142,12 @@ fn get_function_debug_name(expr: &ir::Expression) -> String {
     }
 }
 
-fn find_function_type(func_expr: &ir::Expression, overloads: ExpressionType, actual_params: Vec<ir::Type>) -> Result<ir::Type, ParseError> {
+fn find_function_type(func_expr: &ir::Expression, overloads: ExpressionType, actual_params: Vec<ir::Type>) -> Result<FunctionType, ParseError> {
     match overloads {
         ExpressionType::Function(fts) => {
             for ft in &fts {
                 if ft.1 == actual_params {
-                    return Ok(*ft.0.clone())
+                    return Ok(ft.clone())
                 };
             };
             Err(ParseError::FunctionArgumentTypeMismatch(fts, actual_params))
@@ -135,11 +156,40 @@ fn find_function_type(func_expr: &ir::Expression, overloads: ExpressionType, act
     }
 }
 
+fn write_intrinsic(intrinsic : IntrinsicType, return_type: ir::Type, _: Vec<ir::Type>, param_values: Vec<ir::Expression>, function_expression: ir::Expression) -> Result<TypedExpression, ParseError> {
+    Ok(TypedExpression(match intrinsic {
+        IntrinsicType::Float4 => {
+            assert_eq!(param_values.len(), 4);
+            ir::Expression::Intrinsic(ir::Intrinsic::Float4(
+                Box::new(param_values[0].clone()),
+                Box::new(param_values[1].clone()),
+                Box::new(param_values[2].clone()),
+                Box::new(param_values[3].clone())
+            ))
+        },
+        IntrinsicType::BufferLoad => {
+            assert_eq!(param_values.len(), 1);
+            ir::Expression::Intrinsic(ir::Intrinsic::BufferLoad(
+                Box::new(function_expression),
+                Box::new(param_values[0].clone())
+            ))
+        },
+        IntrinsicType::StructuredBufferLoad => {
+            assert_eq!(param_values.len(), 1);
+            ir::Expression::Intrinsic(ir::Intrinsic::StructuredBufferLoad(
+                Box::new(function_expression),
+                Box::new(param_values[0].clone())
+            ))
+        },
+    }, ExpressionType::Value(return_type)))
+}
+
 fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpression, ParseError> {
     match ast {
         &ast::Expression::LiteralInt(i) => Ok(TypedExpression(ir::Expression::LiteralInt(i), ExpressionType::Value(ir::Type::int()))),
         &ast::Expression::LiteralUint(i) => Ok(TypedExpression(ir::Expression::LiteralUint(i), ExpressionType::Value(ir::Type::uint()))),
         &ast::Expression::LiteralLong(i) => Ok(TypedExpression(ir::Expression::LiteralLong(i), ExpressionType::Value(ir::Type::long()))),
+        &ast::Expression::LiteralHalf(f) => Ok(TypedExpression(ir::Expression::LiteralHalf(f), ExpressionType::Value(ir::Type::float()))),
         &ast::Expression::LiteralFloat(f) => Ok(TypedExpression(ir::Expression::LiteralFloat(f), ExpressionType::Value(ir::Type::float()))),
         &ast::Expression::LiteralDouble(f) => Ok(TypedExpression(ir::Expression::LiteralDouble(f), ExpressionType::Value(ir::Type::double()))),
         &ast::Expression::Variable(ref s) => {
@@ -214,6 +264,34 @@ fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpressio
                         return Err(ParseError::UnknownTypeMember(composite_type.clone(), member.clone()));
                     }
                 }
+                &ExpressionType::Value(ir::Type::Object(ir::ObjectType::Buffer(ref data_type))) => {
+                    match &member[..] {
+                        "Load" => {
+                            return Ok(TypedExpression(composite_ir, ExpressionType::Function(vec![
+                                FunctionType(
+                                    ir::Type::Structured(ir::StructuredType::Data(data_type.clone())),
+                                    vec![ir::Type::int()],
+                                    Some(IntrinsicType::BufferLoad)
+                                )
+                            ])))
+                        },
+                        _ => return Err(ParseError::UnknownTypeMember(composite_type.clone(), member.clone())),
+                    }
+                }
+                &ExpressionType::Value(ir::Type::Object(ir::ObjectType::StructuredBuffer(ref structured_type))) => {
+                    match &member[..] {
+                        "Load" => {
+                            return Ok(TypedExpression(composite_ir, ExpressionType::Function(vec![
+                                FunctionType(
+                                    ir::Type::Structured(structured_type.clone()),
+                                    vec![ir::Type::int()],
+                                    Some(IntrinsicType::StructuredBufferLoad)
+                                )
+                            ])))
+                        },
+                        _ => return Err(ParseError::UnknownTypeMember(composite_type.clone(), member.clone())),
+                    }
+                }
                 // Todo: Matrix components + Object members
                 _ => return Err(ParseError::TypeDoesNotHaveMembers(composite_type.clone())),
             };
@@ -231,8 +309,11 @@ fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpressio
                     ExpressionType::Function(_) => return Err(ParseError::FunctionPassedToAnotherFunction(get_function_debug_name(&func_ir.0)))
                 };
             };
-            let ty = try!(find_function_type(&func_ir.0, func_ir.1, params_types));
-            Ok(TypedExpression(ir::Expression::Call(Box::new(func_ir.0), params_ir), ExpressionType::Value(ty)))
+            let FunctionType(return_type, param_types, intrinsic_opt) = try!(find_function_type(&func_ir.0, func_ir.1, params_types));
+            match intrinsic_opt {
+                Some(intrinsic) => write_intrinsic(intrinsic, return_type, param_types, params_ir, func_ir.0),
+                None => Ok(TypedExpression(ir::Expression::Call(Box::new(func_ir.0), params_ir), ExpressionType::Value(return_type))),
+            }
         },
         &ast::Expression::Cast(ref ty, ref expr) => {
             let expr_ir = try!(parse_expr(expr, context));
@@ -383,8 +464,9 @@ fn parse_rootdefinition(ast: &ast::RootDefinition, context: Context, globals: &m
                 attributes: fd.attributes.clone(),
             };
             let func_type = FunctionType(
-                Box::new(fd_ir.returntype.clone()),
-                fd_ir.params.iter().map(|p| { p.typename.clone() }).collect()
+                fd_ir.returntype.clone(),
+                fd_ir.params.iter().map(|p| { p.typename.clone() }).collect(),
+                None
             );
             try!(next_context.insert_function(fd_ir.name.clone(), func_type));
             ir::RootDefinition::Function(fd_ir)

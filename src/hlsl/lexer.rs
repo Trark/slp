@@ -47,6 +47,104 @@ named!(literal_int<Token>, chain!(
     }
 ));
 
+fn literal_float<'a>(input: &'a [u8]) -> IResult<&'a [u8], Token> {
+
+    type DigitSequence = Vec<u64>;
+    #[derive(PartialEq, Debug, Clone)]
+    struct Fraction(DigitSequence, DigitSequence);
+
+    named!(digit_sequence<DigitSequence>, many1!(digit));
+
+    named!(fractional_constant<Fraction>, alt!(
+        chain!(left: opt!(digit_sequence) ~ tag!(".") ~ right: digit_sequence, || { Fraction(match &left { &Some(ref l) => l.clone(), &None => vec![] }, right) }) |
+        chain!(left: digit_sequence ~ tag!("."), || { Fraction(left, vec![]) })
+    ));
+
+    enum FloatType { Half, Float, Double };
+    named!(suffix<FloatType>, alt!(
+        tag!("h") => { |_| FloatType::Half } |
+        tag!("H") => { |_| FloatType::Half } |
+        tag!("f") => { |_| FloatType::Float } |
+        tag!("F") => { |_| FloatType::Float } |
+        tag!("l") => { |_| FloatType::Double } |
+        tag!("L") => { |_| FloatType::Double }
+    ));
+
+    enum Sign { Positive, Negative };
+    named!(sign<Sign>, alt!(
+        tag!("+") => { |_| Sign::Positive } |
+        tag!("-") => { |_| Sign::Negative }
+    ));
+
+    #[derive(PartialEq, Debug, Clone)]
+    struct Exponent(i64);
+    named!(exponent<Exponent>, chain!(
+        alt!(tag!("e") | tag!("E")) ~
+        s_opt: opt!(sign) ~
+        exponent: digits,
+        || { Exponent(match s_opt { Some(Sign::Negative) => -(exponent as i64), _ => exponent as i64 }) }
+    ));
+
+    fn produce(left: DigitSequence, right: DigitSequence, exponent: i64, float_type: Option<FloatType>) -> Token {
+
+        let mut left_combined = 0f64;
+        for digit in left {
+            left_combined = left_combined * 10f64;
+            left_combined += digit as f64;
+        };
+        let left_float = left_combined as f64;
+
+        let mut right_combined = 0f64;
+        let right_len = right.len();
+        for digit in right {
+            right_combined = right_combined * 10f64;
+            right_combined += digit as f64;
+        };
+        let mut right_float = right_combined as f64;
+        for _ in 0..right_len {
+            right_float = right_float / 10f64;
+        }
+
+        let mantissa = left_float + right_float;
+        let mut value64 = mantissa;
+        if exponent > 0 {
+            for _ in 0..exponent {
+                value64 = value64 * 10f64;
+            }
+        } else {
+            for _ in 0..(-exponent) {
+                value64 = value64 / 10f64;
+            }
+        }
+
+        match float_type.unwrap_or(FloatType::Float) {
+            FloatType::Half => Token::LiteralHalf(value64 as f32),
+            FloatType::Float => Token::LiteralFloat(value64 as f32),
+            FloatType::Double => Token::LiteralDouble(value64),
+        }
+    }
+
+    alt!(input,
+        chain!(
+            fraction: fractional_constant ~
+            exponent_opt: opt!(exponent) ~
+            suffix_opt: opt!(suffix),
+            || {
+                let exponent = exponent_opt.unwrap_or(Exponent(0));
+                let Fraction(left, right) = fraction.clone();
+                let Exponent(exp) = exponent.clone();
+                produce(left, right, exp, suffix_opt)
+            }
+        ) |
+        chain!(
+            digits: digit_sequence ~
+            exponent: exponent ~
+            suffix_opt: opt!(suffix),
+            || { produce(digits, vec![], exponent.0, suffix_opt) }
+        )
+    )
+}
+
 fn identifier_firstchar<'a>(input: &'a [u8]) -> IResult<&'a [u8], u8> {
     if input.len() == 0 {
         IResult::Incomplete(Needed::Size(1))
@@ -190,6 +288,7 @@ named!(rightanglebracket<Token>, chain!(
 named!(token_no_whitespace<Token>, alt!(
 
     identifier => { |id| Token::Id(id) } |
+    literal_float => { |tok| tok } |
     literal_int => { |tok| tok } |
 
     tag!("{") => { |_| Token::LeftBrace } |
@@ -246,10 +345,15 @@ fn test_token() {
     assert_eq!(token(&b" ; "[..]), IResult::Done(&b""[..], Token::Semicolon));
     assert_eq!(token(&b"name"[..]), IResult::Done(&b""[..], Token::Id(Identifier("name".to_string()))));
 
-    assert_eq!(token(&b"12"[..]), IResult::Done(&b""[..], Token::LiteralInt(12)));
+    assert_eq!(token(&b"12 "[..]), IResult::Done(&b""[..], Token::LiteralInt(12)));
     assert_eq!(token(&b"12u"[..]), IResult::Done(&b""[..], Token::LiteralUint(12)));
     assert_eq!(token(&b"12l"[..]), IResult::Done(&b""[..], Token::LiteralLong(12)));
     assert_eq!(token(&b"12L"[..]), IResult::Done(&b""[..], Token::LiteralLong(12)));
+
+    assert_eq!(token(&b"1.0f"[..]), IResult::Done(&b""[..], Token::LiteralFloat(1.0f32)));
+    assert_eq!(token(&b"2.0"[..]), IResult::Done(&b""[..], Token::LiteralFloat(2.0f32)));
+    assert_eq!(token(&b"2.0L"[..]), IResult::Done(&b""[..], Token::LiteralDouble(2.0f64)));
+    assert_eq!(token(&b"0.5h"[..]), IResult::Done(&b""[..], Token::LiteralHalf(0.5f32)));
 
     assert_eq!(token(&b"{"[..]), IResult::Done(&b""[..], Token::LeftBrace));
     assert_eq!(token(&b"}"[..]), IResult::Done(&b""[..], Token::RightBrace));
@@ -310,7 +414,7 @@ fn test_token_stream() {
         Token::Semicolon,
     ])));
 
-    assert_eq!(token_stream(&b"-12"[..]), IResult::Done(&b""[..], TokenStream(vec![
+    assert_eq!(token_stream(&b"-12 "[..]), IResult::Done(&b""[..], TokenStream(vec![
         Token::Minus,
         Token::LiteralInt(12),
     ])));

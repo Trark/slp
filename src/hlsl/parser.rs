@@ -362,6 +362,7 @@ fn expr_paren(input: &[Token]) -> IResult<&[Token], Expression, ParseError> {
         token!(Token::LiteralInt(i) => Expression::LiteralInt(i)) |
         token!(Token::LiteralUint(i) => Expression::LiteralUint(i)) |
         token!(Token::LiteralLong(i) => Expression::LiteralLong(i)) |
+        token!(Token::LiteralHalf(i) => Expression::LiteralHalf(i)) |
         token!(Token::LiteralFloat(i) => Expression::LiteralFloat(i)) |
         token!(Token::LiteralDouble(i) => Expression::LiteralDouble(i))
     )
@@ -732,7 +733,8 @@ fn bexp_var(var_name: &'static str) -> Box<Expression> { Box::new(exp_var(var_na
 #[cfg(test)]
 fn parse_from_str<T>(parse_func: Box<Fn(&[Token]) -> IResult<&[Token], T, ParseError>>) -> Box<Fn(&'static str) -> T> where T: 'static {
     Box::new(move |string: &'static str| {
-        let input = string.as_bytes();
+        let modified_string = string.to_string() + "\n";
+        let input = &modified_string[..].as_bytes();
         let lex_result = super::lexer::token_stream(input);
         match lex_result {
             IResult::Done(rem, TokenStream(mut stream)) => {

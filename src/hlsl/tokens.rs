@@ -31,6 +31,7 @@ pub enum Token {
     LiteralInt(u64), // Int (Hlsl ints do not have sign, the - is an operator on the literal)
     LiteralUint(u64), // Int with explicit unsigned type
     LiteralLong(u64), // Int with explicit long type
+    LiteralHalf(f32),
     LiteralFloat(f32),
     LiteralDouble(f64),
 
