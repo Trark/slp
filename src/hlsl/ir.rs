@@ -122,7 +122,6 @@ pub struct Module {
 }
 
 impl GlobalTable {
-
     pub fn new() -> GlobalTable {
         GlobalTable {
             r_resources: HashMap::new(),
@@ -130,36 +129,6 @@ impl GlobalTable {
             samplers: HashMap::new(),
             constants: HashMap::new(),
         }
-    }
-
-    pub fn generate(module: &ast::Module) -> GlobalTable {
-        let mut table = GlobalTable::new();
-        for root_def in &module.root_definitions {
-            match root_def {
-                &ast::RootDefinition::ConstantBuffer(ref cbuffer) => {
-                    match cbuffer.slot {
-                        Some(ref slot_index) => {
-                            table.constants.insert(slot_index.0, cbuffer.name.clone());
-                        },
-                        None => { },
-                    }
-                },
-                &ast::RootDefinition::GlobalVariable(ref global) => {
-                    let entry = GlobalEntry { name: global.name.clone(), typename: global.typename.clone() };
-                    match global.slot {
-                        Some(ast::GlobalSlot::ReadSlot(ref slot_index)) => {
-                            table.r_resources.insert(*slot_index, entry);
-                        },
-                        Some(ast::GlobalSlot::ReadWriteSlot(ref slot_index)) => {
-                            table.rw_resources.insert(*slot_index, entry);
-                        },
-                        None => { },
-                    }
-                },
-                _ => { }
-            }
-        };
-        table
     }
 }
 
