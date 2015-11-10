@@ -18,14 +18,11 @@ pub enum Intrinsic {
     StructuredBufferLoad(Box<Expression>, Box<Expression>),
 }
 
+pub use super::ast::Literal as Literal;
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
-    LiteralInt(u64),
-    LiteralUint(u64),
-    LiteralLong(u64),
-    LiteralHalf(f32),
-    LiteralFloat(f32),
-    LiteralDouble(f64),
+    Literal(Literal),
     Variable(String),
     UnaryOperation(UnaryOp, Box<Expression>),
     BinaryOperation(BinOp, Box<Expression>, Box<Expression>),

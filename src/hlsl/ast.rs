@@ -113,13 +113,18 @@ pub enum UnaryOp {
 }
 
 #[derive(PartialEq, Debug, Clone)]
+pub enum Literal {
+    Int(u64),
+    Uint(u64),
+    Long(u64),
+    Half(f32),
+    Float(f32),
+    Double(f64),
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
-    LiteralInt(u64),
-    LiteralUint(u64),
-    LiteralLong(u64),
-    LiteralHalf(f32),
-    LiteralFloat(f32),
-    LiteralDouble(f64),
+    Literal(Literal),
     Variable(String),
     UnaryOperation(UnaryOp, Box<Expression>),
     BinaryOperation(BinOp, Box<Expression>, Box<Expression>),

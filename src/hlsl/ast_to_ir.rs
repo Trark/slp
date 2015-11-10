@@ -296,14 +296,20 @@ fn write_method(method: ResolvedMethod, param_values: Vec<ir::Expression>) -> Re
     }, return_type))
 }
 
+fn parse_literal(ast: &ast::Literal) -> Result<TypedExpression, ParseError> {
+    match ast {
+        &ast::Literal::Int(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Int(i)), ir::Type::int())),
+        &ast::Literal::Uint(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Uint(i)), ir::Type::uint())),
+        &ast::Literal::Long(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Long(i)), ir::Type::long())),
+        &ast::Literal::Half(f) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Half(f)), ir::Type::float())),
+        &ast::Literal::Float(f) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Float(f)), ir::Type::float())),
+        &ast::Literal::Double(f) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Double(f)), ir::Type::double())),
+    }
+}
+
 fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpression, ParseError> {
     match ast {
-        &ast::Expression::LiteralInt(i) => Ok(TypedExpression::Value(ir::Expression::LiteralInt(i), ir::Type::int())),
-        &ast::Expression::LiteralUint(i) => Ok(TypedExpression::Value(ir::Expression::LiteralUint(i), ir::Type::uint())),
-        &ast::Expression::LiteralLong(i) => Ok(TypedExpression::Value(ir::Expression::LiteralLong(i), ir::Type::long())),
-        &ast::Expression::LiteralHalf(f) => Ok(TypedExpression::Value(ir::Expression::LiteralHalf(f), ir::Type::float())),
-        &ast::Expression::LiteralFloat(f) => Ok(TypedExpression::Value(ir::Expression::LiteralFloat(f), ir::Type::float())),
-        &ast::Expression::LiteralDouble(f) => Ok(TypedExpression::Value(ir::Expression::LiteralDouble(f), ir::Type::double())),
+        &ast::Expression::Literal(ref lit) => parse_literal(lit),
         &ast::Expression::Variable(ref s) => Ok(try!(context.find_variable(s))),
         &ast::Expression::UnaryOperation(ref op, ref expr) => {
             match try!(parse_expr(expr, context)) {
@@ -706,9 +712,9 @@ fn test_parse() {
                         ast::Expression::BinaryOperation(ast::BinOp::Assignment,
                             Box::new(ast::Expression::ArraySubscript(
                                 Box::new(ast::Expression::Variable("g_myInBuffer".to_string())),
-                                Box::new(ast::Expression::LiteralInt(0))
+                                Box::new(ast::Expression::Literal(ast::Literal::Int(0)))
                             )),
-                            Box::new(ast::Expression::LiteralInt(4))
+                            Box::new(ast::Expression::Literal(ast::Literal::Int(4)))
                         ),
                     ),
                     ast::Statement::Expression(
