@@ -4,21 +4,20 @@ use super::super::tokens::TokenStream;
 use super::super::tokens::Token;
 use super::super::tokens::FollowedBy;
 use super::super::tokens::RegisterSlot;
-use super::super::lexer::token_stream;
+use super::super::lexer::lex;
 use super::super::parser::parse;
 use super::super::ast_to_ir;
-use nom::IResult;
 
 fn token_id(name: &'static str) -> Token { Token::Id(Identifier(name.to_string())) }
 
+// Test a small compute shader (A simplified form of one the basic hlsl compute examples)
+const CS1: &'static [u8] = include_bytes!("cs1.hlsl");
+
 #[test]
-fn cs1() {
+fn cs1_lex() {
 
-    // Test a small compute shader (A simplified form of one the basic hlsl compute examples)
-    let cs1 = include_bytes!("cs1.hlsl");
-
-    let tokens_res = token_stream(cs1);
-    assert_eq!(tokens_res, IResult::Done(&b""[..], TokenStream(vec![
+    let tokens_res = lex(CS1);
+    assert_eq!(tokens_res, Ok(TokenStream(vec![
         Token::Struct,
         token_id("BufType"),
         Token::LeftBrace,
@@ -128,13 +127,21 @@ fn cs1() {
         token_id("f"),
         Token::Semicolon,
         Token::RightBrace,
+        Token::Eof,
     ])));
+}
 
-    let tokens = match tokens_res { IResult::Done(_, TokenStream(toks)) => toks, _ => panic!() };
+#[test]
+fn cs1_parse() {
+    let TokenStream(tokens) = lex(CS1).unwrap();
     let parse_result = parse("CSMAIN".to_string(), &tokens[..]);
-    assert!(!parse_result.is_none());
+    assert!(parse_result.is_ok(), "{:?}", parse_result);
+}
 
-    let ast = match parse_result { Some(ast) => ast, _ => panic!() };
+#[test]
+fn cs1_typecheck() {
+    let TokenStream(tokens) = lex(CS1).unwrap();
+    let ast = parse("CSMAIN".to_string(), &tokens[..]).unwrap();
     let ir_result = ast_to_ir::parse(&ast);
-    assert!(ir_result.is_ok());
+    assert!(ir_result.is_ok(), "{:?}", ir_result);
 }

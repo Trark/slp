@@ -3,7 +3,13 @@ use super::ast::*;
 use nom::{IResult,Needed,Err,ErrorKind};
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum ParseError {
+pub struct ParseError(pub ParseErrorReason, pub Option<Vec<Token>>, pub Option<Box<ParseError>>);
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum ParseErrorReason {
+    Unknown,
+    UnexpectedEndOfStream,
+    FailedToParse,
     WrongToken,
     ExpectingIdentifier,
     WrongSlotType,
@@ -13,12 +19,12 @@ pub enum ParseError {
 macro_rules! token (
     ($i:expr, $inp: pat) => (
         {
-            let res: IResult<&[Token], Token, ParseError> = if $i.len() == 0 {
+            let res: IResult<&[Token], Token, ParseErrorReason> = if $i.len() == 0 {
                 IResult::Incomplete(Needed::Size(1))
             } else {
                 match $i[0] {
                     $inp => IResult::Done(&$i[1..], $i[0].clone()),
-                    _ => IResult::Error(Err::Position(ErrorKind::Custom(ParseError::WrongToken), $i))
+                    _ => IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::WrongToken), $i))
                 } 
             };
             res
@@ -31,21 +37,21 @@ macro_rules! token (
             } else {
                 match $i[0] {
                     $inp => IResult::Done(&$i[1..], $res),
-                    _ => IResult::Error(Err::Position(ErrorKind::Custom(ParseError::WrongToken), $i))
+                    _ => IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::WrongToken), $i))
                 }
             }
         }
     );
 );
 
-fn parse_variablename(input: &[Token]) -> IResult<&[Token], String, ParseError> {
+fn parse_variablename(input: &[Token]) -> IResult<&[Token], String, ParseErrorReason> {
     map!(input, token!(Token::Id(_)), |tok| { match tok { Token::Id(Identifier(name)) => name.clone(), _ => unreachable!() } })
 }
 
-fn parse_datatype(input: &[Token]) -> IResult<&[Token], DataType, ParseError> {
+fn parse_datatype(input: &[Token]) -> IResult<&[Token], DataType, ParseErrorReason> {
 
     // Parse a vector dimension as a token
-    fn parse_digit(input: &[Token]) -> IResult<&[Token], u32, ParseError> {
+    fn parse_digit(input: &[Token]) -> IResult<&[Token], u32, ParseErrorReason> {
         token!(input, Token::LiteralInt(i) => i as u32)
     }
 
@@ -62,7 +68,7 @@ fn parse_datatype(input: &[Token]) -> IResult<&[Token], DataType, ParseError> {
     }
 
     // Parse scalar type as a full token
-    fn parse_scalartype(input: &[Token]) -> IResult<&[Token], ScalarType, ParseError> {
+    fn parse_scalartype(input: &[Token]) -> IResult<&[Token], ScalarType, ParseErrorReason> {
         if input.len() == 0 {
             IResult::Incomplete(Needed::Size(1))
         } else {
@@ -72,13 +78,13 @@ fn parse_datatype(input: &[Token]) -> IResult<&[Token], DataType, ParseError> {
                         IResult::Done(rest, ty) => if rest.len() == 0 {
                             IResult::Done(&input[1..], ty)
                         } else {
-                            IResult::Error(Err::Position(ErrorKind::Custom(ParseError::UnknownType), input))
+                            IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType), input))
                         },
                         IResult::Incomplete(rem) => IResult::Incomplete(rem),
-                        IResult::Error(_) => IResult::Error(Err::Position(ErrorKind::Custom(ParseError::UnknownType), input)),
+                        IResult::Error(_) => IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType), input)),
                     }
                 },
-                _ => IResult::Error(Err::Position(ErrorKind::Custom(ParseError::WrongToken), input))
+                _ => IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::WrongToken), input))
             }
         }
     }
@@ -163,23 +169,23 @@ fn parse_datatype(input: &[Token]) -> IResult<&[Token], DataType, ParseError> {
                     },
                     _ => match parse_datatype_str(&name[..]) {
                         Some(ty) => IResult::Done(&input[1..], ty),
-                        None => IResult::Error(Err::Position(ErrorKind::Custom(ParseError::UnknownType), input)),
+                        None => IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType), input)),
                     }
                 }
             },
-            _ => IResult::Error(Err::Position(ErrorKind::Custom(ParseError::WrongToken), input))
+            _ => IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::WrongToken), input))
         }
     }
 }
 
-fn parse_structuredtype(input: &[Token]) -> IResult<&[Token], StructuredType, ParseError> {
+fn parse_structuredtype(input: &[Token]) -> IResult<&[Token], StructuredType, ParseErrorReason> {
     alt!(input,
         parse_datatype => { |ty| { StructuredType::Data(ty) } } |
         token!(Token::Id(Identifier(ref name)) => StructuredType::Custom(name.clone()))
     )
 }
 
-fn parse_objecttype(input: &[Token]) -> IResult<&[Token], ObjectType, ParseError> {
+fn parse_objecttype(input: &[Token]) -> IResult<&[Token], ObjectType, ParseErrorReason> {
     if input.len() == 0 {
         return IResult::Incomplete(Needed::Size(1))
     }
@@ -247,10 +253,10 @@ fn parse_objecttype(input: &[Token]) -> IResult<&[Token], ObjectType, ParseError
                 "InputPatch" => ParseType::InputPatch,
                 "OutputPatch" => ParseType::OutputPatch,
 
-                _ => return IResult::Error(Err::Position(ErrorKind::Custom(ParseError::UnknownType), input))
+                _ => return IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType), input))
             }
         },
-        _ => return IResult::Error(Err::Position(ErrorKind::Custom(ParseError::UnknownType), input))
+        _ => return IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType), input))
     };
 
     let rest = &input[1..];
@@ -330,7 +336,7 @@ fn parse_objecttype(input: &[Token]) -> IResult<&[Token], ObjectType, ParseError
 
 }
 
-fn parse_voidtype(input: &[Token]) -> IResult<&[Token], Type, ParseError> {
+fn parse_voidtype(input: &[Token]) -> IResult<&[Token], Type, ParseErrorReason> {
     if input.len() == 0 {
         IResult::Incomplete(Needed::Size(1))
     } else {
@@ -338,14 +344,14 @@ fn parse_voidtype(input: &[Token]) -> IResult<&[Token], Type, ParseError> {
             &Token::Id(Identifier(ref name)) => if name == "void" {
                 IResult::Done(&input[1..], Type::Void)
             } else {
-                IResult::Error(Err::Position(ErrorKind::Custom(ParseError::UnknownType), input))
+                IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType), input))
             },
-            _ => IResult::Error(Err::Position(ErrorKind::Custom(ParseError::WrongToken), input)),
+            _ => IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::WrongToken), input)),
         }
     }
 }
 
-fn parse_typename(input: &[Token]) -> IResult<&[Token], Type, ParseError> {
+fn parse_typename(input: &[Token]) -> IResult<&[Token], Type, ParseErrorReason> {
     alt!(input,
         parse_objecttype => { |ty| { Type::Object(ty) } } |
         parse_voidtype |
@@ -355,7 +361,7 @@ fn parse_typename(input: &[Token]) -> IResult<&[Token], Type, ParseError> {
     )
 }
 
-fn expr_paren(input: &[Token]) -> IResult<&[Token], Expression, ParseError> {
+fn expr_paren(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
     alt!(input,
         delimited!(token!(Token::LeftParen), expr, token!(Token::RightParen)) |
         parse_variablename => { |name| { Expression::Variable(name) } } |
@@ -368,7 +374,7 @@ fn expr_paren(input: &[Token]) -> IResult<&[Token], Expression, ParseError> {
     )
 }
 
-fn expr_p1(input: &[Token]) -> IResult<&[Token], Expression, ParseError> {
+fn expr_p1(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
 
     #[derive(Clone)]
     enum Precedence1Postfix {
@@ -379,7 +385,7 @@ fn expr_p1(input: &[Token]) -> IResult<&[Token], Expression, ParseError> {
         Member(String),
     }
 
-    fn expr_p1_right(input: &[Token]) -> IResult<&[Token], Precedence1Postfix, ParseError> {
+    fn expr_p1_right(input: &[Token]) -> IResult<&[Token], Precedence1Postfix, ParseErrorReason> {
         chain!(input,
             right: alt!(
                 chain!(token!(Token::Plus) ~ token!(Token::Plus), || { Precedence1Postfix::Increment }) |
@@ -436,7 +442,7 @@ fn expr_p1(input: &[Token]) -> IResult<&[Token], Expression, ParseError> {
     )
 }
 
-fn unaryop_prefix(input: &[Token]) -> IResult<&[Token], UnaryOp, ParseError> {
+fn unaryop_prefix(input: &[Token]) -> IResult<&[Token], UnaryOp, ParseErrorReason> {
     alt!(input,
         chain!(token!(Token::Plus) ~ token!(Token::Plus), || { UnaryOp::PrefixIncrement }) |
         chain!(token!(Token::Minus) ~ token!(Token::Minus), || { UnaryOp::PrefixDecrement }) |
@@ -447,7 +453,7 @@ fn unaryop_prefix(input: &[Token]) -> IResult<&[Token], UnaryOp, ParseError> {
     )
 }
 
-fn expr_p2(input: &[Token]) -> IResult<&[Token], Expression, ParseError> {
+fn expr_p2(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
     alt!(input,
         chain!(unary: unaryop_prefix ~ expr: expr_p2, || { Expression::UnaryOperation(unary, Box::new(expr)) }) |
         chain!(token!(Token::LeftParen) ~ cast: parse_typename ~ token!(Token::RightParen) ~ expr: expr_p2, || { Expression::Cast(cast, Box::new(expr)) }) |
@@ -464,9 +470,9 @@ fn combine_rights(left: Expression, rights: Vec<(BinOp, Expression)>) -> Express
     final_expression
 }
 
-fn expr_p3(input: &[Token]) -> IResult<&[Token], Expression, ParseError> {
+fn expr_p3(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
 
-    fn binop_p3(input: &[Token]) -> IResult<&[Token], BinOp, ParseError> {
+    fn binop_p3(input: &[Token]) -> IResult<&[Token], BinOp, ParseErrorReason> {
         alt!(input,
             token!(Token::Asterix) => { |_| BinOp::Multiply } |
             token!(Token::ForwardSlash) => { |_| BinOp::Divide } |
@@ -474,7 +480,7 @@ fn expr_p3(input: &[Token]) -> IResult<&[Token], Expression, ParseError> {
         )
     }
 
-    fn expr_p3_right(input: &[Token]) -> IResult<&[Token], (BinOp, Expression), ParseError> {
+    fn expr_p3_right(input: &[Token]) -> IResult<&[Token], (BinOp, Expression), ParseErrorReason> {
         chain!(input,
             op: binop_p3 ~
             right: expr_p2,
@@ -489,16 +495,16 @@ fn expr_p3(input: &[Token]) -> IResult<&[Token], Expression, ParseError> {
     )
 }
 
-fn expr_p4(input: &[Token]) -> IResult<&[Token], Expression, ParseError> {
+fn expr_p4(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
 
-    fn binop_p4(input: &[Token]) -> IResult<&[Token], BinOp, ParseError> {
+    fn binop_p4(input: &[Token]) -> IResult<&[Token], BinOp, ParseErrorReason> {
         alt!(input,
             token!(Token::Plus) => { |_| BinOp::Add } |
             token!(Token::Minus) => { |_| BinOp::Subtract }
         )
     }
 
-    fn expr_p4_right(input: &[Token]) -> IResult<&[Token], (BinOp, Expression), ParseError> {
+    fn expr_p4_right(input: &[Token]) -> IResult<&[Token], (BinOp, Expression), ParseErrorReason> {
         chain!(input,
             op: binop_p4 ~
             right: expr_p3,
@@ -513,18 +519,18 @@ fn expr_p4(input: &[Token]) -> IResult<&[Token], Expression, ParseError> {
     )
 }
 
-fn expr_p15(input: &[Token]) -> IResult<&[Token], Expression, ParseError> {
+fn expr_p15(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
     alt!(input,
         chain!(lhs: expr_p4 ~ token!(Token::Equals) ~ rhs: expr_p15, || { Expression::BinaryOperation(BinOp::Assignment, Box::new(lhs), Box::new(rhs)) }) |
         expr_p4
     )
 }
 
-fn expr(input: &[Token]) -> IResult<&[Token], Expression, ParseError> {
+fn expr(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
     expr_p15(input)
 }
 
-fn vardef(input: &[Token]) -> IResult<&[Token], VarDef, ParseError> {
+fn vardef(input: &[Token]) -> IResult<&[Token], VarDef, ParseErrorReason> {
     chain!(input,
         typename: parse_typename ~
         varname: parse_variablename ~
@@ -539,14 +545,14 @@ fn vardef(input: &[Token]) -> IResult<&[Token], VarDef, ParseError> {
     )
 }
 
-fn condition(input: &[Token]) -> IResult<&[Token], Condition, ParseError> {
+fn condition(input: &[Token]) -> IResult<&[Token], Condition, ParseErrorReason> {
     alt!(input,
         vardef => { |variable_definition| Condition::Assignment(variable_definition) } |
         expr => { |expression| Condition::Expr(expression) }
     )
 }
 
-fn statement(input: &[Token]) -> IResult<&[Token], Statement, ParseError> {
+fn statement(input: &[Token]) -> IResult<&[Token], Statement, ParseErrorReason> {
     alt!(input,
         token!(Token::Semicolon) => { |_| { Statement::Empty } } |
         chain!(token!(Token::If) ~ token!(Token::LeftParen) ~ cond: condition ~ token!(Token::RightParen) ~ inner_statement: statement, || { Statement::If(cond, Box::new(inner_statement)) }) |
@@ -570,7 +576,7 @@ fn statement(input: &[Token]) -> IResult<&[Token], Statement, ParseError> {
     )
 }
 
-fn structmember(input: &[Token]) -> IResult<&[Token], StructMember, ParseError> {
+fn structmember(input: &[Token]) -> IResult<&[Token], StructMember, ParseErrorReason> {
     chain!(input,
         typename: parse_typename ~
         varname: parse_variablename ~
@@ -579,7 +585,7 @@ fn structmember(input: &[Token]) -> IResult<&[Token], StructMember, ParseError> 
     )
 }
 
-fn structdefinition(input: &[Token]) -> IResult<&[Token], StructDefinition, ParseError> {
+fn structdefinition(input: &[Token]) -> IResult<&[Token], StructDefinition, ParseErrorReason> {
     chain!(input,
         token!(Token::Struct) ~
         structname: parse_variablename ~
@@ -594,7 +600,7 @@ fn structdefinition(input: &[Token]) -> IResult<&[Token], StructDefinition, Pars
     )
 }
 
-fn constantvariable(input: &[Token]) -> IResult<&[Token], ConstantVariable, ParseError> {
+fn constantvariable(input: &[Token]) -> IResult<&[Token], ConstantVariable, ParseErrorReason> {
     chain!(input,
         typename: parse_typename ~
         varname: parse_variablename ~
@@ -603,17 +609,17 @@ fn constantvariable(input: &[Token]) -> IResult<&[Token], ConstantVariable, Pars
     )
 }
 
-fn cbuffer_register(input: &[Token]) -> IResult<&[Token], ConstantSlot, ParseError> {
+fn cbuffer_register(input: &[Token]) -> IResult<&[Token], ConstantSlot, ParseErrorReason> {
     map_res!(input, preceded!(token!(Token::Colon), token!(Token::Register(_))),
         |reg| { match reg {
-            Token::Register(RegisterSlot::B(slot)) => Ok(ConstantSlot(slot)) as Result<ConstantSlot, ParseError>,
-            Token::Register(_) => Err(ParseError::WrongSlotType),
+            Token::Register(RegisterSlot::B(slot)) => Ok(ConstantSlot(slot)) as Result<ConstantSlot, ParseErrorReason>,
+            Token::Register(_) => Err(ParseErrorReason::WrongSlotType),
             _ => unreachable!(),
         } }
     )
 }
 
-fn cbuffer(input: &[Token]) -> IResult<&[Token], ConstantBuffer, ParseError> {
+fn cbuffer(input: &[Token]) -> IResult<&[Token], ConstantBuffer, ParseErrorReason> {
     chain!(input,
         token!(Token::ConstantBuffer) ~
         name: parse_variablename ~
@@ -628,18 +634,18 @@ fn cbuffer(input: &[Token]) -> IResult<&[Token], ConstantBuffer, ParseError> {
     )
 }
 
-fn globalvariable_register(input: &[Token]) -> IResult<&[Token], GlobalSlot, ParseError> {
+fn globalvariable_register(input: &[Token]) -> IResult<&[Token], GlobalSlot, ParseErrorReason> {
     map_res!(input, preceded!(token!(Token::Colon), token!(Token::Register(_))),
         |reg| { match reg {
-            Token::Register(RegisterSlot::T(slot)) => Ok(GlobalSlot::ReadSlot(slot)) as Result<GlobalSlot, ParseError>,
-            Token::Register(RegisterSlot::U(slot)) => Ok(GlobalSlot::ReadWriteSlot(slot)) as Result<GlobalSlot, ParseError>,
-            Token::Register(_) => Err(ParseError::WrongSlotType),
+            Token::Register(RegisterSlot::T(slot)) => Ok(GlobalSlot::ReadSlot(slot)) as Result<GlobalSlot, ParseErrorReason>,
+            Token::Register(RegisterSlot::U(slot)) => Ok(GlobalSlot::ReadWriteSlot(slot)) as Result<GlobalSlot, ParseErrorReason>,
+            Token::Register(_) => Err(ParseErrorReason::WrongSlotType),
             _ => unreachable!(),
         } }
     )
 }
 
-fn globalvariable(input: &[Token]) -> IResult<&[Token], GlobalVariable, ParseError> {
+fn globalvariable(input: &[Token]) -> IResult<&[Token], GlobalVariable, ParseErrorReason> {
     chain!(input,
         typename: parse_typename ~
         name: parse_variablename ~
@@ -649,7 +655,7 @@ fn globalvariable(input: &[Token]) -> IResult<&[Token], GlobalVariable, ParseErr
     )
 }
 
-fn functionattribute(input: &[Token]) -> IResult<&[Token], FunctionAttribute, ParseError> {
+fn functionattribute(input: &[Token]) -> IResult<&[Token], FunctionAttribute, ParseErrorReason> {
     chain!(input,
         token!(Token::LeftSquareBracket) ~
         attr: alt!(
@@ -670,7 +676,7 @@ fn functionattribute(input: &[Token]) -> IResult<&[Token], FunctionAttribute, Pa
     )
 }
 
-fn functionparam(input: &[Token]) -> IResult<&[Token], FunctionParam, ParseError> {
+fn functionparam(input: &[Token]) -> IResult<&[Token], FunctionParam, ParseErrorReason> {
     chain!(input,
         typename: parse_typename ~
         param: parse_variablename ~
@@ -683,7 +689,7 @@ fn functionparam(input: &[Token]) -> IResult<&[Token], FunctionParam, ParseError
     )
 }
 
-fn functiondefinition(input: &[Token]) -> IResult<&[Token], FunctionDefinition, ParseError> {
+fn functiondefinition(input: &[Token]) -> IResult<&[Token], FunctionDefinition, ParseErrorReason> {
     chain!(input,
         attributes: many0!(functionattribute) ~
         ret: parse_typename ~
@@ -702,7 +708,7 @@ fn functiondefinition(input: &[Token]) -> IResult<&[Token], FunctionDefinition, 
     )
 }
 
-fn rootdefinition(input: &[Token]) -> IResult<&[Token], RootDefinition, ParseError> {
+fn rootdefinition(input: &[Token]) -> IResult<&[Token], RootDefinition, ParseErrorReason> {
     alt!(input,
         structdefinition => { |structdef| { RootDefinition::Struct(structdef) } } |
         cbuffer => { |cbuffer| { RootDefinition::ConstantBuffer(cbuffer) } } |
@@ -711,16 +717,33 @@ fn rootdefinition(input: &[Token]) -> IResult<&[Token], RootDefinition, ParseErr
     )
 }
 
-pub fn module(input: &[Token]) -> IResult<&[Token], Vec<RootDefinition>, ParseError> {
-    many0!(input, rootdefinition)
+pub fn module(input: &[Token]) -> IResult<&[Token], Vec<RootDefinition>, ParseErrorReason> {
+    chain!(input, roots: many0!(rootdefinition) ~ token!(Token::Eof), || { roots })
 }
 
-pub fn parse(entry_point: String, source: &[Token]) -> Option<Module> {
+fn errorkind_to_reason(errkind: ErrorKind<ParseErrorReason>) -> ParseErrorReason {
+    match errkind {
+        ErrorKind::Custom(reason) => reason,
+        _ => ParseErrorReason::Unknown,
+    }
+}
+
+fn iresult_to_error(err: Err<&[Token], ParseErrorReason>) -> ParseError {
+    match err {
+        Err::Code(error) => ParseError(errorkind_to_reason(error), None, None),
+        Err::Node(error, inner_err) => ParseError(errorkind_to_reason(error), None, Some(Box::new(iresult_to_error(*inner_err)))),
+        Err::Position(error, position) => ParseError(errorkind_to_reason(error), Some(position.to_vec()), None),
+        Err::NodePosition(error, position, inner_err) =>  ParseError(errorkind_to_reason(error), Some(position.to_vec()), Some(Box::new(iresult_to_error(*inner_err)))),
+    }
+}
+
+pub fn parse(entry_point: String, source: &[Token]) -> Result<Module, ParseError> {
     let parse_result = module(source);
     match parse_result {
-        IResult::Done(rest, hlsl) => if rest.len() == 0 { Some(Module { entry_point: entry_point, root_definitions: hlsl }) } else { None },
-        IResult::Error(_) => None,
-        IResult::Incomplete(_) => None,
+        IResult::Done(rest, _) if rest.len() != 0 => Err(ParseError(ParseErrorReason::FailedToParse, Some(rest.to_vec()), None)),
+        IResult::Done(_, hlsl) => Ok(Module { entry_point: entry_point, root_definitions: hlsl }),
+        IResult::Error(err) => Err(iresult_to_error(err)),
+        IResult::Incomplete(_) => Err(ParseError(ParseErrorReason::UnexpectedEndOfStream, None, None)),
     }
 }
 
@@ -731,15 +754,13 @@ fn exp_var(var_name: &'static str) -> Expression { Expression::Variable(var_name
 fn bexp_var(var_name: &'static str) -> Box<Expression> { Box::new(exp_var(var_name)) }
 
 #[cfg(test)]
-fn parse_from_str<T>(parse_func: Box<Fn(&[Token]) -> IResult<&[Token], T, ParseError>>) -> Box<Fn(&'static str) -> T> where T: 'static {
+fn parse_from_str<T>(parse_func: Box<Fn(&[Token]) -> IResult<&[Token], T, ParseErrorReason>>) -> Box<Fn(&'static str) -> T> where T: 'static {
     Box::new(move |string: &'static str| {
         let modified_string = string.to_string() + "\n";
         let input = &modified_string[..].as_bytes();
-        let lex_result = super::lexer::token_stream(input);
+        let lex_result = super::lexer::lex(input);
         match lex_result {
-            IResult::Done(rem, TokenStream(mut stream)) => {
-                if rem.len() != 0 { panic!("Tokens remaining while lexing `{:?}`: {:?}", string, rem) };
-                stream.push(Token::Eof);
+            Ok(TokenStream(stream)) => {
                 match parse_func(&stream[..]) {
                     IResult::Done(rem, exp) => {
                         if rem == &[Token::Eof] {
@@ -752,7 +773,7 @@ fn parse_from_str<T>(parse_func: Box<Fn(&[Token]) -> IResult<&[Token], T, ParseE
                     _ => panic!("Failed to parse {:?}", stream)
                 }
             }
-            _ => panic!("Failed to lex `{:?}`", string)
+            Err(error) => panic!("Failed to lex `{:?}`", error)
         }
     })
 }

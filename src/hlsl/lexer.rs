@@ -2,6 +2,13 @@ use super::tokens::*;
 use nom::{IResult,Needed,Err,ErrorKind};
 use std::str;
 
+#[derive(PartialEq, Debug, Clone)]
+pub enum LexError {
+    Unknown,
+    FailedToParse(Vec<u8>),
+    UnexpectedEndOfStream,
+}
+
 named!(digit<u64>, alt!(
     tag!("0") => { |_| { 0 } } |
     tag!("1") => { |_| { 1 } } |
@@ -334,7 +341,26 @@ named!(token_no_whitespace<Token>, alt!(
 
 named!(token<Token>, delimited!(opt!(whitespace), alt!(token_no_whitespace), opt!(whitespace)));
 
-named!(pub token_stream<TokenStream>, map!(many0!(token), |v| { TokenStream(v) }));
+named!(token_stream<TokenStream>, map!(many0!(token), |v| { TokenStream(v) }));
+
+pub fn lex(input: &[u8]) -> Result<TokenStream, LexError> {
+    match token_stream(input) {
+        IResult::Done(rest, TokenStream(mut result)) => {
+            if rest == [] {
+                let result_with_eof = { result.push(Token::Eof); result };
+                Ok(TokenStream(result_with_eof))
+            } else {
+                Err(LexError::FailedToParse(rest.to_vec()))
+            }
+        },
+        IResult::Incomplete(_) => {
+            Err(LexError::UnexpectedEndOfStream)
+        },
+        IResult::Error(_) => {
+            Err(LexError::Unknown)
+        },
+    }
+}
 
 #[test]
 fn test_token() {
