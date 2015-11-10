@@ -89,12 +89,34 @@ pub struct FunctionDefinition {
 }
 
 #[derive(PartialEq, Debug, Clone)]
+pub enum KernelSemantic {
+    DispatchThreadId,
+    GroupId,
+    GroupIndex,
+    GroupThreadId,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct Dimension(pub u64, pub u64, pub u64);
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct KernelParam(pub String, pub KernelSemantic);
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct Kernel {
+    pub group_dimensions: Dimension,
+    pub params: Vec<KernelParam>,
+    pub body: Vec<Statement>,
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum RootDefinition {
     Struct(StructDefinition),
     SamplerState,
     ConstantBuffer(ConstantBuffer),
     GlobalVariable(GlobalVariable),
     Function(FunctionDefinition),
+    Kernel(Kernel),
 }
 
 #[derive(PartialEq, Debug, Clone)]

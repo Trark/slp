@@ -36,6 +36,10 @@ pub enum ParseError {
     InvalidCast(ParseType, ParseType),
     FunctionTypeInInitExpression,
     FunctionNotCalled,
+
+    KernelNotDefined,
+    KernelDefinedMultipleTimes,
+    KernelHasNoDispatchDimensions,
 }
 
 pub type ReturnType = ir::Type;
@@ -643,12 +647,37 @@ fn parse_rootdefinition_function(fd: &ast::FunctionDefinition, mut context: Cont
     Ok((ir::RootDefinition::Function(fd_ir), context))
 }
 
-fn parse_rootdefinition(ast: &ast::RootDefinition, context: Context, globals: &mut ir::GlobalTable) -> Result<(ir::RootDefinition, Context), ParseError> {
+fn parse_rootdefinition_kernel(fd: &ast::FunctionDefinition, context: Context) -> Result<(ir::RootDefinition, Context), ParseError> {
+    let body_ir = {
+        let mut scoped_context = context.scoped();
+        for param in &fd.params {
+            try!(scoped_context.insert_variable(param.name.clone(), param.typename.clone()));
+        }
+        try!(parse_statement_vec(&fd.body, scoped_context))
+    };
+    fn find_dispatch_dimensions(attributes: &[ast::FunctionAttribute]) -> Result<ir::Dimension, ParseError> {
+        for attribute in attributes {
+            match attribute {
+                &ast::FunctionAttribute::NumThreads(x, y, z) => return Ok(ir::Dimension(x, y, z)),
+            };
+        }
+        Err(ParseError::KernelHasNoDispatchDimensions)
+    }
+    let kernel = ir::Kernel {
+        group_dimensions: try!(find_dispatch_dimensions(&fd.attributes[..])),
+        params: vec![],
+        body: body_ir,
+    };
+    Ok((ir::RootDefinition::Kernel(kernel), context))
+}
+
+fn parse_rootdefinition(ast: &ast::RootDefinition, context: Context, globals: &mut ir::GlobalTable, entry_point: &str) -> Result<(ir::RootDefinition, Context), ParseError> {
     match ast {
         &ast::RootDefinition::Struct(ref sd) => parse_rootdefinition_struct(sd, context),
         &ast::RootDefinition::SamplerState => Ok((ir::RootDefinition::SamplerState, context)),
         &ast::RootDefinition::ConstantBuffer(ref cb) => parse_rootdefinition_constantbuffer(cb, context, globals),
         &ast::RootDefinition::GlobalVariable(ref gv) => parse_rootdefinition_globalvariable(gv, context, globals),
+        &ast::RootDefinition::Function(ref fd) if fd.name == entry_point => parse_rootdefinition_kernel(fd, context),
         &ast::RootDefinition::Function(ref fd) => parse_rootdefinition_function(fd, context),
     }
 }
@@ -659,9 +688,27 @@ pub fn parse(ast: &ast::Module) -> Result<ir::Module, ParseError> {
     let mut ir = ir::Module { entry_point: ast.entry_point.clone(), global_table: ir::GlobalTable::new(), root_definitions: vec![] };
 
     for def in &ast.root_definitions {
-        let (def_ir, next_context) = try!(parse_rootdefinition(&def, context, &mut ir.global_table));
+        let (def_ir, next_context) = try!(parse_rootdefinition(&def, context, &mut ir.global_table, &ir.entry_point[..]));
         ir.root_definitions.push(def_ir);
         context = next_context;
+    }
+
+    // Ensure we have one kernel function
+    let mut has_kernel = false;
+    for root_def in &ir.root_definitions {
+        match root_def {
+            &ir::RootDefinition::Kernel(_) => {
+                if has_kernel {
+                    return Err(ParseError::KernelDefinedMultipleTimes);
+                } else {
+                    has_kernel = true;
+                }
+            },
+            _ => { },
+        }
+    }
+    if !has_kernel {
+        return Err(ParseError::KernelNotDefined);
     }
 
     Ok(ir)
@@ -731,10 +778,10 @@ fn test_parse() {
                         ),
                     ),
                 ],
-                attributes: vec![],
+                attributes: vec![ast::FunctionAttribute::NumThreads(8, 8, 1)],
             }),
         ],
     };
     let res = parse(&module);
-    assert!(res.is_ok());
+    assert!(res.is_ok(), "{:?}", res);
 }

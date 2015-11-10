@@ -134,14 +134,14 @@ fn cs1_lex() {
 #[test]
 fn cs1_parse() {
     let TokenStream(tokens) = lex(CS1).unwrap();
-    let parse_result = parse("CSMAIN".to_string(), &tokens[..]);
+    let parse_result = parse("CSMain".to_string(), &tokens[..]);
     assert!(parse_result.is_ok(), "{:?}", parse_result);
 }
 
 #[test]
 fn cs1_typecheck() {
     let TokenStream(tokens) = lex(CS1).unwrap();
-    let ast = parse("CSMAIN".to_string(), &tokens[..]).unwrap();
+    let ast = parse("CSMain".to_string(), &tokens[..]).unwrap();
     let ir_result = ast_to_ir::parse(&ast);
     assert!(ir_result.is_ok(), "{:?}", ir_result);
 }
