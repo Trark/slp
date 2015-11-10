@@ -574,78 +574,83 @@ fn parse_statement_vec(ast: &Vec<ast::Statement>, context: Context) -> Result<Ve
     Ok(body_ir)
 }
 
-fn parse_rootdefinition(ast: &ast::RootDefinition, context: Context, globals: &mut ir::GlobalTable) -> Result<(ir::RootDefinition, Context), ParseError> {
-    let mut next_context = context;
-    let res = match ast {
-        &ast::RootDefinition::Struct(ref sd) => {
-            let struct_def = sd.clone();
-            match next_context.structs.insert(struct_def.name.clone(), struct_def.clone()) {
-                Some(_) => return Err(ParseError::StructAlreadyDefined(struct_def.name.clone())),
-                None => { },
-            };
-            ir::RootDefinition::Struct(struct_def)
-        },
-        &ast::RootDefinition::SamplerState => ir::RootDefinition::SamplerState,
-        &ast::RootDefinition::ConstantBuffer(ref cb) => {
-            let cb_ir = ir::ConstantBuffer { name: cb.name.clone(), members: cb.members.clone() };
-            try!(next_context.insert_variable(cb_ir.name.clone(), ir::Type::custom(&cb_ir.name[..])));
-            match cb.slot {
-                Some(ast::ConstantSlot(slot)) => {
-                    match globals.constants.insert(slot, cb_ir.name.clone()) {
-                        Some(currently_used_by) => return Err(ParseError::ConstantSlotAlreadyUsed(currently_used_by.clone(), cb_ir.name.clone())),
-                        None => { },
-                    }
-                },
-                None => { },
-            }
-            ir::RootDefinition::ConstantBuffer(cb_ir)
-        },
-        &ast::RootDefinition::GlobalVariable(ref gv) => {
-            let gv_ir = ir::GlobalVariable { name: gv.name.clone(), typename: gv.typename.clone() };
-            try!(next_context.insert_variable(gv_ir.name.clone(), gv_ir.typename.clone()));
-            let entry = ir::GlobalEntry { name: gv_ir.name.clone(), typename: gv_ir.typename.clone() };
-            match gv.slot {
-                Some(ast::GlobalSlot::ReadSlot(slot)) => {
-                    match globals.r_resources.insert(slot, entry) {
-                        Some(currently_used_by) => return Err(ParseError::ReadResourceSlotAlreadyUsed(currently_used_by.name.clone(), gv_ir.name.clone())),
-                        None => { },
-                    }
-                },
-                Some(ast::GlobalSlot::ReadWriteSlot(slot)) => {
-                    match globals.rw_resources.insert(slot, entry) {
-                        Some(currently_used_by) => return Err(ParseError::ReadWriteResourceSlotAlreadyUsed(currently_used_by.name.clone(), gv_ir.name.clone())),
-                        None => { },
-                    }
-                },
-                None => { },
-            }
-            ir::RootDefinition::GlobalVariable(gv_ir)
-        }
-        &ast::RootDefinition::Function(ref fd) => {
-            let body_ir = {
-                let mut scoped_context = next_context.scoped();
-                for param in &fd.params {
-                    try!(scoped_context.insert_variable(param.name.clone(), param.typename.clone()));
-                }
-                try!(parse_statement_vec(&fd.body, scoped_context))
-            };
-            let fd_ir = ir::FunctionDefinition {
-                name: fd.name.clone(),
-                returntype: fd.returntype.clone(),
-                params: fd.params.clone(),
-                body: body_ir,
-                attributes: fd.attributes.clone(),
-            };
-            let func_type = FunctionOverload(
-                fd_ir.returntype.clone(),
-                fd_ir.params.iter().map(|p| { p.typename.clone() }).collect()
-            );
-            try!(next_context.insert_function(fd_ir.name.clone(), func_type));
-            ir::RootDefinition::Function(fd_ir)
-        }
-
+fn parse_rootdefinition_struct(sd: &ast::StructDefinition, mut context: Context) -> Result<(ir::RootDefinition, Context), ParseError> {
+    let struct_def = sd.clone();
+    match context.structs.insert(struct_def.name.clone(), struct_def.clone()) {
+        Some(_) => return Err(ParseError::StructAlreadyDefined(struct_def.name.clone())),
+        None => { },
     };
-    Ok((res, next_context))
+    Ok((ir::RootDefinition::Struct(struct_def), context))
+}
+
+fn parse_rootdefinition_constantbuffer(cb: &ast::ConstantBuffer, mut context: Context, globals: &mut ir::GlobalTable) -> Result<(ir::RootDefinition, Context), ParseError> {
+    let cb_ir = ir::ConstantBuffer { name: cb.name.clone(), members: cb.members.clone() };
+    try!(context.insert_variable(cb_ir.name.clone(), ir::Type::custom(&cb_ir.name[..])));
+    match cb.slot {
+        Some(ast::ConstantSlot(slot)) => {
+            match globals.constants.insert(slot, cb_ir.name.clone()) {
+                Some(currently_used_by) => return Err(ParseError::ConstantSlotAlreadyUsed(currently_used_by.clone(), cb_ir.name.clone())),
+                None => { },
+            }
+        },
+        None => { },
+    }
+    Ok((ir::RootDefinition::ConstantBuffer(cb_ir), context))
+}
+
+fn parse_rootdefinition_globalvariable(gv: &ast::GlobalVariable, mut context: Context, globals: &mut ir::GlobalTable) -> Result<(ir::RootDefinition, Context), ParseError> {
+    let gv_ir = ir::GlobalVariable { name: gv.name.clone(), typename: gv.typename.clone() };
+    try!(context.insert_variable(gv_ir.name.clone(), gv_ir.typename.clone()));
+    let entry = ir::GlobalEntry { name: gv_ir.name.clone(), typename: gv_ir.typename.clone() };
+    match gv.slot {
+        Some(ast::GlobalSlot::ReadSlot(slot)) => {
+            match globals.r_resources.insert(slot, entry) {
+                Some(currently_used_by) => return Err(ParseError::ReadResourceSlotAlreadyUsed(currently_used_by.name.clone(), gv_ir.name.clone())),
+                None => { },
+            }
+        },
+        Some(ast::GlobalSlot::ReadWriteSlot(slot)) => {
+            match globals.rw_resources.insert(slot, entry) {
+                Some(currently_used_by) => return Err(ParseError::ReadWriteResourceSlotAlreadyUsed(currently_used_by.name.clone(), gv_ir.name.clone())),
+                None => { },
+            }
+        },
+        None => { },
+    }
+    Ok((ir::RootDefinition::GlobalVariable(gv_ir), context))
+}
+
+fn parse_rootdefinition_function(fd: &ast::FunctionDefinition, mut context: Context) -> Result<(ir::RootDefinition, Context), ParseError> {
+    let body_ir = {
+        let mut scoped_context = context.scoped();
+        for param in &fd.params {
+            try!(scoped_context.insert_variable(param.name.clone(), param.typename.clone()));
+        }
+        try!(parse_statement_vec(&fd.body, scoped_context))
+    };
+    let fd_ir = ir::FunctionDefinition {
+        name: fd.name.clone(),
+        returntype: fd.returntype.clone(),
+        params: fd.params.clone(),
+        body: body_ir,
+        attributes: fd.attributes.clone(),
+    };
+    let func_type = FunctionOverload(
+        fd_ir.returntype.clone(),
+        fd_ir.params.iter().map(|p| { p.typename.clone() }).collect()
+    );
+    try!(context.insert_function(fd_ir.name.clone(), func_type));
+    Ok((ir::RootDefinition::Function(fd_ir), context))
+}
+
+fn parse_rootdefinition(ast: &ast::RootDefinition, context: Context, globals: &mut ir::GlobalTable) -> Result<(ir::RootDefinition, Context), ParseError> {
+    match ast {
+        &ast::RootDefinition::Struct(ref sd) => parse_rootdefinition_struct(sd, context),
+        &ast::RootDefinition::SamplerState => Ok((ir::RootDefinition::SamplerState, context)),
+        &ast::RootDefinition::ConstantBuffer(ref cb) => parse_rootdefinition_constantbuffer(cb, context, globals),
+        &ast::RootDefinition::GlobalVariable(ref gv) => parse_rootdefinition_globalvariable(gv, context, globals),
+        &ast::RootDefinition::Function(ref fd) => parse_rootdefinition_function(fd, context),
+    }
 }
 
 pub fn parse(ast: &ast::Module) -> Result<ir::Module, ParseError> {
