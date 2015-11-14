@@ -57,7 +57,7 @@ pub enum IntrinsicFunction {
 #[derive(PartialEq, Debug, Clone)]
 pub enum FunctionName {
     Intrinsic(IntrinsicFunction),
-    User(ir::FunctionId, String),
+    User(ir::FunctionId),
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -78,7 +78,7 @@ pub enum IntrinsicMethod {
 #[derive(PartialEq, Debug, Clone)]
 pub enum MethodName {
     Intrinsic(IntrinsicMethod),
-    User(ir::FunctionId, String),
+    User(ir::FunctionId),
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -121,26 +121,8 @@ pub struct Context {
     next_free_function_id: ir::FunctionId,
 }
 
-impl FunctionName {
-    pub fn get_name(&self) -> String {
-        match self {
-            &FunctionName::User(_, ref s) => s.clone(),
-            &FunctionName::Intrinsic(_) => "<unknown>".to_string(),
-        }
-    }
-}
-
 impl UnresolvedFunction {
     pub fn get_name(&self) -> String { self.0.clone() }
-}
-
-impl MethodName {
-    pub fn get_name(&self) -> String {
-        match self {
-            &MethodName::User(_, ref s) => s.clone(),
-            &MethodName::Intrinsic(_) => "<unknown-method>".to_string(),
-        }
-    }
 }
 
 impl UnresolvedMethod {
@@ -272,7 +254,7 @@ fn write_function(function: ResolvedFunction, param_values: Vec<ir::Expression>)
     let ResolvedFunction(FunctionOverload(name, return_type, _)) = function;
     let intrinsic = match name {
         FunctionName::Intrinsic(intrinsic) => intrinsic,
-        FunctionName::User(id, _) => {
+        FunctionName::User(id) => {
             return Ok(TypedExpression::Value(ir::Expression::Call(Box::new(ir::Expression::Function(id)), param_values), return_type))
         },
     };
@@ -656,7 +638,7 @@ fn parse_rootdefinition_function(fd: &ast::FunctionDefinition, mut context: Cont
         attributes: fd.attributes.clone(),
     };
     let func_type = FunctionOverload(
-        FunctionName::User(fd_ir.id, fd_ir.original_name.clone()),
+        FunctionName::User(fd_ir.id),
         fd_ir.returntype.clone(),
         fd_ir.params.iter().map(|p| { p.typename.clone() }).collect()
     );
