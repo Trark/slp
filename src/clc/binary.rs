@@ -63,10 +63,6 @@ impl Printer {
             self.buffer.push_str("\t");
         }
     }
-
-    pub fn to_string(&self) -> String {
-        self.buffer.clone()
-    }
 }
 
 fn print_dimension(dim: &VectorDimension, printer: &mut Printer) {
