@@ -19,11 +19,13 @@ pub enum Intrinsic {
 }
 
 pub use super::ast::Literal as Literal;
+pub type FunctionId = u32;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
     Literal(Literal),
     Variable(String),
+    Function(FunctionId),
     UnaryOperation(UnaryOp, Box<Expression>),
     BinaryOperation(BinOp, Box<Expression>, Box<Expression>),
     ArraySubscript(Box<Expression>, Box<Expression>),
@@ -81,7 +83,8 @@ pub use super::ast::FunctionParam as FunctionParam;
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct FunctionDefinition {
-    pub name: String,
+    pub id: FunctionId,
+    pub original_name: String,
     pub returntype: Type,
     pub params: Vec<FunctionParam>,
     pub body: Vec<Statement>,

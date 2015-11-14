@@ -57,17 +57,17 @@ pub enum IntrinsicFunction {
 #[derive(PartialEq, Debug, Clone)]
 pub enum FunctionName {
     Intrinsic(IntrinsicFunction),
-    User(String),
+    User(ir::FunctionId, String),
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct FunctionOverload(pub ReturnType, pub ParamArray);
+pub struct FunctionOverload(pub FunctionName, pub ReturnType, pub ParamArray);
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct ResolvedFunction(pub FunctionName, pub FunctionOverload);
+pub struct ResolvedFunction(pub FunctionOverload);
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct UnresolvedFunction(pub FunctionName, pub Vec<FunctionOverload>);
+pub struct UnresolvedFunction(pub String, pub Vec<FunctionOverload>);
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum IntrinsicMethod {
@@ -78,17 +78,17 @@ pub enum IntrinsicMethod {
 #[derive(PartialEq, Debug, Clone)]
 pub enum MethodName {
     Intrinsic(IntrinsicMethod),
-    User(String),
+    User(ir::FunctionId, String),
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct MethodOverload(pub ReturnType, pub ParamArray);
+pub struct MethodOverload(pub MethodName, pub ReturnType, pub ParamArray);
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct ResolvedMethod(pub MethodName, pub ClassType, pub MethodOverload, ir::Expression);
+pub struct ResolvedMethod(pub ClassType, pub MethodOverload, ir::Expression);
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct UnresolvedMethod(pub MethodName, pub ClassType, pub Vec<MethodOverload>, ir::Expression);
+pub struct UnresolvedMethod(pub String, pub ClassType, pub Vec<MethodOverload>, ir::Expression);
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum ParseType {
@@ -117,32 +117,34 @@ pub struct Context {
     // Variables visible in the current context. Maps names to types
     // One map per scope level (nearer the front is a wider scope)
     variables: Vec<HashMap<String, ir::Type>>,
+
+    next_free_function_id: ir::FunctionId,
 }
 
 impl FunctionName {
     pub fn get_name(&self) -> String {
         match self {
-            &FunctionName::User(ref s) => s.clone(),
+            &FunctionName::User(_, ref s) => s.clone(),
             &FunctionName::Intrinsic(_) => "<unknown>".to_string(),
         }
     }
 }
 
 impl UnresolvedFunction {
-    pub fn get_name(&self) -> String { self.0.get_name() }
+    pub fn get_name(&self) -> String { self.0.clone() }
 }
 
 impl MethodName {
     pub fn get_name(&self) -> String {
         match self {
-            &MethodName::User(ref s) => s.clone(),
+            &MethodName::User(_, ref s) => s.clone(),
             &MethodName::Intrinsic(_) => "<unknown-method>".to_string(),
         }
     }
 }
 
 impl UnresolvedMethod {
-    pub fn get_name(&self) -> String { self.0.get_name() }
+    pub fn get_name(&self) -> String { self.0.clone() }
 }
 
 impl TypedExpression {
@@ -157,7 +159,7 @@ impl TypedExpression {
 
 impl Context {
     pub fn new() -> Context {
-        Context { structs: HashMap::new(), functions: get_intrinsics(), variables: vec![HashMap::new()] }
+        Context { structs: HashMap::new(), functions: get_intrinsics(), variables: vec![HashMap::new()], next_free_function_id: 0 }
     }
 
     pub fn insert_variable(&mut self, name: String, typename: ir::Type) -> Result<(), TyperError> {
@@ -185,8 +187,8 @@ impl Context {
         match self.functions.entry(name.clone()) {
             Entry::Occupied(mut occupied) => {
                 // Fail if the overload already exists
-                for &FunctionOverload(_, ref args) in &occupied.get().1 {
-                    if *args == function_type.1 {
+                for &FunctionOverload(_, _, ref args) in &occupied.get().1 {
+                    if *args == function_type.2 {
                         return Err(TyperError::ValueAlreadyDefined(name, ParseType::Unknown, ParseType::Unknown))
                     }
                 };
@@ -196,7 +198,7 @@ impl Context {
             },
             Entry::Vacant(vacant) => {
                 // Insert a new function with one overload
-                vacant.insert(UnresolvedFunction(FunctionName::User(name), vec![function_type])); Ok(())
+                vacant.insert(UnresolvedFunction(name, vec![function_type])); Ok(())
             },
         }
     }
@@ -222,7 +224,15 @@ impl Context {
             structs: self.structs.clone(),
             functions: self.functions.clone(),
             variables: scoped_vars,
+            next_free_function_id: 0,
         }
+    }
+
+    fn make_function_id(&mut self) -> ir::FunctionId {
+        assert_eq!(self.variables.len(), 1);
+        let value = self.next_free_function_id;
+        self.next_free_function_id = self.next_free_function_id + 1;
+        value
     }
 }
 
@@ -232,8 +242,9 @@ fn get_intrinsics() -> HashMap<String, UnresolvedFunction> {
     fn t_float() -> ir::Type { ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(ir::ScalarType::Float))) };
     fn t_float4() -> ir::Type { ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Vector(ir::ScalarType::Float, 4))) };
 
-    map.insert("float4".to_string(), UnresolvedFunction(FunctionName::Intrinsic(IntrinsicFunction::Float4), vec![
-        FunctionOverload(t_float4(), vec![t_float(), t_float(), t_float(), t_float()])
+    let (float4_str, float4_func) = ("float4".to_string(), FunctionName::Intrinsic(IntrinsicFunction::Float4));
+    map.insert(float4_str.clone(), UnresolvedFunction(float4_str.clone(), vec![
+        FunctionOverload(float4_func, t_float4(), vec![t_float(), t_float(), t_float(), t_float()])
     ]));
 
     map
@@ -241,8 +252,8 @@ fn get_intrinsics() -> HashMap<String, UnresolvedFunction> {
 
 fn find_function_type(function: UnresolvedFunction, actual_params: ParamArray) -> Result<ResolvedFunction, TyperError> {
     for overload in &function.1 {
-        if overload.1 == actual_params {
-            return Ok(ResolvedFunction(function.0, overload.clone()))
+        if overload.2 == actual_params {
+            return Ok(ResolvedFunction(overload.clone()))
         };
     };
     Err(TyperError::FunctionArgumentTypeMismatch(function, actual_params))
@@ -250,19 +261,19 @@ fn find_function_type(function: UnresolvedFunction, actual_params: ParamArray) -
 
 fn find_method_type(method: UnresolvedMethod, actual_params: ParamArray) -> Result<ResolvedMethod, TyperError> {
     for overload in &method.2 {
-        if overload.1 == actual_params {
-            return Ok(ResolvedMethod(method.0, method.1, overload.clone(), method.3))
+        if overload.2 == actual_params {
+            return Ok(ResolvedMethod(method.1, overload.clone(), method.3))
         };
     };
     Err(TyperError::MethodArgumentTypeMismatch(method, actual_params))
 }
 
 fn write_function(function: ResolvedFunction, param_values: Vec<ir::Expression>) -> Result<TypedExpression, TyperError> {
-    let ResolvedFunction(name, FunctionOverload(return_type, _)) = function;
+    let ResolvedFunction(FunctionOverload(name, return_type, _)) = function;
     let intrinsic = match name {
         FunctionName::Intrinsic(intrinsic) => intrinsic,
-        FunctionName::User(name) => {
-            return Ok(TypedExpression::Value(ir::Expression::Call(Box::new(ir::Expression::Variable(name)), param_values), return_type))
+        FunctionName::User(id, _) => {
+            return Ok(TypedExpression::Value(ir::Expression::Call(Box::new(ir::Expression::Function(id)), param_values), return_type))
         },
     };
     Ok(TypedExpression::Value(match intrinsic {
@@ -279,7 +290,7 @@ fn write_function(function: ResolvedFunction, param_values: Vec<ir::Expression>)
 }
 
 fn write_method(method: ResolvedMethod, param_values: Vec<ir::Expression>) -> Result<TypedExpression, TyperError> {
-    let ResolvedMethod(name, _, MethodOverload(return_type, _), object_ir) = method;
+    let ResolvedMethod(_, MethodOverload(name, return_type, _), object_ir) = method;
     let intrinsic = match name {
         MethodName::Intrinsic(intrinsic) => intrinsic,
         _ => unreachable!(),
@@ -416,9 +427,10 @@ fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpressio
                     match &member[..] {
                         "Load" => {
                             return Ok(TypedExpression::Method(UnresolvedMethod(
-                                MethodName::Intrinsic(IntrinsicMethod::BufferLoad),
+                                "Buffer::Load".to_string(),
                                 ir::Type::Object(ir::ObjectType::Buffer(data_type.clone())),
                                 vec![MethodOverload(
+                                    MethodName::Intrinsic(IntrinsicMethod::BufferLoad),
                                     ir::Type::Structured(ir::StructuredType::Data(data_type.clone())),
                                     vec![ir::Type::int()]
                                 )],
@@ -432,9 +444,10 @@ fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpressio
                     match &member[..] {
                         "Load" => {
                             return Ok(TypedExpression::Method(UnresolvedMethod(
-                                MethodName::Intrinsic(IntrinsicMethod::StructuredBufferLoad),
+                                "StructuredBuffer::Load".to_string(),
                                 ir::Type::Object(ir::ObjectType::StructuredBuffer(structured_type.clone())),
                                 vec![MethodOverload(
+                                    MethodName::Intrinsic(IntrinsicMethod::StructuredBufferLoad),
                                     ir::Type::Structured(structured_type.clone()),
                                     vec![ir::Type::int()]
                                 )],
@@ -635,17 +648,19 @@ fn parse_rootdefinition_function(fd: &ast::FunctionDefinition, mut context: Cont
         try!(parse_statement_vec(&fd.body, scoped_context))
     };
     let fd_ir = ir::FunctionDefinition {
-        name: fd.name.clone(),
+        id: context.make_function_id(),
+        original_name: fd.name.clone(),
         returntype: fd.returntype.clone(),
         params: fd.params.clone(),
         body: body_ir,
         attributes: fd.attributes.clone(),
     };
     let func_type = FunctionOverload(
+        FunctionName::User(fd_ir.id, fd_ir.original_name.clone()),
         fd_ir.returntype.clone(),
         fd_ir.params.iter().map(|p| { p.typename.clone() }).collect()
     );
-    try!(context.insert_function(fd_ir.name.clone(), func_type));
+    try!(context.insert_function(fd_ir.original_name.clone(), func_type));
     Ok((ir::RootDefinition::Function(fd_ir), context))
 }
 

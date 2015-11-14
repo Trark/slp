@@ -6,7 +6,7 @@ void myFunc(uint x)
 {
 }
 
-void myFunc_1(float x)
+void myFunc(float x)
 {
     x = 4.f;
 }
@@ -19,4 +19,6 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     a = b;
     b = g_myInBuffer.Load(0);
     g_myOutBuffer[b] = a;
+    float4 p = float4(1.0f, 2.4f, 0.3f, 3.4f);
+	myFunc(4.0f);
 }

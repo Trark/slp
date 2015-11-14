@@ -175,6 +175,23 @@ fn print_constructor(cons: &Constructor, printer: &mut Printer) {
             print_expression_inner(&*z, 15, printer);
             printer.print(")");
         },
+        &Constructor::Float4(ref x, ref y, ref z, ref w) => {
+            printer.print("(");
+            print_typename(&Type::Vector(Scalar::Float, VectorDimension::Four), printer);
+            printer.print(")");
+            printer.print("(");
+            print_expression_inner(x, 15, printer);
+            printer.print(",");
+            printer.space();
+            print_expression_inner(&*y, 15, printer);
+            printer.print(",");
+            printer.space();
+            print_expression_inner(&*z, 15, printer);
+            printer.print(",");
+            printer.space();
+            print_expression_inner(&*w, 15, printer);
+            printer.print(")");
+        },
     }
 }
 
@@ -202,6 +219,18 @@ fn print_expression_inner(expression: &Expression, last_precedence: u32, printer
             printer.print("]");
         },
         &Expression::Intrinsic(ref intrinsic) => print_intrinsic(intrinsic, printer),
+        &Expression::Call(ref func, ref params) => {
+            print_expression_inner(func, 1, printer);
+            printer.print("(");
+            for (idx, param) in params.iter().enumerate() {
+                print_expression(param, printer);
+                if idx < params.len() - 1 {
+                    printer.print(",");
+                    printer.space();
+                }
+            }
+            printer.print(")");
+        },
         _ => unimplemented!(),
     }
 }

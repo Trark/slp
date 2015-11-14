@@ -1,5 +1,5 @@
 
-void myFunc(uint x)
+void myFunc_0(uint x)
 {
 }
 
@@ -16,4 +16,6 @@ kernel void MyKernel(__constant uint* g_myInBuffer, __global uint* g_myOutBuffer
 	a = b;
 	b = g_myInBuffer[0];
 	g_myOutBuffer[b] = a;
+	float4 p = (float4)(1.0f, 2.4f, 0.3f, 3.4f);
+	myFunc_1(4.0f);
 }

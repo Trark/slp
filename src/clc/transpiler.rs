@@ -1,4 +1,6 @@
 
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use super::cir as dst;
 use super::super::hlsl::ir as src;
 
@@ -11,9 +13,25 @@ pub enum TranspileError {
     CouldNotGetEquivalentDataType(src::DataType),
 
     GlobalFoundThatIsntInKernelParams(src::GlobalVariable),
+
+    UnknownFunctionId(src::FunctionId),
 }
 
 type KernelParams = Vec<dst::KernelParam>;
+
+struct Context {
+    kernel_params: KernelParams,
+    function_name_map: HashMap<src::FunctionId, String>,
+}
+
+impl Context {
+    fn get_function(&self, id: &src::FunctionId) -> Result<dst::Expression, TranspileError> {
+        match self.function_name_map.get(id) {
+            Some(v) => Ok(dst::Expression::Variable(v.clone())),
+            None => Err(TranspileError::UnknownFunctionId(id.clone())),
+        }
+    }
+}
 
 fn transpile_scalartype(scalartype: &src::ScalarType) -> Result<dst::Scalar, TranspileError> {
     match scalartype {
@@ -67,65 +85,81 @@ fn transpile_literal(lit: &src::Literal) -> Result<dst::Literal, TranspileError>
     }
 }
 
-fn transpile_intrinsic(intrinsic: &src::Intrinsic) -> Result<dst::Expression, TranspileError> {
+fn transpile_intrinsic(intrinsic: &src::Intrinsic, context: &Context) -> Result<dst::Expression, TranspileError> {
     match intrinsic {
-        &src::Intrinsic::Float4(_, _, _, _) => unimplemented!(),
+        &src::Intrinsic::Float4(ref x, ref y, ref z, ref w) => {
+            Ok(dst::Expression::Constructor(dst::Constructor::Float4(
+                Box::new(try!(transpile_expression(x, context))),
+                Box::new(try!(transpile_expression(y, context))),
+                Box::new(try!(transpile_expression(z, context))),
+                Box::new(try!(transpile_expression(w, context)))
+            )))
+        },
         &src::Intrinsic::BufferLoad(ref buffer, ref loc) => {
-            let cl_buffer = Box::new(try!(transpile_expression(buffer)));
-            let cl_loc = Box::new(try!(transpile_expression(loc)));
+            let cl_buffer = Box::new(try!(transpile_expression(buffer, context)));
+            let cl_loc = Box::new(try!(transpile_expression(loc, context)));
             Ok(dst::Expression::ArraySubscript(cl_buffer, cl_loc))
         },
         &src::Intrinsic::StructuredBufferLoad(_, _) => unimplemented!(),
     }
 }
 
-fn transpile_expression(expression: &src::Expression) -> Result<dst::Expression, TranspileError> {
+fn transpile_expression(expression: &src::Expression, context: &Context) -> Result<dst::Expression, TranspileError> {
     match expression {
         &src::Expression::Literal(ref lit) => Ok(dst::Expression::Literal(try!(transpile_literal(lit)))),
         &src::Expression::Variable(ref name) => Ok(dst::Expression::Variable(name.clone())),
-        &src::Expression::UnaryOperation(_, _) => Err(TranspileError::Unknown),
+        &src::Expression::Function(ref id) => context.get_function(id),
+        &src::Expression::UnaryOperation(_, _) => unimplemented!(),
         &src::Expression::BinaryOperation(ref binop, ref lhs, ref rhs) => {
             let cl_binop = try!(transpile_binop(binop));
-            let cl_lhs = Box::new(try!(transpile_expression(lhs)));
-            let cl_rhs = Box::new(try!(transpile_expression(rhs)));
+            let cl_lhs = Box::new(try!(transpile_expression(lhs, context)));
+            let cl_rhs = Box::new(try!(transpile_expression(rhs, context)));
             Ok(dst::Expression::BinaryOperation(cl_binop, cl_lhs, cl_rhs))
         }
         &src::Expression::ArraySubscript(ref expr, ref sub) => {
-            let cl_expr = Box::new(try!(transpile_expression(expr)));
-            let cl_sub = Box::new(try!(transpile_expression(sub)));
+            let cl_expr = Box::new(try!(transpile_expression(expr, context)));
+            let cl_sub = Box::new(try!(transpile_expression(sub, context)));
             Ok(dst::Expression::ArraySubscript(cl_expr, cl_sub))
         },
-        &src::Expression::Member(_, _) => Err(TranspileError::Unknown),
-        &src::Expression::Call(_, _) => Err(TranspileError::Unknown),
-        &src::Expression::Cast(_, _) => Err(TranspileError::Unknown),
-        &src::Expression::Intrinsic(ref intrinsic) => transpile_intrinsic(intrinsic),
+        &src::Expression::Member(_, _) => unimplemented!(),
+        &src::Expression::Call(ref func, ref params) => {
+            let func_expr = try!(transpile_expression(func, context));
+            let mut params_exprs: Vec<dst::Expression> = vec![];
+            for param in params {
+                let param_expr = try!(transpile_expression(param, context));
+                params_exprs.push(param_expr);
+            };
+            Ok(dst::Expression::Call(Box::new(func_expr), params_exprs))
+        },
+        &src::Expression::Cast(_, _) => unimplemented!(),
+        &src::Expression::Intrinsic(ref intrinsic) => transpile_intrinsic(intrinsic, context),
     }
 }
 
-fn transpile_vardef(vardef: &src::VarDef) -> Result<dst::VarDef, TranspileError> {
+fn transpile_vardef(vardef: &src::VarDef, context: &Context) -> Result<dst::VarDef, TranspileError> {
     Ok(dst::VarDef {
         name: vardef.name.clone(),
         typename: try!(transpile_type(&vardef.typename)),
-        assignment: match &vardef.assignment { &None => None, &Some(ref expr) => Some(try!(transpile_expression(expr))) },
+        assignment: match &vardef.assignment { &None => None, &Some(ref expr) => Some(try!(transpile_expression(expr, context))) },
     })
 }
 
-fn transpile_statement(statement: &src::Statement) -> Result<dst::Statement, TranspileError> {
+fn transpile_statement(statement: &src::Statement, context: &Context) -> Result<dst::Statement, TranspileError> {
     match statement {
-        &src::Statement::Expression(ref expr) => Ok(dst::Statement::Expression(try!(transpile_expression(expr)))),
-        &src::Statement::Var(ref vd) => Ok(dst::Statement::Var(try!(transpile_vardef(vd)))),
-        &src::Statement::Block(_) => Err(TranspileError::Unknown),
-        &src::Statement::If(_, _) => Err(TranspileError::Unknown),
-        &src::Statement::For(_, _, _, _) => Err(TranspileError::Unknown),
-        &src::Statement::While(_, _) => Err(TranspileError::Unknown),
-        &src::Statement::Return(_) => Err(TranspileError::Unknown),
+        &src::Statement::Expression(ref expr) => Ok(dst::Statement::Expression(try!(transpile_expression(expr, context)))),
+        &src::Statement::Var(ref vd) => Ok(dst::Statement::Var(try!(transpile_vardef(vd, context)))),
+        &src::Statement::Block(_) => unimplemented!(),
+        &src::Statement::If(_, _) => unimplemented!(),
+        &src::Statement::For(_, _, _, _) => unimplemented!(),
+        &src::Statement::While(_, _) => unimplemented!(),
+        &src::Statement::Return(_) => unimplemented!(),
     }
 }
 
-fn transpile_statements(statements: &[src::Statement]) -> Result<Vec<dst::Statement>, TranspileError> {
+fn transpile_statements(statements: &[src::Statement], context: &Context) -> Result<Vec<dst::Statement>, TranspileError> {
     let mut cl_statements = vec![];
     for statement in statements {
-        cl_statements.push(try!(transpile_statement(statement)));
+        cl_statements.push(try!(transpile_statement(statement, context)));
     }
     Ok(cl_statements)
 }
@@ -178,13 +212,13 @@ fn transpile_kernel_input_semantics(params: &[src::KernelParam]) -> Result<Vec<d
     Ok(cl_params)
 }
 
-fn transpile_rootdefinition(rootdef: &src::RootDefinition, global_params: &KernelParams) -> Result<Option<dst::RootDefinition>, TranspileError> {
+fn transpile_rootdefinition(rootdef: &src::RootDefinition, context: &Context) -> Result<Option<dst::RootDefinition>, TranspileError> {
     match rootdef {
         &src::RootDefinition::Struct(_) => unimplemented!{},
         &src::RootDefinition::SamplerState => unimplemented!{},
         &src::RootDefinition::ConstantBuffer(_) => unimplemented!{},
         &src::RootDefinition::GlobalVariable(ref gv) => {
-            if global_params.iter().any(|gp| { gp.name == gv.name }) {
+            if context.kernel_params.iter().any(|gp| { gp.name == gv.name }) {
                 return Ok(None)
             } else {
                 return Err(TranspileError::GlobalFoundThatIsntInKernelParams(gv.clone()))
@@ -192,19 +226,19 @@ fn transpile_rootdefinition(rootdef: &src::RootDefinition, global_params: &Kerne
         },
         &src::RootDefinition::Function(ref func) => {
             let cl_func = dst::FunctionDefinition {
-                name: func.name.clone(),
+                name: func.original_name.clone() + "_" + &func.id.to_string(),
                 returntype: try!(transpile_type(&func.returntype)),
                 params: try!(transpile_params(&func.params)),
-                body: try!(transpile_statements(&func.body)),
+                body: try!(transpile_statements(&func.body, context)),
             };
             Ok(Some(dst::RootDefinition::Function(cl_func)))
         }
         &src::RootDefinition::Kernel(ref kernel) => {
             let mut body = try!(transpile_kernel_input_semantics(&kernel.params));
-            let mut main_body = try!(transpile_statements(&kernel.body));
+            let mut main_body = try!(transpile_statements(&kernel.body, context));
             body.append(&mut main_body);
             let cl_kernel = dst::Kernel {
-                params: global_params.clone(),
+                params: context.kernel_params.clone(),
                 body: body,
             };
             Ok(Some(dst::RootDefinition::Kernel(cl_kernel)))
@@ -244,13 +278,46 @@ fn transpile_global(table: &src::GlobalTable) -> Result<KernelParams, TranspileE
     Ok(global_params)
 }
 
+fn create_function_names(rootdefs: &[src::RootDefinition]) -> Result<HashMap<src::FunctionId, String>, TranspileError> {
+    let mut grouped_functions: HashMap<String, Vec<src::FunctionId>> = HashMap::new();
+    for rootdef in rootdefs {
+        match rootdef {
+            &src::RootDefinition::Function(ref func) => {
+                match grouped_functions.entry(func.original_name.clone()) {
+                    Entry::Occupied(mut occupied) => { occupied.get_mut().push(func.id); },
+                    Entry::Vacant(vacant) => { vacant.insert(vec![func.id]); },
+                }
+            },
+            _ => { },
+        }
+    };
+    let mut name_map: HashMap<src::FunctionId, String> = HashMap::new();
+    for (key, ids) in grouped_functions {
+        assert!(ids.len() > 0);
+        if ids.len() == 1 {
+            let ret = name_map.insert(ids[0], key);
+            assert_eq!(ret, None);
+        } else {
+            for (idx, id) in ids.iter().enumerate() {
+                let gen = key.clone() + "_" + &idx.to_string();
+                let ret = name_map.insert(*id, gen);
+                assert_eq!(ret, None);
+            }
+        }
+    };
+    Ok(name_map)
+}
+
 pub fn transpile(module: &src::Module) -> Result<dst::Module, TranspileError> {
 
-    let global_params = try!(transpile_global(&module.global_table));
-    let mut cl_defs = vec![];
+    let context = Context {
+        kernel_params: try!(transpile_global(&module.global_table)),
+        function_name_map: try!(create_function_names(&module.root_definitions)),
+    };
 
+    let mut cl_defs = vec![];
     for rootdef in &module.root_definitions {
-        match try!(transpile_rootdefinition(rootdef, &global_params)) {
+        match try!(transpile_rootdefinition(rootdef, &context)) {
             Some(def) => cl_defs.push(def),
             None => { },
         }
