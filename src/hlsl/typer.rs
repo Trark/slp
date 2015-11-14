@@ -5,7 +5,7 @@ use super::ir;
 use super::ast;
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum ParseError {
+pub enum TyperError {
     Unimplemented,
 
     ValueAlreadyDefined(String, ParseType, ParseType),
@@ -160,24 +160,24 @@ impl Context {
         Context { structs: HashMap::new(), functions: get_intrinsics(), variables: vec![HashMap::new()] }
     }
 
-    pub fn insert_variable(&mut self, name: String, typename: ir::Type) -> Result<(), ParseError> {
+    pub fn insert_variable(&mut self, name: String, typename: ir::Type) -> Result<(), TyperError> {
         assert!(self.variables.len() > 0);
         if let Ok(ety) = self.find_variable(&name) {
-            return Err(ParseError::ValueAlreadyDefined(name, ety.to_parsetype(), ParseType::Value(typename)))
+            return Err(TyperError::ValueAlreadyDefined(name, ety.to_parsetype(), ParseType::Value(typename)))
         };
         let last = self.variables.len() - 1;
         match self.variables[last].entry(name.clone()) {
-            Entry::Occupied(occupied) => Err(ParseError::ValueAlreadyDefined(name, ParseType::Value(occupied.get().clone()), ParseType::Value(typename))),
+            Entry::Occupied(occupied) => Err(TyperError::ValueAlreadyDefined(name, ParseType::Value(occupied.get().clone()), ParseType::Value(typename))),
             Entry::Vacant(vacant) => { vacant.insert(typename); Ok(()) },
         }
     }
 
-    pub fn insert_function(&mut self, name: String, function_type: FunctionOverload) -> Result<(), ParseError> {
+    pub fn insert_function(&mut self, name: String, function_type: FunctionOverload) -> Result<(), TyperError> {
         // Error if a variable of the same name already exists
         assert_eq!(self.variables.len(), 1);
         for map in self.variables.iter().rev() {
             match map.get(&name) {
-                Some(ty) => return Err(ParseError::ValueAlreadyDefined(name, ParseType::Value(ty.clone()), ParseType::Unknown)),
+                Some(ty) => return Err(TyperError::ValueAlreadyDefined(name, ParseType::Value(ty.clone()), ParseType::Unknown)),
                 None => { },
             }
         }
@@ -187,7 +187,7 @@ impl Context {
                 // Fail if the overload already exists
                 for &FunctionOverload(_, ref args) in &occupied.get().1 {
                     if *args == function_type.1 {
-                        return Err(ParseError::ValueAlreadyDefined(name, ParseType::Unknown, ParseType::Unknown))
+                        return Err(TyperError::ValueAlreadyDefined(name, ParseType::Unknown, ParseType::Unknown))
                     }
                 };
                 // Insert a new overload
@@ -201,7 +201,7 @@ impl Context {
         }
     }
 
-    pub fn find_variable(&self, name: &String) -> Result<TypedExpression, ParseError> {
+    pub fn find_variable(&self, name: &String) -> Result<TypedExpression, TyperError> {
         match self.functions.get(name) {
             Some(tys) => return Ok(TypedExpression::Function(tys.clone())),
             None => { },
@@ -212,7 +212,7 @@ impl Context {
                 None => { },
             }
         }
-        Err(ParseError::UnknownIdentifier(name.clone()))
+        Err(TyperError::UnknownIdentifier(name.clone()))
     }
 
     pub fn scoped(&self) -> Context {
@@ -239,25 +239,25 @@ fn get_intrinsics() -> HashMap<String, UnresolvedFunction> {
     map
 }
 
-fn find_function_type(function: UnresolvedFunction, actual_params: ParamArray) -> Result<ResolvedFunction, ParseError> {
+fn find_function_type(function: UnresolvedFunction, actual_params: ParamArray) -> Result<ResolvedFunction, TyperError> {
     for overload in &function.1 {
         if overload.1 == actual_params {
             return Ok(ResolvedFunction(function.0, overload.clone()))
         };
     };
-    Err(ParseError::FunctionArgumentTypeMismatch(function, actual_params))
+    Err(TyperError::FunctionArgumentTypeMismatch(function, actual_params))
 }
 
-fn find_method_type(method: UnresolvedMethod, actual_params: ParamArray) -> Result<ResolvedMethod, ParseError> {
+fn find_method_type(method: UnresolvedMethod, actual_params: ParamArray) -> Result<ResolvedMethod, TyperError> {
     for overload in &method.2 {
         if overload.1 == actual_params {
             return Ok(ResolvedMethod(method.0, method.1, overload.clone(), method.3))
         };
     };
-    Err(ParseError::MethodArgumentTypeMismatch(method, actual_params))
+    Err(TyperError::MethodArgumentTypeMismatch(method, actual_params))
 }
 
-fn write_function(function: ResolvedFunction, param_values: Vec<ir::Expression>) -> Result<TypedExpression, ParseError> {
+fn write_function(function: ResolvedFunction, param_values: Vec<ir::Expression>) -> Result<TypedExpression, TyperError> {
     let ResolvedFunction(name, FunctionOverload(return_type, _)) = function;
     let intrinsic = match name {
         FunctionName::Intrinsic(intrinsic) => intrinsic,
@@ -278,7 +278,7 @@ fn write_function(function: ResolvedFunction, param_values: Vec<ir::Expression>)
     }, return_type))
 }
 
-fn write_method(method: ResolvedMethod, param_values: Vec<ir::Expression>) -> Result<TypedExpression, ParseError> {
+fn write_method(method: ResolvedMethod, param_values: Vec<ir::Expression>) -> Result<TypedExpression, TyperError> {
     let ResolvedMethod(name, _, MethodOverload(return_type, _), object_ir) = method;
     let intrinsic = match name {
         MethodName::Intrinsic(intrinsic) => intrinsic,
@@ -302,7 +302,7 @@ fn write_method(method: ResolvedMethod, param_values: Vec<ir::Expression>) -> Re
     }, return_type))
 }
 
-fn parse_literal(ast: &ast::Literal) -> Result<TypedExpression, ParseError> {
+fn parse_literal(ast: &ast::Literal) -> Result<TypedExpression, TyperError> {
     match ast {
         &ast::Literal::Int(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Int(i)), ir::Type::int())),
         &ast::Literal::Uint(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Uint(i)), ir::Type::uint())),
@@ -313,7 +313,7 @@ fn parse_literal(ast: &ast::Literal) -> Result<TypedExpression, ParseError> {
     }
 }
 
-fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpression, ParseError> {
+fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpression, TyperError> {
     match ast {
         &ast::Expression::Literal(ref lit) => parse_literal(lit),
         &ast::Expression::Variable(ref s) => Ok(try!(context.find_variable(s))),
@@ -322,7 +322,7 @@ fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpressio
                 TypedExpression::Value(expr_ir, expr_ty) => {
                     Ok(TypedExpression::Value(ir::Expression::UnaryOperation(op.clone(), Box::new(expr_ir)), expr_ty))
                 },
-                _ => Err(ParseError::UnaryOperationWrongTypes(op.clone(), ParseType::Unknown)),
+                _ => Err(TyperError::UnaryOperationWrongTypes(op.clone(), ParseType::Unknown)),
             }
         },
         &ast::Expression::BinaryOperation(ref op, ref lhs, ref rhs) => {
@@ -332,14 +332,14 @@ fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpressio
             let rhs_pt = rhs_texp.to_parsetype();
             let (lhs_ir, lhs_type) = match lhs_texp {
                 TypedExpression::Value(expr_ir, expr_ty) => (expr_ir, expr_ty),
-                _ => return Err(ParseError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt)),
+                _ => return Err(TyperError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt)),
             };
             let (rhs_ir, rhs_type) = match rhs_texp {
                 TypedExpression::Value(expr_ir, expr_ty) => (expr_ir, expr_ty),
-                _ => return Err(ParseError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt)),
+                _ => return Err(TyperError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt)),
             };
             if lhs_type != rhs_type {
-                Err(ParseError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt))
+                Err(TyperError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt))
             } else {
                 Ok(TypedExpression::Value(ir::Expression::BinaryOperation(op.clone(), Box::new(lhs_ir), Box::new(rhs_ir)), lhs_type.clone()))
             }
@@ -349,11 +349,11 @@ fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpressio
             let subscript_texp = try!(parse_expr(subscript, context));
             let (array_ir, array_ty) = match array_texp {
                 TypedExpression::Value(array_ir, array_ty) => (array_ir, array_ty),
-                _ => return Err(ParseError::ArrayIndexingNonArrayType),
+                _ => return Err(TyperError::ArrayIndexingNonArrayType),
             };
             let (subscript_ir, subscript_ty) = match subscript_texp {
                 TypedExpression::Value(subscript_ir, subscript_ty) => (subscript_ir, subscript_ty),
-                _ => return Err(ParseError::ArrayIndexingNonArrayType),
+                _ => return Err(TyperError::ArrayIndexingNonArrayType),
             };
             let indexed_type = match array_ty {
                 ir::Type::Object(ir::ObjectType::Buffer(data_type)) |
@@ -364,12 +364,12 @@ fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpressio
                 ir::Type::Object(ir::ObjectType::RWStructuredBuffer(structured_type)) => {
                     ir::Type::Structured(structured_type)
                 },
-                _ => return Err(ParseError::ArrayIndexingNonArrayType),
+                _ => return Err(TyperError::ArrayIndexingNonArrayType),
             };
             match subscript_ty {
                 ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(ir::ScalarType::Int))) |
                 ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(ir::ScalarType::UInt))) => { },
-                _ => return Err(ParseError::ArraySubscriptIndexNotInteger),
+                _ => return Err(TyperError::ArraySubscriptIndexNotInteger),
             };
             Ok(TypedExpression::Value(ir::Expression::ArraySubscript(Box::new(array_ir), Box::new(subscript_ir)), indexed_type))
         },
@@ -378,23 +378,23 @@ fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpressio
             let composite_pt = composite_texp.to_parsetype();
             let (composite_ir, composite_ty) = match composite_texp {
                 TypedExpression::Value(composite_ir, composite_type) => (composite_ir, composite_type),
-                _ => return Err(ParseError::TypeDoesNotHaveMembers(composite_texp.to_parsetype())),
+                _ => return Err(TyperError::TypeDoesNotHaveMembers(composite_texp.to_parsetype())),
             };
             let ety = match &composite_ty {
                 &ir::Type::Structured(ir::StructuredType::Custom(ref user_defined_name)) => {
                     match context.structs.get(user_defined_name) {
                         Some(struct_def) => {
-                            fn find_struct_member(struct_def: &ir::StructDefinition, member: &String, struct_type: &ir::Type) -> Result<ir::Type, ParseError> {
+                            fn find_struct_member(struct_def: &ir::StructDefinition, member: &String, struct_type: &ir::Type) -> Result<ir::Type, TyperError> {
                                 for struct_member in &struct_def.members {
                                     if &struct_member.name == member {
                                         return Ok(struct_member.typename.clone())
                                     }
                                 }
-                                Err(ParseError::UnknownTypeMember(ParseType::Value(struct_type.clone()), member.clone()))
+                                Err(TyperError::UnknownTypeMember(ParseType::Value(struct_type.clone()), member.clone()))
                             }
                             try!(find_struct_member(struct_def, member, &composite_ty))
                         },
-                        None => return Err(ParseError::UnknownType(composite_pt)),
+                        None => return Err(TyperError::UnknownType(composite_pt)),
                     }
                 }
                 &ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Vector(ref scalar, ref x))) => {
@@ -409,7 +409,7 @@ fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpressio
                     if exists {
                         ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(scalar.clone())))
                     } else {
-                        return Err(ParseError::UnknownTypeMember(composite_pt, member.clone()));
+                        return Err(TyperError::UnknownTypeMember(composite_pt, member.clone()));
                     }
                 }
                 &ir::Type::Object(ir::ObjectType::Buffer(ref data_type)) => {
@@ -425,7 +425,7 @@ fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpressio
                                 composite_ir
                             )))
                         },
-                        _ => return Err(ParseError::UnknownTypeMember(composite_pt, member.clone())),
+                        _ => return Err(TyperError::UnknownTypeMember(composite_pt, member.clone())),
                     }
                 }
                 &ir::Type::Object(ir::ObjectType::StructuredBuffer(ref structured_type)) => {
@@ -441,11 +441,11 @@ fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpressio
                                 composite_ir
                             )))
                         },
-                        _ => return Err(ParseError::UnknownTypeMember(composite_pt, member.clone())),
+                        _ => return Err(TyperError::UnknownTypeMember(composite_pt, member.clone())),
                     }
                 }
                 // Todo: Matrix components + Object members
-                _ => return Err(ParseError::TypeDoesNotHaveMembers(composite_pt)),
+                _ => return Err(TyperError::TypeDoesNotHaveMembers(composite_pt)),
             };
             Ok(TypedExpression::Value(ir::Expression::Member(Box::new(composite_ir), member.clone()), ety))
         },
@@ -457,7 +457,7 @@ fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpressio
                 let expr_texp = try!(parse_expr(param, context));
                 let (expr_ir, expr_ty) = match expr_texp {
                     TypedExpression::Value(expr_ir, expr_ty) => (expr_ir, expr_ty),
-                    texp => return Err(ParseError::FunctionPassedToAnotherFunction(func_texp.to_parsetype(), texp.to_parsetype())),
+                    texp => return Err(TyperError::FunctionPassedToAnotherFunction(func_texp.to_parsetype(), texp.to_parsetype())),
                 };
                 params_ir.push(expr_ir);
                 params_types.push(expr_ty);
@@ -471,7 +471,7 @@ fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpressio
                     let method = try!(find_method_type(unresolved, params_types));
                     write_method(method, params_ir)
                 },
-                _ => return Err(ParseError::CallOnNonFunction),
+                _ => return Err(TyperError::CallOnNonFunction),
             }
         },
         &ast::Expression::Cast(ref ty, ref expr) => {
@@ -481,18 +481,18 @@ fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpressio
                 TypedExpression::Value(expr_ir, _) => {
                     Ok(TypedExpression::Value(ir::Expression::Cast(ty.clone(), Box::new(expr_ir)), ty.clone()))
                 },
-                _ => Err(ParseError::InvalidCast(expr_pt, ParseType::Value(ty.clone()))),
+                _ => Err(TyperError::InvalidCast(expr_pt, ParseType::Value(ty.clone()))),
             }
         },
     }
 }
 
-fn parse_vardef(ast: &ast::VarDef, context: Context) -> Result<(ir::VarDef, Context), ParseError> {
+fn parse_vardef(ast: &ast::VarDef, context: Context) -> Result<(ir::VarDef, Context), TyperError> {
     let assign_ir = match ast.assignment {
         Some(ref expr) => {
             match try!(parse_expr(expr, &context)) {
                 TypedExpression::Value(expr_ir, _) => Some(expr_ir),
-                _ => return Err(ParseError::FunctionTypeInInitExpression),
+                _ => return Err(TyperError::FunctionTypeInInitExpression),
             }
         },
         None => None,
@@ -503,12 +503,12 @@ fn parse_vardef(ast: &ast::VarDef, context: Context) -> Result<(ir::VarDef, Cont
     Ok((vd_ir, context))
 }
 
-fn parse_condition(ast: &ast::Condition, context: Context) -> Result<(ir::Condition, Context), ParseError> {
+fn parse_condition(ast: &ast::Condition, context: Context) -> Result<(ir::Condition, Context), TyperError> {
     match ast {
         &ast::Condition::Expr(ref expr) => {
             let expr_ir = match try!(parse_expr(expr, &context)) {
                 TypedExpression::Value(expr_ir, _) => expr_ir,
-                _ => return Err(ParseError::FunctionNotCalled),
+                _ => return Err(TyperError::FunctionNotCalled),
             };
             Ok((ir::Condition::Expr(expr_ir), context))
         },
@@ -519,13 +519,13 @@ fn parse_condition(ast: &ast::Condition, context: Context) -> Result<(ir::Condit
     }
 }
 
-fn parse_statement(ast: &ast::Statement, context: Context) -> Result<(Option<ir::Statement>, Context), ParseError> {
+fn parse_statement(ast: &ast::Statement, context: Context) -> Result<(Option<ir::Statement>, Context), TyperError> {
     match ast {
         &ast::Statement::Empty => Ok((None, context)),
         &ast::Statement::Expression(ref expr) => {
             match try!(parse_expr(expr, &context)) {
                 TypedExpression::Value(expr_ir, _) => Ok((Some(ir::Statement::Expression(expr_ir)), context)),
-                _ => return Err(ParseError::FunctionNotCalled),
+                _ => return Err(TyperError::FunctionNotCalled),
             }
         },
         &ast::Statement::Var(ref vd) => {
@@ -560,13 +560,13 @@ fn parse_statement(ast: &ast::Statement, context: Context) -> Result<(Option<ir:
         &ast::Statement::Return(ref expr) => {
             match try!(parse_expr(expr, &context)) {
                 TypedExpression::Value(expr_ir, _) => Ok((Some(ir::Statement::Return(expr_ir)), context)),
-                _ => return Err(ParseError::FunctionNotCalled),
+                _ => return Err(TyperError::FunctionNotCalled),
             }
         },
     }
 }
 
-fn parse_statement_vec(ast: &Vec<ast::Statement>, context: Context) -> Result<Vec<ir::Statement>, ParseError> {
+fn parse_statement_vec(ast: &Vec<ast::Statement>, context: Context) -> Result<Vec<ir::Statement>, TyperError> {
     let mut context = context;
     let mut body_ir = vec![];
     for statement_ast in ast {
@@ -580,22 +580,22 @@ fn parse_statement_vec(ast: &Vec<ast::Statement>, context: Context) -> Result<Ve
     Ok(body_ir)
 }
 
-fn parse_rootdefinition_struct(sd: &ast::StructDefinition, mut context: Context) -> Result<(ir::RootDefinition, Context), ParseError> {
+fn parse_rootdefinition_struct(sd: &ast::StructDefinition, mut context: Context) -> Result<(ir::RootDefinition, Context), TyperError> {
     let struct_def = sd.clone();
     match context.structs.insert(struct_def.name.clone(), struct_def.clone()) {
-        Some(_) => return Err(ParseError::StructAlreadyDefined(struct_def.name.clone())),
+        Some(_) => return Err(TyperError::StructAlreadyDefined(struct_def.name.clone())),
         None => { },
     };
     Ok((ir::RootDefinition::Struct(struct_def), context))
 }
 
-fn parse_rootdefinition_constantbuffer(cb: &ast::ConstantBuffer, mut context: Context, globals: &mut ir::GlobalTable) -> Result<(ir::RootDefinition, Context), ParseError> {
+fn parse_rootdefinition_constantbuffer(cb: &ast::ConstantBuffer, mut context: Context, globals: &mut ir::GlobalTable) -> Result<(ir::RootDefinition, Context), TyperError> {
     let cb_ir = ir::ConstantBuffer { name: cb.name.clone(), members: cb.members.clone() };
     try!(context.insert_variable(cb_ir.name.clone(), ir::Type::custom(&cb_ir.name[..])));
     match cb.slot {
         Some(ast::ConstantSlot(slot)) => {
             match globals.constants.insert(slot, cb_ir.name.clone()) {
-                Some(currently_used_by) => return Err(ParseError::ConstantSlotAlreadyUsed(currently_used_by.clone(), cb_ir.name.clone())),
+                Some(currently_used_by) => return Err(TyperError::ConstantSlotAlreadyUsed(currently_used_by.clone(), cb_ir.name.clone())),
                 None => { },
             }
         },
@@ -604,20 +604,20 @@ fn parse_rootdefinition_constantbuffer(cb: &ast::ConstantBuffer, mut context: Co
     Ok((ir::RootDefinition::ConstantBuffer(cb_ir), context))
 }
 
-fn parse_rootdefinition_globalvariable(gv: &ast::GlobalVariable, mut context: Context, globals: &mut ir::GlobalTable) -> Result<(ir::RootDefinition, Context), ParseError> {
+fn parse_rootdefinition_globalvariable(gv: &ast::GlobalVariable, mut context: Context, globals: &mut ir::GlobalTable) -> Result<(ir::RootDefinition, Context), TyperError> {
     let gv_ir = ir::GlobalVariable { name: gv.name.clone(), typename: gv.typename.clone() };
     try!(context.insert_variable(gv_ir.name.clone(), gv_ir.typename.clone()));
     let entry = ir::GlobalEntry { name: gv_ir.name.clone(), typename: gv_ir.typename.clone() };
     match gv.slot {
         Some(ast::GlobalSlot::ReadSlot(slot)) => {
             match globals.r_resources.insert(slot, entry) {
-                Some(currently_used_by) => return Err(ParseError::ReadResourceSlotAlreadyUsed(currently_used_by.name.clone(), gv_ir.name.clone())),
+                Some(currently_used_by) => return Err(TyperError::ReadResourceSlotAlreadyUsed(currently_used_by.name.clone(), gv_ir.name.clone())),
                 None => { },
             }
         },
         Some(ast::GlobalSlot::ReadWriteSlot(slot)) => {
             match globals.rw_resources.insert(slot, entry) {
-                Some(currently_used_by) => return Err(ParseError::ReadWriteResourceSlotAlreadyUsed(currently_used_by.name.clone(), gv_ir.name.clone())),
+                Some(currently_used_by) => return Err(TyperError::ReadWriteResourceSlotAlreadyUsed(currently_used_by.name.clone(), gv_ir.name.clone())),
                 None => { },
             }
         },
@@ -626,7 +626,7 @@ fn parse_rootdefinition_globalvariable(gv: &ast::GlobalVariable, mut context: Co
     Ok((ir::RootDefinition::GlobalVariable(gv_ir), context))
 }
 
-fn parse_rootdefinition_function(fd: &ast::FunctionDefinition, mut context: Context) -> Result<(ir::RootDefinition, Context), ParseError> {
+fn parse_rootdefinition_function(fd: &ast::FunctionDefinition, mut context: Context) -> Result<(ir::RootDefinition, Context), TyperError> {
     let body_ir = {
         let mut scoped_context = context.scoped();
         for param in &fd.params {
@@ -649,7 +649,7 @@ fn parse_rootdefinition_function(fd: &ast::FunctionDefinition, mut context: Cont
     Ok((ir::RootDefinition::Function(fd_ir), context))
 }
 
-fn parse_rootdefinition_kernel(fd: &ast::FunctionDefinition, context: Context) -> Result<(ir::RootDefinition, Context), ParseError> {
+fn parse_rootdefinition_kernel(fd: &ast::FunctionDefinition, context: Context) -> Result<(ir::RootDefinition, Context), TyperError> {
     let body_ir = {
         let mut scoped_context = context.scoped();
         for param in &fd.params {
@@ -663,20 +663,20 @@ fn parse_rootdefinition_kernel(fd: &ast::FunctionDefinition, context: Context) -
             vec.push(ir::KernelParam(param.name.clone(),
                 match &param.semantic {
                     &Some(ast::Semantic::DispatchThreadId) => ir::KernelSemantic::DispatchThreadId,
-                    &Some(_) => return Err(ParseError::KernelHasParamWithBadSemantic(param.clone())),
-                    &None => return Err(ParseError::KernelHasParamWithoutSemantic(param.clone())),
+                    &Some(_) => return Err(TyperError::KernelHasParamWithBadSemantic(param.clone())),
+                    &None => return Err(TyperError::KernelHasParamWithoutSemantic(param.clone())),
                 }
             ));
         }
         vec
     };
-    fn find_dispatch_dimensions(attributes: &[ast::FunctionAttribute]) -> Result<ir::Dimension, ParseError> {
+    fn find_dispatch_dimensions(attributes: &[ast::FunctionAttribute]) -> Result<ir::Dimension, TyperError> {
         for attribute in attributes {
             match attribute {
                 &ast::FunctionAttribute::NumThreads(x, y, z) => return Ok(ir::Dimension(x, y, z)),
             };
         }
-        Err(ParseError::KernelHasNoDispatchDimensions)
+        Err(TyperError::KernelHasNoDispatchDimensions)
     }
     let kernel = ir::Kernel {
         group_dimensions: try!(find_dispatch_dimensions(&fd.attributes[..])),
@@ -686,7 +686,7 @@ fn parse_rootdefinition_kernel(fd: &ast::FunctionDefinition, context: Context) -
     Ok((ir::RootDefinition::Kernel(kernel), context))
 }
 
-fn parse_rootdefinition(ast: &ast::RootDefinition, context: Context, globals: &mut ir::GlobalTable, entry_point: &str) -> Result<(ir::RootDefinition, Context), ParseError> {
+fn parse_rootdefinition(ast: &ast::RootDefinition, context: Context, globals: &mut ir::GlobalTable, entry_point: &str) -> Result<(ir::RootDefinition, Context), TyperError> {
     match ast {
         &ast::RootDefinition::Struct(ref sd) => parse_rootdefinition_struct(sd, context),
         &ast::RootDefinition::SamplerState => Ok((ir::RootDefinition::SamplerState, context)),
@@ -697,7 +697,7 @@ fn parse_rootdefinition(ast: &ast::RootDefinition, context: Context, globals: &m
     }
 }
 
-pub fn parse(ast: &ast::Module) -> Result<ir::Module, ParseError> {
+pub fn typeparse(ast: &ast::Module) -> Result<ir::Module, TyperError> {
     let mut context = Context::new();
 
     let mut ir = ir::Module { entry_point: ast.entry_point.clone(), global_table: ir::GlobalTable::new(), root_definitions: vec![] };
@@ -714,7 +714,7 @@ pub fn parse(ast: &ast::Module) -> Result<ir::Module, ParseError> {
         match root_def {
             &ir::RootDefinition::Kernel(_) => {
                 if has_kernel {
-                    return Err(ParseError::KernelDefinedMultipleTimes);
+                    return Err(TyperError::KernelDefinedMultipleTimes);
                 } else {
                     has_kernel = true;
                 }
@@ -723,14 +723,14 @@ pub fn parse(ast: &ast::Module) -> Result<ir::Module, ParseError> {
         }
     }
     if !has_kernel {
-        return Err(ParseError::KernelNotDefined);
+        return Err(TyperError::KernelNotDefined);
     }
 
     Ok(ir)
 }
 
 #[test]
-fn test_parse() {
+fn test_typeparse() {
     let module = ast::Module {
         entry_point: "CSMAIN".to_string(),
         root_definitions: vec![
@@ -797,6 +797,6 @@ fn test_parse() {
             }),
         ],
     };
-    let res = parse(&module);
+    let res = typeparse(&module);
     assert!(res.is_ok(), "{:?}", res);
 }

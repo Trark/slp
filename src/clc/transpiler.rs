@@ -267,7 +267,7 @@ pub fn transpile(module: &src::Module) -> Result<dst::Module, TranspileError> {
 fn test_transpile() {
 
     use super::super::hlsl;
-    use super::super::hlsl::ast_to_ir;
+    use super::super::hlsl::typer::typeparse;
 
     let module = hlsl::ast::Module {
         entry_point: "CSMAIN".to_string(),
@@ -335,7 +335,7 @@ fn test_transpile() {
             }),
         ],
     };
-    let res = ast_to_ir::parse(&module);
+    let res = typeparse(&module);
     assert!(res.is_ok(), "{:?}", res);
 
     let clc_res = transpile(&res.unwrap());

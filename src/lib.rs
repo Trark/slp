@@ -8,7 +8,7 @@ pub mod clc;
 
 use hlsl::lexer::LexError;
 use hlsl::parser::ParseError;
-use hlsl::ast_to_ir::ParseError as TyperError;
+use hlsl::typer::TyperError;
 use clc::transpiler::TranspileError;
 
 #[derive(PartialEq, Debug, Clone)]
@@ -25,7 +25,7 @@ pub fn hlsl_to_cl(hlsl_source: &[u8], entry_point: &'static str) -> Result<clc::
 
     let ast = try!(hlsl::parser::parse(entry_point.to_string(), &tokens[..]));
 
-    let ir = try!(hlsl::ast_to_ir::parse(&ast));
+    let ir = try!(hlsl::typer::typeparse(&ast));
 
     let cir = try!(clc::transpiler::transpile(&ir));
 

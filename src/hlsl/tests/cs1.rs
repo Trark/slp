@@ -6,7 +6,7 @@ use super::super::tokens::FollowedBy;
 use super::super::tokens::RegisterSlot;
 use super::super::lexer::lex;
 use super::super::parser::parse;
-use super::super::ast_to_ir;
+use super::super::typer::typeparse;
 
 fn token_id(name: &'static str) -> Token { Token::Id(Identifier(name.to_string())) }
 
@@ -142,6 +142,6 @@ fn cs1_parse() {
 fn cs1_typecheck() {
     let TokenStream(tokens) = lex(CS1).unwrap();
     let ast = parse("CSMain".to_string(), &tokens[..]).unwrap();
-    let ir_result = ast_to_ir::parse(&ast);
+    let ir_result = typeparse(&ast);
     assert!(ir_result.is_ok(), "{:?}", ir_result);
 }

@@ -6,7 +6,7 @@ pub mod ast;
 pub mod parser;
 
 pub mod ir;
-pub mod ast_to_ir;
+pub mod typer;
 
 #[cfg(test)]
 mod tests;
