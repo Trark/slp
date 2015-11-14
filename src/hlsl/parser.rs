@@ -1,3 +1,5 @@
+use std::error;
+use std::fmt;
 use super::tokens::*;
 use super::ast::*;
 use nom::{IResult,Needed,Err,ErrorKind};
@@ -14,6 +16,18 @@ pub enum ParseErrorReason {
     ExpectingIdentifier,
     WrongSlotType,
     UnknownType,
+}
+
+impl error::Error for ParseError {
+    fn description(&self) -> &str {
+        "parser error"
+    }
+}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", error::Error::description(self))
+    }
 }
 
 macro_rules! token (

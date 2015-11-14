@@ -1,12 +1,30 @@
+use std::str;
+use std::error;
+use std::fmt;
 use super::tokens::*;
 use nom::{IResult,Needed,Err,ErrorKind};
-use std::str;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum LexError {
     Unknown,
     FailedToParse(Vec<u8>),
     UnexpectedEndOfStream,
+}
+
+impl error::Error for LexError {
+    fn description(&self) -> &str {
+        match *self {
+            LexError::Unknown => "unknown lexer error",
+            LexError::FailedToParse(_) => "failed to parse stream",
+            LexError::UnexpectedEndOfStream => "unexpected end of stream",
+        }
+    }
+}
+
+impl fmt::Display for LexError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", error::Error::description(self))
+    }
 }
 
 named!(digit<u64>, alt!(

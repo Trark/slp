@@ -6,6 +6,8 @@ extern crate nom;
 pub mod hlsl;
 pub mod clc;
 
+use std::error;
+use std::fmt;
 use hlsl::lexer::LexError;
 use hlsl::parser::ParseError;
 use hlsl::typer::TyperError;
@@ -32,6 +34,23 @@ pub fn hlsl_to_cl(hlsl_source: &[u8], entry_point: &'static str) -> Result<clc::
     let cl_binary = clc::binary::Binary::from_cir(&cir);
 
     Ok(cl_binary)
+}
+
+impl error::Error for CompileError {
+    fn description(&self) -> &str {
+        match *self {
+            CompileError::LexError(ref lexer_error) => error::Error::description(lexer_error),
+            CompileError::ParseError(ref parser_error) => error::Error::description(parser_error),
+            CompileError::TyperError(ref typer_error) => error::Error::description(typer_error),
+            CompileError::TranspileError(ref transpiler_error) => error::Error::description(transpiler_error),
+        }
+    }
+}
+
+impl fmt::Display for CompileError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", error::Error::description(self))
+    }
 }
 
 impl From<LexError> for CompileError {

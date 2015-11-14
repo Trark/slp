@@ -1,4 +1,5 @@
-
+use std::error;
+use std::fmt;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use super::cir as dst;
@@ -15,6 +16,25 @@ pub enum TranspileError {
     GlobalFoundThatIsntInKernelParams(src::GlobalVariable),
 
     UnknownFunctionId(src::FunctionId),
+}
+
+impl error::Error for TranspileError {
+    fn description(&self) -> &str {
+        match *self {
+            TranspileError::Unknown => "unknown transpiler error",
+            TranspileError::TypeIsNotAllowedAsGlobal(_) => "global variable has unsupported type",
+            TranspileError::CouldNotGetEquivalentType(_) => "could not find equivalent clc type",
+            TranspileError::CouldNotGetEquivalentDataType(_) => "could not find equivalent clc type",
+            TranspileError::GlobalFoundThatIsntInKernelParams(_) => "non-parameter global found",
+            TranspileError::UnknownFunctionId(_) => "unknown function id",
+        }
+    }
+}
+
+impl fmt::Display for TranspileError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", error::Error::description(self))
+    }
 }
 
 type KernelParams = Vec<dst::KernelParam>;

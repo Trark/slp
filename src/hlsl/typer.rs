@@ -1,4 +1,6 @@
 
+use std::error;
+use std::fmt;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use super::ir;
@@ -98,8 +100,57 @@ pub enum ParseType {
     Unknown,
 }
 
+impl error::Error for TyperError {
+    fn description(&self) -> &str {
+        match *self {
+            TyperError::Unimplemented => "unimplemented",
+
+            TyperError::ValueAlreadyDefined(_, _, _) => "identifier already defined",
+            TyperError::StructAlreadyDefined(_) => "struct aready defined",
+
+            TyperError::ConstantSlotAlreadyUsed(_, _) => "global constant slot already used",
+            TyperError::ReadResourceSlotAlreadyUsed(_, _) => "global resource slot already used",
+            TyperError::ReadWriteResourceSlotAlreadyUsed(_, _) => "global writable resource slot already used",
+
+            TyperError::UnknownIdentifier(_) => "unknown identifier",
+            TyperError::UnknownType(_) => "unknown type name",
+
+            TyperError::TypeDoesNotHaveMembers(_) => "unknown member (type has no members)",
+            TyperError::UnknownTypeMember(_, _) => "unknown member",
+
+            TyperError::ArrayIndexingNonArrayType => "array index applied to non-array type",
+            TyperError::ArraySubscriptIndexNotInteger => "array subscripts must be integers",
+
+            TyperError::CallOnNonFunction => "function call applied to non-function type",
+
+            TyperError::FunctionPassedToAnotherFunction(_, _) => "functions can not be passed to other functions",
+            TyperError::FunctionArgumentTypeMismatch(_, _) => "wrong parameters given to function",
+            TyperError::MethodArgumentTypeMismatch(_, _) => "wrong paramters given to method",
+
+            TyperError::UnaryOperationWrongTypes(_, _) => "operation does not support the given types",
+            TyperError::BinaryOperationWrongTypes(_, _, _) => "operation does not support the given types",
+
+            TyperError::InvalidCast(_, _) => "invalid cast",
+            TyperError::FunctionTypeInInitExpression => "function not called",
+            TyperError::FunctionNotCalled => "function not called",
+
+            TyperError::KernelNotDefined => "entry point not found",
+            TyperError::KernelDefinedMultipleTimes => "multiple entry points found",
+            TyperError::KernelHasNoDispatchDimensions => "compute kernels require a dispatch dimension",
+            TyperError::KernelHasParamWithBadSemantic(_) => "kernel parameter did not have a valid kernel semantic",
+            TyperError::KernelHasParamWithoutSemantic(_) => "kernel parameter did not have a kernel semantic",
+        }
+    }
+}
+
+impl fmt::Display for TyperError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", error::Error::description(self))
+    }
+}
+
 #[derive(PartialEq, Debug, Clone)]
-pub enum TypedExpression {
+enum TypedExpression {
     // Expression + Type
     Value(ir::Expression, ir::Type),
     // Name of function + overloads
@@ -109,7 +160,7 @@ pub enum TypedExpression {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct Context {
+struct Context {
     structs: HashMap<String, ir::StructDefinition>,
 
     functions: HashMap<String, UnresolvedFunction>,
