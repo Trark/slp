@@ -1,4 +1,10 @@
 
+struct myStruct
+{
+	float4 pos;
+	uint index;
+};
+
 void myFunc_0(uint x)
 {
 }

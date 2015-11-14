@@ -271,8 +271,26 @@ fn print_statements(statements: &[Statement], printer: &mut Printer) {
     }
 }
 
-fn print_rootdefinition_struct(_: &StructDefinition, _: &mut Printer) {
-
+fn print_rootdefinition_struct(structdefinition: &StructDefinition, printer: &mut Printer) {
+    printer.print("struct");
+    printer.space();
+    printer.print(&structdefinition.name);
+    printer.line();
+    printer.print("{");
+    printer.indent();
+    for member in &structdefinition.members {
+        printer.line();
+        print_typename(&member.typename, printer);
+        printer.space();
+        printer.print(&member.name);
+        printer.separator();
+        printer.print(";");
+    }
+    printer.unindent();
+    printer.line();
+    printer.print("}");
+    printer.separator();
+    printer.print(";");
 }
 
 fn print_rootdefinition_function(function: &FunctionDefinition, printer: &mut Printer) {
@@ -301,8 +319,6 @@ fn print_rootdefinition_function(function: &FunctionDefinition, printer: &mut Pr
     printer.unindent();
     printer.line();
     printer.print("}");
-    printer.line();
-    printer.line();
 }
 
 fn print_rootdefinition_kernel(kernel: &Kernel, printer: &mut Printer) {
@@ -333,20 +349,20 @@ fn print_rootdefinition_kernel(kernel: &Kernel, printer: &mut Printer) {
     printer.unindent();
     printer.line();
     printer.print("}");
-    printer.line();
 }
 
 fn print_rootdefinition(rootdef: &RootDefinition, printer: &mut Printer) {
+    printer.line();
     match rootdef {
         &RootDefinition::Struct(ref sd) => print_rootdefinition_struct(sd, printer),
         &RootDefinition::Function(ref fd) => print_rootdefinition_function(fd, printer),
         &RootDefinition::Kernel(ref kernel) => print_rootdefinition_kernel(kernel, printer),
-    }
+    };
+    printer.line();
 }
 
 fn print(module: &Module) -> Printer {
     let mut printer = Printer::new();
-    printer.line();
     for rootdef in &module.root_definitions {
         print_rootdefinition(&rootdef, &mut printer);
     }

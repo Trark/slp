@@ -234,7 +234,23 @@ fn transpile_kernel_input_semantics(params: &[src::KernelParam]) -> Result<Vec<d
 
 fn transpile_rootdefinition(rootdef: &src::RootDefinition, context: &Context) -> Result<Option<dst::RootDefinition>, TranspileError> {
     match rootdef {
-        &src::RootDefinition::Struct(_) => unimplemented!{},
+        &src::RootDefinition::Struct(ref structdefinition) => {
+            Ok(Some(dst::RootDefinition::Struct(dst::StructDefinition {
+                name: structdefinition.name.clone(),
+                members: try!(structdefinition.members.iter().fold(
+                    Ok(vec![]),
+                    |result, member| {
+                        let mut vec = try!(result);
+                        let dst_member = dst::StructMember {
+                            name: member.name.clone(),
+                            typename: try!(transpile_type(&member.typename)),
+                        };
+                        vec.push(dst_member);
+                        Ok(vec)
+                    }
+                )),
+            })))
+        },
         &src::RootDefinition::SamplerState => unimplemented!{},
         &src::RootDefinition::ConstantBuffer(_) => unimplemented!{},
         &src::RootDefinition::GlobalVariable(ref gv) => {
