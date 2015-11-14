@@ -680,12 +680,21 @@ fn functionparam(input: &[Token]) -> IResult<&[Token], FunctionParam, ParseError
     chain!(input,
         typename: parse_typename ~
         param: parse_variablename ~
-        opt!(chain!(
+        semantic: opt!(chain!(
             token!(Token::Colon) ~
-            tok: token!(Token::Id(_)), // Todo: Semantics
+            tok: map_res!(token!(Token::Id(_)), |tok| {
+                if let Token::Id(Identifier(name)) = tok {
+                    match &name[..] {
+                        "SV_DispatchThreadID" => Ok(Semantic::DispatchThreadId),
+                        _ => Err(())
+                    }
+                } else {
+                    Err(())
+                }
+            }),
             || { tok }
         )),
-        || { FunctionParam { name: param, typename: typename } }
+        || { FunctionParam { name: param, typename: typename, semantic: semantic } }
     )
 }
 
@@ -1028,7 +1037,7 @@ fn test_rootdefinition() {
     let test_func_ast = FunctionDefinition { 
         name: "func".to_string(),
         returntype: Type::Void,
-        params: vec![FunctionParam { name: "x".to_string(), typename: Type::float() }],
+        params: vec![FunctionParam { name: "x".to_string(), typename: Type::float(), semantic: None }],
         body: vec![],
         attributes: vec![],
     };
@@ -1037,7 +1046,7 @@ fn test_rootdefinition() {
     assert_eq!(rootdefinition_str("[numthreads(16, 16, 1)] void func(float x) { }"), RootDefinition::Function(FunctionDefinition {
         name: "func".to_string(),
         returntype: Type::Void,
-        params: vec![FunctionParam { name: "x".to_string(), typename: Type::float() }],
+        params: vec![FunctionParam { name: "x".to_string(), typename: Type::float(), semantic: None }],
         body: vec![],
         attributes: vec![FunctionAttribute::NumThreads(16, 16, 1)],
     }));

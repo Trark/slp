@@ -223,6 +223,14 @@ pub struct GlobalVariable {
 }
 
 #[derive(PartialEq, Debug, Clone)]
+pub enum Semantic {
+    DispatchThreadId,
+    GroupId,
+    GroupIndex,
+    GroupThreadId,
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum FunctionAttribute {
     NumThreads(u64, u64, u64),
 }
@@ -231,6 +239,7 @@ pub enum FunctionAttribute {
 pub struct FunctionParam {
     pub name: String,
     pub typename: Type,
+    pub semantic: Option<Semantic>,
 }
 
 #[derive(PartialEq, Debug, Clone)]

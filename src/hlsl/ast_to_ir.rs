@@ -40,6 +40,8 @@ pub enum ParseError {
     KernelNotDefined,
     KernelDefinedMultipleTimes,
     KernelHasNoDispatchDimensions,
+    KernelHasParamWithBadSemantic(ast::FunctionParam),
+    KernelHasParamWithoutSemantic(ast::FunctionParam),
 }
 
 pub type ReturnType = ir::Type;
@@ -655,6 +657,19 @@ fn parse_rootdefinition_kernel(fd: &ast::FunctionDefinition, context: Context) -
         }
         try!(parse_statement_vec(&fd.body, scoped_context))
     };
+    let kernel_params = {
+        let mut vec = vec![];
+        for param in &fd.params {
+            vec.push(ir::KernelParam(param.name.clone(),
+                match &param.semantic {
+                    &Some(ast::Semantic::DispatchThreadId) => ir::KernelSemantic::DispatchThreadId,
+                    &Some(_) => return Err(ParseError::KernelHasParamWithBadSemantic(param.clone())),
+                    &None => return Err(ParseError::KernelHasParamWithoutSemantic(param.clone())),
+                }
+            ));
+        }
+        vec
+    };
     fn find_dispatch_dimensions(attributes: &[ast::FunctionAttribute]) -> Result<ir::Dimension, ParseError> {
         for attribute in attributes {
             match attribute {
@@ -665,7 +680,7 @@ fn parse_rootdefinition_kernel(fd: &ast::FunctionDefinition, context: Context) -
     }
     let kernel = ir::Kernel {
         group_dimensions: try!(find_dispatch_dimensions(&fd.attributes[..])),
-        params: vec![],
+        params: kernel_params,
         body: body_ir,
     };
     Ok((ir::RootDefinition::Kernel(kernel), context))
@@ -727,14 +742,14 @@ fn test_parse() {
             ast::RootDefinition::Function(ast::FunctionDefinition {
                 name: "myFunc".to_string(),
                 returntype: ast::Type::Void,
-                params: vec![ast::FunctionParam { name: "x".to_string(), typename: ast::Type::uint() }],
+                params: vec![ast::FunctionParam { name: "x".to_string(), typename: ast::Type::uint(), semantic: None }],
                 body: vec![],
                 attributes: vec![],
             }),
             ast::RootDefinition::Function(ast::FunctionDefinition {
                 name: "myFunc".to_string(),
                 returntype: ast::Type::Void,
-                params: vec![ast::FunctionParam { name: "x".to_string(), typename: ast::Type::float() }],
+                params: vec![ast::FunctionParam { name: "x".to_string(), typename: ast::Type::float(), semantic: None }],
                 body: vec![],
                 attributes: vec![],
             }),

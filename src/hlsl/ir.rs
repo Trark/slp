@@ -140,6 +140,17 @@ pub struct Module {
     pub root_definitions: Vec<RootDefinition>,
 }
 
+impl KernelSemantic {
+    pub fn get_type(&self) -> Type {
+        match self {
+            &KernelSemantic::DispatchThreadId => Type::Structured(StructuredType::Data(DataType::Vector(ScalarType::UInt, 3))),
+            &KernelSemantic::GroupId => Type::Structured(StructuredType::Data(DataType::Vector(ScalarType::UInt, 3))),
+            &KernelSemantic::GroupIndex => Type::Structured(StructuredType::Data(DataType::Scalar(ScalarType::UInt))),
+            &KernelSemantic::GroupThreadId => Type::Structured(StructuredType::Data(DataType::Vector(ScalarType::UInt, 3))),
+        }
+    }
+}
+
 impl GlobalTable {
     pub fn new() -> GlobalTable {
         GlobalTable {
