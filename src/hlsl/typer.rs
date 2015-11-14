@@ -114,7 +114,7 @@ pub struct Context {
 
     functions: HashMap<String, UnresolvedFunction>,
 
-    // Variables (and functions) visible in the current context. Maps names to types
+    // Variables visible in the current context. Maps names to types
     // One map per scope level (nearer the front is a wider scope)
     variables: Vec<HashMap<String, ir::Type>>,
 }
