@@ -184,6 +184,9 @@ pub struct FunctionDefinition {
 }
 
 #[derive(PartialEq, Debug, Clone)]
+pub struct Dimension(pub u64, pub u64, pub u64);
+
+#[derive(PartialEq, Debug, Clone)]
 pub struct KernelParam {
     pub name: Identifier,
     pub typename: Type,
@@ -193,6 +196,7 @@ pub struct KernelParam {
 pub struct Kernel {
     pub params: Vec<KernelParam>,
     pub body: Vec<Statement>,
+    pub group_dimensions: Dimension,
 }
 
 #[derive(PartialEq, Debug, Clone)]

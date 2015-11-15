@@ -369,6 +369,24 @@ fn print_rootdefinition_function(function: &FunctionDefinition, printer: &mut Pr
 }
 
 fn print_rootdefinition_kernel(kernel: &Kernel, printer: &mut Printer) {
+
+    printer.print("__attribute__");
+    printer.print("(");
+    printer.print("(");
+    printer.print("reqd_work_group_size");
+    printer.print("(");
+    printer.print(&kernel.group_dimensions.0.to_string());
+    printer.print(",");
+    printer.space();
+    printer.print(&kernel.group_dimensions.1.to_string());
+    printer.print(",");
+    printer.space();
+    printer.print(&kernel.group_dimensions.2.to_string());
+    printer.print(")");
+    printer.print(")");
+    printer.print(")");
+    printer.line();
+
     printer.print("kernel");
     printer.space();
     printer.print("void");

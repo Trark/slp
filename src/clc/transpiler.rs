@@ -501,6 +501,7 @@ fn transpile_rootdefinition(rootdef: &src::RootDefinition, context: &mut Context
             let cl_kernel = dst::Kernel {
                 params: context.kernel_params.clone(),
                 body: body,
+                group_dimensions: dst::Dimension(kernel.group_dimensions.0, kernel.group_dimensions.1, kernel.group_dimensions.2),
             };
             Ok(Some(dst::RootDefinition::Kernel(cl_kernel)))
         }
