@@ -115,6 +115,11 @@ fn print_typename(typename: &Type, printer: &mut Printer) {
             print_typename(pointed_type, printer);
             printer.print("*");
         },
+        &Type::Struct(ref identifier) => {
+            printer.print("struct");
+            printer.space();
+            printer.print(identifier);
+        },
         _ => unimplemented!(),
     };
 }
@@ -213,12 +218,38 @@ fn print_expression_inner(expression: &Expression, last_precedence: u32, printer
         &Expression::Variable(ref name) => printer.print(name),
         &Expression::BinaryOperation(ref binop, ref lhs, ref rhs) => print_binaryoperation(binop, lhs, rhs, last_precedence, printer),
         &Expression::ArraySubscript(ref array, ref sub) => {
-            print_expression_inner(array, 1, printer);
+            let prec = 1;
+            if last_precedence <= prec { printer.print("(") }
+            print_expression_inner(array, prec, printer);
             printer.print("[");
             print_expression(sub, printer);
             printer.print("]");
+            if last_precedence <= prec { printer.print(")") }
         },
-        &Expression::Intrinsic(ref intrinsic) => print_intrinsic(intrinsic, printer),
+        &Expression::Member(ref composite, ref member) => {
+            let prec = 1;
+            if last_precedence <= prec { printer.print("(") }
+            print_expression_inner(composite, prec, printer);
+            printer.print(".");
+            printer.print(member);
+            if last_precedence <= prec { printer.print(")") }
+        },
+        &Expression::Deref(ref inner) => {
+            let prec = 2;
+            if last_precedence <= prec { printer.print("(") }
+            printer.print("*");
+            printer.separator();
+            print_expression_inner(inner, prec, printer);
+            if last_precedence <= prec { printer.print(")") }
+        },
+        &Expression::MemberDeref(ref composite, ref member) => {
+            let prec = 1;
+            if last_precedence <= prec { printer.print("(") }
+            print_expression_inner(composite, prec, printer);
+            printer.print("->");
+            printer.print(member);
+            if last_precedence <= prec { printer.print(")") }
+        },
         &Expression::Call(ref func, ref params) => {
             print_expression_inner(func, 1, printer);
             printer.print("(");
@@ -231,6 +262,7 @@ fn print_expression_inner(expression: &Expression, last_precedence: u32, printer
             }
             printer.print(")");
         },
+        &Expression::Intrinsic(ref intrinsic) => print_intrinsic(intrinsic, printer),
         _ => unimplemented!(),
     }
 }

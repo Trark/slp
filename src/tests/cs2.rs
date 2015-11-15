@@ -12,6 +12,11 @@ fn cs2_full() {
     let code = code_result.unwrap();
 
     let expected = CS2_CL_EXPECTED.to_string().replace("\r\n", "\n");
+    // Check by line first (for better error messages)
+    for (code_line, expected_line) in code.to_string().lines().zip(expected.lines()) {
+        assert_eq!(&code_line[..], expected_line);
+    }
+    // Check the whole thing (should only capture differing line numbers)
     assert_eq!(&code.to_string()[..], expected);
 
 }

@@ -16,6 +16,8 @@ pub enum TranspileError {
     GlobalFoundThatIsntInKernelParams(src::GlobalVariable),
 
     UnknownFunctionId(src::FunctionId),
+    UnknownStructId(src::StructId),
+    UnknownConstantBufferId(src::ConstantBufferId),
     InvalidVariableRef,
     UnknownVariableId,
 }
@@ -29,6 +31,8 @@ impl error::Error for TranspileError {
             TranspileError::CouldNotGetEquivalentDataType(_) => "could not find equivalent clc type",
             TranspileError::GlobalFoundThatIsntInKernelParams(_) => "non-parameter global found",
             TranspileError::UnknownFunctionId(_) => "unknown function id",
+            TranspileError::UnknownStructId(_) => "unknown struct id",
+            TranspileError::UnknownConstantBufferId(_) => "unknown cbuffer id",
             TranspileError::InvalidVariableRef => "invalid variable ref",
             TranspileError::UnknownVariableId => "unknown variable id",
         }
@@ -46,7 +50,9 @@ type KernelParams = Vec<dst::KernelParam>;
 struct Context {
     kernel_params: KernelParams,
     function_name_map: HashMap<src::FunctionId, String>,
-
+    struct_name_map: HashMap<src::StructId, String>,
+    cbuffer_type_name_map: HashMap<src::ConstantBufferId, String>,
+    cbuffer_instance_name_map: HashMap<src::ConstantBufferId, String>,
     variable_scopes: Vec<HashMap<src::VariableId, String>>,
 }
 
@@ -56,9 +62,59 @@ impl Context {
         let mut context = Context {
             kernel_params: vec![],
             function_name_map: HashMap::new(),
+            struct_name_map: HashMap::new(),
+            cbuffer_type_name_map: HashMap::new(),
+            cbuffer_instance_name_map: HashMap::new(),
             variable_scopes: vec![globals.variables.clone()],
         };
-        context.add_functions(&globals.functions);
+
+        // Insert functions (try to generate [name]_[overload number] for overloads)
+        {
+            let mut grouped_functions: HashMap<String, Vec<src::FunctionId>> = HashMap::new();
+            for (id, name) in globals.functions.iter() {
+                match grouped_functions.entry(name.clone()) {
+                    Entry::Occupied(mut occupied) => { occupied.get_mut().push(id.clone()); },
+                    Entry::Vacant(vacant) => { vacant.insert(vec![id.clone()]); },
+                }
+            };
+            for (key, ids) in grouped_functions {
+                assert!(ids.len() > 0);
+                if ids.len() == 1 {
+                    let identifier = context.make_identifier(&key);
+                    let ret = context.function_name_map.insert(ids[0], identifier);
+                    assert_eq!(ret, None);
+                } else {
+                    for id in ids {
+                        let gen = key.clone() + "_" + &id.to_string();
+                        let identifier = context.make_identifier(&gen);
+                        let ret = context.function_name_map.insert(id, identifier);
+                        assert_eq!(ret, None);
+                    }
+                }
+            };
+        }
+
+        // Insert structs (name collisions possible with function overloads + globals)
+        {
+            for (id, struct_name) in globals.structs.iter() {
+                let identifier = context.make_identifier(struct_name);
+                let ret = context.struct_name_map.insert(id.clone(), identifier);
+                assert_eq!(ret, None);
+            };
+        }
+
+        // Insert cbuffers
+        {
+            for (id, cbuffer_name) in globals.constants.iter() {
+                let identifier_instance = context.make_identifier(cbuffer_name);
+                let ret = context.cbuffer_instance_name_map.insert(id.clone(), identifier_instance);
+                assert_eq!(ret, None);
+                let identifier_type = context.make_identifier(&(cbuffer_name.clone() + "_t"));
+                let ret = context.cbuffer_type_name_map.insert(id.clone(), identifier_type);
+                assert_eq!(ret, None);
+            };
+        }
+
         context
     }
 
@@ -94,9 +150,48 @@ impl Context {
         }
     }
 
+    /// Get the name of a struct
+    fn get_struct_name(&self, id: &src::StructId) -> Result<String, TranspileError> {
+        match self.struct_name_map.get(id) {
+            Some(v) => Ok(v.clone()),
+            None => Err(TranspileError::UnknownStructId(id.clone())),
+        }
+    }
+
+    /// Get the name of the struct used for a cbuffer
+    fn get_cbuffer_struct_name(&self, id: &src::ConstantBufferId) -> Result<String, TranspileError> {
+        match self.cbuffer_type_name_map.get(id) {
+            Some(v) => Ok(v.clone()),
+            None => Err(TranspileError::UnknownConstantBufferId(id.clone())),
+        }
+    }
+
+        /// Get the name of the cbuffer instance
+    fn get_cbuffer_instance_name(&self, id: &src::ConstantBufferId) -> Result<String, TranspileError> {
+        match self.cbuffer_instance_name_map.get(id) {
+            Some(v) => Ok(v.clone()),
+            None => Err(TranspileError::UnknownConstantBufferId(id.clone())),
+        }
+    }
+
     fn is_free(&self, identifier: &str) -> bool {
         for func_name in self.function_name_map.values() {
             if func_name == identifier {
+                return false;
+            }
+        }
+        for struct_name in self.struct_name_map.values() {
+            if struct_name == identifier {
+                return false;
+            }
+        }
+        for cbuffer_instance in self.cbuffer_instance_name_map.values() {
+            if cbuffer_instance == identifier {
+                return false;
+            }
+        }
+        for cbuffer_type in self.cbuffer_type_name_map.values() {
+            if cbuffer_type == identifier {
                 return false;
             }
         }
@@ -122,31 +217,6 @@ impl Context {
             }
             index = index + 1;
         }
-    }
-
-    fn add_functions(&mut self, functions: &HashMap<src::FunctionId, String>) {
-        let mut grouped_functions: HashMap<String, Vec<src::FunctionId>> = HashMap::new();
-        for (id, name) in functions.iter() {
-            match grouped_functions.entry(name.clone()) {
-                Entry::Occupied(mut occupied) => { occupied.get_mut().push(id.clone()); },
-                Entry::Vacant(vacant) => { vacant.insert(vec![id.clone()]); },
-            }
-        };
-        for (key, ids) in grouped_functions {
-            assert!(ids.len() > 0);
-            if ids.len() == 1 {
-                let identifier = self.make_identifier(&key);
-                let ret = self.function_name_map.insert(ids[0], identifier);
-                assert_eq!(ret, None);
-            } else {
-                for id in ids {
-                    let gen = key.clone() + "_" + &id.to_string();
-                    let identifier = self.make_identifier(&gen);
-                    let ret = self.function_name_map.insert(id, identifier);
-                    assert_eq!(ret, None);
-                }
-            }
-        };
     }
 
     fn push_scope(&mut self, decls: &src::ScopedDeclarations) {
@@ -186,10 +256,14 @@ fn transpile_datatype(datatype: &src::DataType) -> Result<dst::Type, TranspileEr
     }
 }
 
-fn transpile_type(hlsltype: &src::Type) -> Result<dst::Type, TranspileError> {
+fn transpile_type(hlsltype: &src::Type, context: &Context) -> Result<dst::Type, TranspileError> {
     match hlsltype {
         &src::Type::Void => Ok(dst::Type::Void),
         &src::Type::Structured(src::StructuredType::Data(ref data_type)) => transpile_datatype(data_type),
+        &src::Type::Structured(src::StructuredType::Struct(ref id)) => {
+            let struct_name = try!(context.get_struct_name(id));
+            Ok(dst::Type::Struct(struct_name))
+        },
         ty => return Err(TranspileError::CouldNotGetEquivalentType(ty.clone())),
     }
 }
@@ -239,6 +313,10 @@ fn transpile_expression(expression: &src::Expression, context: &Context) -> Resu
     match expression {
         &src::Expression::Literal(ref lit) => Ok(dst::Expression::Literal(try!(transpile_literal(lit)))),
         &src::Expression::Variable(ref var_ref) => context.get_variable_ref(var_ref),
+        &src::Expression::ConstantVariable(ref id, ref name) => {
+            let cbuffer_instance_name = try!(context.get_cbuffer_instance_name(id));
+            Ok(dst::Expression::MemberDeref(Box::new(dst::Expression::Variable(cbuffer_instance_name)), name.clone()))
+        },
         &src::Expression::Function(ref id) => context.get_function(id),
         &src::Expression::UnaryOperation(_, _) => unimplemented!(),
         &src::Expression::BinaryOperation(ref binop, ref lhs, ref rhs) => {
@@ -252,7 +330,10 @@ fn transpile_expression(expression: &src::Expression, context: &Context) -> Resu
             let cl_sub = Box::new(try!(transpile_expression(sub, context)));
             Ok(dst::Expression::ArraySubscript(cl_expr, cl_sub))
         },
-        &src::Expression::Member(_, _) => unimplemented!(),
+        &src::Expression::Member(ref expr, ref member_name) => {
+            let cl_expr = Box::new(try!(transpile_expression(expr, context)));
+            Ok(dst::Expression::Member(cl_expr, member_name.clone()))
+        },
         &src::Expression::Call(ref func, ref params) => {
             let func_expr = try!(transpile_expression(func, context));
             let mut params_exprs: Vec<dst::Expression> = vec![];
@@ -270,7 +351,7 @@ fn transpile_expression(expression: &src::Expression, context: &Context) -> Resu
 fn transpile_vardef(vardef: &src::VarDef, context: &Context) -> Result<dst::VarDef, TranspileError> {
     Ok(dst::VarDef {
         name: try!(context.get_variable_id(&vardef.id)),
-        typename: try!(transpile_type(&vardef.typename)),
+        typename: try!(transpile_type(&vardef.typename, context)),
         assignment: match &vardef.assignment { &None => None, &Some(ref expr) => Some(try!(transpile_expression(expr, context))) },
     })
 }
@@ -310,7 +391,7 @@ fn transpile_statements(statements: &[src::Statement], context: &mut Context) ->
 fn transpile_param(param: &src::FunctionParam, context: &Context) -> Result<dst::FunctionParam, TranspileError> {
     Ok(dst::FunctionParam {
         name: try!(context.get_variable_id(&param.id)),
-        typename: try!(transpile_type(&param.typename)),
+        typename: try!(transpile_type(&param.typename, context)),
     })
 }
 
@@ -325,7 +406,7 @@ fn transpile_params(params: &[src::FunctionParam], context: &Context) -> Result<
 fn transpile_kernel_input_semantic(param: &src::KernelParam, context: &Context) -> Result<dst::Statement, TranspileError> {
     match &param.1 {
         &src::KernelSemantic::DispatchThreadId => {
-            let typename = try!(transpile_type(&param.1.get_type()));
+            let typename = try!(transpile_type(&param.1.get_type(), context));
             let assign = match &param.1 {
                 &src::KernelSemantic::DispatchThreadId => {
                     let x = dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(Box::new(dst::Expression::Literal(dst::Literal::UInt(0)))));
@@ -359,14 +440,14 @@ fn transpile_rootdefinition(rootdef: &src::RootDefinition, context: &mut Context
     match rootdef {
         &src::RootDefinition::Struct(ref structdefinition) => {
             Ok(Some(dst::RootDefinition::Struct(dst::StructDefinition {
-                name: structdefinition.name.clone(),
+                name: try!(context.get_struct_name(&structdefinition.id)),
                 members: try!(structdefinition.members.iter().fold(
                     Ok(vec![]),
                     |result, member| {
                         let mut vec = try!(result);
                         let dst_member = dst::StructMember {
                             name: member.name.clone(),
-                            typename: try!(transpile_type(&member.typename)),
+                            typename: try!(transpile_type(&member.typename, context)),
                         };
                         vec.push(dst_member);
                         Ok(vec)
@@ -375,7 +456,21 @@ fn transpile_rootdefinition(rootdef: &src::RootDefinition, context: &mut Context
             })))
         },
         &src::RootDefinition::SamplerState => unimplemented!{},
-        &src::RootDefinition::ConstantBuffer(_) => unimplemented!{},
+        &src::RootDefinition::ConstantBuffer(ref cb) => {
+            let mut members = vec![];
+            for member in &cb.members {
+                let var_name = member.name.clone();
+                let var_type = try!(transpile_type(&member.typename, context));
+                members.push(dst::StructMember {
+                    name: var_name,
+                    typename: var_type,
+                });
+            };
+            Ok(Some(dst::RootDefinition::Struct(dst::StructDefinition {
+                name: try!(context.get_cbuffer_struct_name(&cb.id)),
+                members: members,
+            })))
+        },
         &src::RootDefinition::GlobalVariable(ref gv) => {
             let global_name = try!(context.get_variable_id(&gv.id));
             if context.kernel_params.iter().any(|gp| { gp.name == global_name }) {
@@ -391,7 +486,7 @@ fn transpile_rootdefinition(rootdef: &src::RootDefinition, context: &mut Context
             context.pop_scope();
             let cl_func = dst::FunctionDefinition {
                 name: try!(context.get_function_name(&func.id)),
-                returntype: try!(transpile_type(&func.returntype)),
+                returntype: try!(transpile_type(&func.returntype, context)),
                 params: params,
                 body: body,
             };
@@ -415,6 +510,18 @@ fn transpile_rootdefinition(rootdef: &src::RootDefinition, context: &mut Context
 fn transpile_global(table: &src::GlobalTable, context: &Context) -> Result<KernelParams, TranspileError> {
     let mut global_params: KernelParams = vec![];
     // Todo: Pick slot numbers better
+    for (_, id) in &table.constants {
+        let cl_type = dst::Type::Pointer(
+            dst::AddressSpace::Constant,
+            Box::new(dst::Type::Struct(try!(context.get_cbuffer_struct_name(id))))
+        );
+        let cl_var = try!(context.get_cbuffer_instance_name(id));
+        let param = dst::KernelParam {
+            name: cl_var,
+            typename: cl_type,
+        };
+        global_params.push(param);
+    }
     for (_, global_entry) in &table.r_resources {
         let cl_type = match &global_entry.typename {
             &src::Type::Object(src::ObjectType::Buffer(ref data_type)) => {

@@ -1,12 +1,67 @@
 
 use std::collections::HashMap;
-use super::ast;
 
 pub use super::ast::ScalarType as ScalarType;
 pub use super::ast::DataType as DataType;
-pub use super::ast::StructuredType as StructuredType;
-pub use super::ast::ObjectType as ObjectType;
-pub use super::ast::Type as Type;
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum StructuredType {
+    Data(DataType),
+    Struct(StructId),
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum ObjectType {
+    Buffer(DataType),
+    RWBuffer(DataType),
+
+    ByteAddressBuffer,
+    RWByteAddressBuffer,
+
+    StructuredBuffer(StructuredType),
+    RWStructuredBuffer(StructuredType),
+    AppendStructuredBuffer(StructuredType),
+    ConsumeStructuredBuffer(StructuredType),
+
+    Texture1D(DataType),
+    Texture1DArray(DataType),
+    Texture2D(DataType),
+    Texture2DArray(DataType),
+    Texture2DMS(DataType),
+    Texture2DMSArray(DataType),
+    Texture3D(DataType),
+    TextureCube(DataType),
+    TextureCubeArray(DataType),
+    RWTexture1D(DataType),
+    RWTexture1DArray(DataType),
+    RWTexture2D(DataType),
+    RWTexture2DArray(DataType),
+    RWTexture3D(DataType),
+
+    InputPatch,
+    OutputPatch,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum Type {
+    Void,
+    Structured(StructuredType),
+    SamplerState,
+    Object(ObjectType),
+    Array(Box<Type>),
+}
+
+impl Type {
+    pub fn from_scalar(scalar: ScalarType) -> Type { Type::Structured(StructuredType::Data(DataType::Scalar(scalar))) }
+
+    pub fn uint() -> Type { Type::from_scalar(ScalarType::UInt) }
+    pub fn int() -> Type { Type::from_scalar(ScalarType::Int) }
+    pub fn long() -> Type { Type::from_scalar(ScalarType::Int) }
+    pub fn float() -> Type { Type::from_scalar(ScalarType::Float) }
+    pub fn double() -> Type { Type::from_scalar(ScalarType::Double) }
+    pub fn float4x4() -> Type { Type::Structured(StructuredType::Data(DataType::Matrix(ScalarType::Float, 4, 4))) }
+}
+
 pub use super::ast::BinOp as BinOp;
 pub use super::ast::UnaryOp as UnaryOp;
 
@@ -22,6 +77,10 @@ pub use super::ast::Literal as Literal;
 
 /// Id to function (in global scope)
 pub type FunctionId = u32;
+/// Id to a user defined struct
+pub type StructId = u32;
+/// Id to constant buffer
+pub type ConstantBufferId = u32;
 /// Id to variable in current scope
 pub type VariableId = u32;
 /// Number of scope levels to go up
@@ -41,12 +100,15 @@ pub struct ScopedDeclarations {
 pub struct GlobalDeclarations {
     pub functions: HashMap<FunctionId, String>,
     pub variables: HashMap<VariableId, String>,
+    pub structs: HashMap<StructId, String>,
+    pub constants: HashMap<ConstantBufferId, String>,
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
     Literal(Literal),
     Variable(VariableRef),
+    ConstantVariable(ConstantBufferId, String),
     Function(FunctionId),
     UnaryOperation(UnaryOp, Box<Expression>),
     BinaryOperation(BinOp, Box<Expression>, Box<Expression>),
@@ -81,16 +143,31 @@ pub enum Statement {
     Return(Expression),
 }
 
-pub use super::ast::StructMember as StructMember;
-pub use super::ast::StructDefinition as StructDefinition;
+#[derive(PartialEq, Debug, Clone)]
+pub struct StructMember {
+    pub name: String,
+    pub typename: Type,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct StructDefinition {
+    pub id: StructId,
+    pub members: Vec<StructMember>,
+}
 
 pub use super::ast::PackSubOffset as PackSubOffset;
 pub use super::ast::PackOffset as PackOffset;
-pub use super::ast::ConstantVariable as ConstantVariable;
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct ConstantVariable {
+    pub name: String,
+    pub typename: Type,
+    pub offset: Option<PackOffset>,
+}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct ConstantBuffer {
-    pub id: VariableId,
+    pub id: ConstantBufferId,
     pub members: Vec<ConstantVariable>,
 }
 
@@ -153,7 +230,7 @@ pub enum RootDefinition {
 #[derive(PartialEq, Debug, Clone)]
 pub struct GlobalEntry {
     pub id: VariableId,
-    pub typename: ast::Type,
+    pub typename: Type,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -161,7 +238,7 @@ pub struct GlobalTable {
     pub r_resources: HashMap<u32, GlobalEntry>,
     pub rw_resources: HashMap<u32, GlobalEntry>,
     pub samplers: HashMap<u32, String>,
-    pub constants: HashMap<u32, String>,
+    pub constants: HashMap<u32, ConstantBufferId>,
 }
 
 #[derive(PartialEq, Debug, Clone)]

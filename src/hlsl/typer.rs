@@ -10,32 +10,33 @@ use super::ast;
 pub enum TyperError {
     Unimplemented,
 
-    ValueAlreadyDefined(String, ParseType, ParseType),
+    ValueAlreadyDefined(String, ErrorType, ErrorType),
     StructAlreadyDefined(String),
+    ConstantBufferAlreadyDefined(String),
 
-    ConstantSlotAlreadyUsed(String, String),
+    ConstantSlotAlreadyUsed(String),
     ReadResourceSlotAlreadyUsed(ir::VariableId, ir::VariableId),
     ReadWriteResourceSlotAlreadyUsed(ir::VariableId, ir::VariableId),
 
     UnknownIdentifier(String),
-    UnknownType(ParseType),
+    UnknownType(ErrorType),
 
-    TypeDoesNotHaveMembers(ParseType),
-    UnknownTypeMember(ParseType, String),
+    TypeDoesNotHaveMembers(ErrorType),
+    UnknownTypeMember(ErrorType, String),
 
     ArrayIndexingNonArrayType,
     ArraySubscriptIndexNotInteger,
 
     CallOnNonFunction,
 
-    FunctionPassedToAnotherFunction(ParseType, ParseType),
+    FunctionPassedToAnotherFunction(ErrorType, ErrorType),
     FunctionArgumentTypeMismatch(UnresolvedFunction, ParamArray),
     MethodArgumentTypeMismatch(UnresolvedMethod, ParamArray),
 
-    UnaryOperationWrongTypes(ir::UnaryOp, ParseType),
-    BinaryOperationWrongTypes(ir::BinOp, ParseType, ParseType),
+    UnaryOperationWrongTypes(ir::UnaryOp, ErrorType),
+    BinaryOperationWrongTypes(ir::BinOp, ErrorType, ErrorType),
 
-    InvalidCast(ParseType, ParseType),
+    InvalidCast(ErrorType, ErrorType),
     FunctionTypeInInitExpression,
     FunctionNotCalled,
 
@@ -93,8 +94,8 @@ pub struct ResolvedMethod(pub ClassType, pub MethodOverload, ir::Expression);
 pub struct UnresolvedMethod(pub String, pub ClassType, pub Vec<MethodOverload>, ir::Expression);
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum ParseType {
-    Value(ir::Type),
+pub enum ErrorType {
+    Value(ast::Type),
     Function(UnresolvedFunction),
     Method(UnresolvedMethod),
     Unknown,
@@ -107,8 +108,9 @@ impl error::Error for TyperError {
 
             TyperError::ValueAlreadyDefined(_, _, _) => "identifier already defined",
             TyperError::StructAlreadyDefined(_) => "struct aready defined",
+            TyperError::ConstantBufferAlreadyDefined(_) => "cbuffer aready defined",
 
-            TyperError::ConstantSlotAlreadyUsed(_, _) => "global constant slot already used",
+            TyperError::ConstantSlotAlreadyUsed(_) => "global constant slot already used",
             TyperError::ReadResourceSlotAlreadyUsed(_, _) => "global resource slot already used",
             TyperError::ReadWriteResourceSlotAlreadyUsed(_, _) => "global writable resource slot already used",
 
@@ -166,12 +168,22 @@ struct VariableBlock {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-struct GlobalContext {
-    structs: HashMap<String, ir::StructDefinition>,
+struct TypeBlock {
+    struct_ids: HashMap<String, ir::StructId>,
+    struct_definitions: HashMap<ir::StructId, HashMap<String, ir::Type>>,
+    next_free_struct_id: ir::StructId,
 
+    cbuffer_ids: HashMap<String, ir::ConstantBufferId>,
+    cbuffer_definitions: HashMap<ir::ConstantBufferId, HashMap<String, ir::Type>>,
+    next_free_cbuffer_id: ir::ConstantBufferId,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+struct GlobalContext {
     functions: HashMap<String, UnresolvedFunction>,
     next_free_function_id: ir::FunctionId,
 
+    types: TypeBlock,
     variables: VariableBlock,
 }
 
@@ -188,6 +200,16 @@ enum Context {
     Scope(ScopeContext),
 }
 
+trait StructIdFinder {
+    fn find_struct_id(&self, name: &String) -> Result<ir::StructId, TyperError>;
+}
+
+trait ErrorTypeContext {
+    fn ir_type_to_error_type(&self, ty: &ir::Type) -> ErrorType;
+
+    fn typed_expression_to_error_type(&self, texp: &TypedExpression) -> ErrorType;
+}
+
 impl UnresolvedFunction {
     pub fn get_name(&self) -> String { self.0.clone() }
 }
@@ -196,27 +218,17 @@ impl UnresolvedMethod {
     pub fn get_name(&self) -> String { self.0.clone() }
 }
 
-impl TypedExpression {
-    fn to_parsetype(&self) -> ParseType {
-        match self {
-            &TypedExpression::Value(_, ref ty) => ParseType::Value(ty.clone()),
-            &TypedExpression::Function(ref unresolved) => ParseType::Function(unresolved.clone()),
-            &TypedExpression::Method(ref unresolved) => ParseType::Method(unresolved.clone()),
-        }
-    }
-}
-
 impl VariableBlock {
     fn new() -> VariableBlock {
         VariableBlock { variables: HashMap::new(), next_free_variable_id: 0 }
     }
 
-    fn insert_variable(&mut self, name: String, typename: ir::Type) -> Result<ir::VariableId, TyperError> {
+    fn insert_variable(&mut self, name: String, typename: ir::Type, context: &ErrorTypeContext) -> Result<ir::VariableId, TyperError> {
         if let Some(&(ref ty, _)) = self.has_variable(&name) {
-            return Err(TyperError::ValueAlreadyDefined(name, ParseType::Value(ty.clone()), ParseType::Value(typename)))
+            return Err(TyperError::ValueAlreadyDefined(name, context.ir_type_to_error_type(ty), context.ir_type_to_error_type(&typename)))
         };
         match self.variables.entry(name.clone()) {
-            Entry::Occupied(occupied) => Err(TyperError::ValueAlreadyDefined(name, ParseType::Value(occupied.get().0.clone()), ParseType::Value(typename))),
+            Entry::Occupied(occupied) => Err(TyperError::ValueAlreadyDefined(name, context.ir_type_to_error_type(&occupied.get().0), context.ir_type_to_error_type(&typename))),
             Entry::Vacant(vacant) => {
                 let id = self.next_free_variable_id;
                 self.next_free_variable_id = self.next_free_variable_id + 1;
@@ -246,15 +258,186 @@ impl VariableBlock {
     }
 }
 
+impl TypeBlock {
+    fn new() -> TypeBlock {
+        TypeBlock {
+            struct_ids: HashMap::new(),
+            struct_definitions: HashMap::new(),
+            next_free_struct_id: 0,
+            cbuffer_ids: HashMap::new(),
+            cbuffer_definitions: HashMap::new(),
+            next_free_cbuffer_id: 0,
+        }
+    }
+
+    fn insert_struct(&mut self, name: &String, members: HashMap<String, ir::Type>) -> Option<ir::StructId> {
+        let id = self.next_free_struct_id;
+        self.next_free_struct_id = self.next_free_struct_id + 1;
+        match (self.struct_ids.entry(name.clone()), self.struct_definitions.entry(id.clone())) {
+            (Entry::Vacant(id_entry), Entry::Vacant(def_entry)) => {
+                id_entry.insert(id.clone());
+                def_entry.insert(members);
+                Some(id.clone())
+            },
+            _ => None,
+        }
+    }
+
+    fn find_struct_member(&self, id: &ir::StructId, member_name: &String) -> Result<ir::Type, TyperError> {
+        match self.struct_definitions.get(id) {
+            Some(def) => def.get(member_name).map(|ty| ty.clone()).ok_or(
+                TyperError::UnknownTypeMember(
+                    self.ir_type_to_error_type(&ir::Type::Structured(ir::StructuredType::Struct(id.clone()))),
+                    member_name.clone()
+                )
+            ),
+            None => Err(TyperError::UnknownType(
+                self.ir_type_to_error_type(&ir::Type::Structured(ir::StructuredType::Struct(id.clone())))
+            )),
+        }
+    }
+
+    fn insert_cbuffer(&mut self, name: &String, members: HashMap<String, ir::Type>) -> Option<ir::ConstantBufferId> {
+        let id = self.next_free_cbuffer_id;
+        self.next_free_cbuffer_id = self.next_free_cbuffer_id + 1;
+        match (self.cbuffer_ids.entry(name.clone()), self.cbuffer_definitions.entry(id.clone())) {
+            (Entry::Vacant(id_entry), Entry::Vacant(def_entry)) => {
+                id_entry.insert(id.clone());
+                def_entry.insert(members);
+                Some(id.clone())
+            },
+            _ => None,
+        }
+    }
+
+    fn find_variable(&self, name: &String) -> Option<TypedExpression> {
+        for (id, members) in &self.cbuffer_definitions {
+            for (member_name, ty) in members {
+                if member_name == name {
+                    return Some(TypedExpression::Value(
+                        ir::Expression::ConstantVariable(id.clone(), name.clone()),
+                        ty.clone()
+                    ));
+                }
+            }
+        }
+        None
+    }
+
+    fn get_struct_name(&self, id: &ir::StructId) -> Option<String> {
+        for (struct_name, struct_id) in &self.struct_ids {
+            if id == struct_id {
+                return Some(struct_name.clone());
+            }
+        }
+        None
+    }
+
+    fn invert_structuredtype(&self, ty: &ir::StructuredType) -> ast::StructuredType {
+        match *ty {
+            ir::StructuredType::Data(ref data_type) => ast::StructuredType::Data(data_type.clone()),
+            ir::StructuredType::Struct(ref id) => {
+                ast::StructuredType::Custom(match self.get_struct_name(&id) {
+                    Some(name) => name,
+                    None => "<struct>".to_string(),
+                })
+            },
+        }
+    }
+
+    fn invert_objecttype(&self, ty: &ir::ObjectType) -> ast::ObjectType {
+        match *ty {
+            ir::ObjectType::Buffer(ref data_type) => ast::ObjectType::Buffer(data_type.clone()),
+            ir::ObjectType::RWBuffer(ref data_type) => ast::ObjectType::RWBuffer(data_type.clone()),
+            ir::ObjectType::ByteAddressBuffer => ast::ObjectType::ByteAddressBuffer,
+            ir::ObjectType::RWByteAddressBuffer => ast::ObjectType::RWByteAddressBuffer,
+            ir::ObjectType::StructuredBuffer(ref structured_type) => ast::ObjectType::StructuredBuffer(self.invert_structuredtype(structured_type)),
+            ir::ObjectType::RWStructuredBuffer(ref structured_type) => ast::ObjectType::RWStructuredBuffer(self.invert_structuredtype(structured_type)),
+            ir::ObjectType::AppendStructuredBuffer(ref structured_type) => ast::ObjectType::AppendStructuredBuffer(self.invert_structuredtype(structured_type)),
+            ir::ObjectType::ConsumeStructuredBuffer(ref structured_type) => ast::ObjectType::ConsumeStructuredBuffer(self.invert_structuredtype(structured_type)),
+            ir::ObjectType::Texture1D(ref data_type) => ast::ObjectType::Texture1D(data_type.clone()),
+            ir::ObjectType::Texture1DArray(ref data_type) => ast::ObjectType::Texture1DArray(data_type.clone()),
+            ir::ObjectType::Texture2D(ref data_type) => ast::ObjectType::Texture2D(data_type.clone()),
+            ir::ObjectType::Texture2DArray(ref data_type) => ast::ObjectType::Texture2DArray(data_type.clone()),
+            ir::ObjectType::Texture2DMS(ref data_type) => ast::ObjectType::Texture2DMS(data_type.clone()),
+            ir::ObjectType::Texture2DMSArray(ref data_type) => ast::ObjectType::Texture2DMSArray(data_type.clone()),
+            ir::ObjectType::Texture3D(ref data_type) => ast::ObjectType::Texture3D(data_type.clone()),
+            ir::ObjectType::TextureCube(ref data_type) => ast::ObjectType::TextureCube(data_type.clone()),
+            ir::ObjectType::TextureCubeArray(ref data_type) => ast::ObjectType::TextureCubeArray(data_type.clone()),
+            ir::ObjectType::RWTexture1D(ref data_type) => ast::ObjectType::RWTexture1D(data_type.clone()),
+            ir::ObjectType::RWTexture1DArray(ref data_type) => ast::ObjectType::RWTexture1DArray(data_type.clone()),
+            ir::ObjectType::RWTexture2D(ref data_type) => ast::ObjectType::RWTexture2D(data_type.clone()),
+            ir::ObjectType::RWTexture2DArray(ref data_type) => ast::ObjectType::RWTexture2DArray(data_type.clone()),
+            ir::ObjectType::RWTexture3D(ref data_type) => ast::ObjectType::RWTexture3D(data_type.clone()),
+            ir::ObjectType::InputPatch => ast::ObjectType::InputPatch,
+            ir::ObjectType::OutputPatch => ast::ObjectType::OutputPatch,
+        }
+    }
+
+    fn invert_type(&self, ty: &ir::Type) -> ast::Type {
+        match *ty {
+            ir::Type::Void => ast::Type::Void,
+            ir::Type::Structured(ref structured_type) => ast::Type::Structured(self.invert_structuredtype(structured_type)),
+            ir::Type::SamplerState => ast::Type::SamplerState,
+            ir::Type::Object(ref object_type) => ast::Type::Object(self.invert_objecttype(object_type)),
+            ir::Type::Array(ref array_type) => ast::Type::Array(Box::new(self.invert_type(array_type))),
+        }
+    }
+
+    fn destruct(self) -> (HashMap<ir::StructId, String>, HashMap<ir::ConstantBufferId, String>) {
+        (self.struct_ids.iter().fold(HashMap::new(),
+            |mut map, (name, id)| {
+                map.insert(id.clone(), name.clone());
+                map
+             }
+        ),
+        self.cbuffer_ids.iter().fold(HashMap::new(),
+            |mut map, (name, id)| {
+                map.insert(id.clone(), name.clone());
+                map
+             }
+        ))
+    }
+}
+
+impl StructIdFinder for TypeBlock {
+    fn find_struct_id(&self, name: &String) -> Result<ir::StructId, TyperError> {
+        self.struct_ids.get(name).map(|id| id.clone()).ok_or(
+            TyperError::UnknownType(
+                ErrorType::Value(ast::Type::Structured(ast::StructuredType::Custom(name.clone())))
+            )
+        )
+    }
+}
+
+impl ErrorTypeContext for TypeBlock {
+    fn ir_type_to_error_type(&self, ty: &ir::Type) -> ErrorType {
+        ErrorType::Value(TypeBlock::invert_type(self, ty))
+    }
+
+    fn typed_expression_to_error_type(&self, texp: &TypedExpression) -> ErrorType {
+        match *texp {
+            TypedExpression::Value(_, ref ty) => ErrorType::Value(TypeBlock::invert_type(self, ty)),
+            TypedExpression::Function(ref unresolved) => ErrorType::Function(unresolved.clone()),
+            TypedExpression::Method(ref unresolved) => ErrorType::Method(unresolved.clone()),
+        }
+    }
+}
+
 impl GlobalContext {
     fn new() -> GlobalContext {
-        GlobalContext { structs: HashMap::new(), functions: get_intrinsics(), next_free_function_id: 0, variables: VariableBlock::new() }
+        GlobalContext {
+            functions: get_intrinsics(),
+            next_free_function_id: 0,
+            types: TypeBlock::new(),
+            variables: VariableBlock::new(),
+        }
     }
 
     pub fn insert_function(&mut self, name: String, function_type: FunctionOverload) -> Result<(), TyperError> {
         // Error if a variable of the same name already exists
         if let Some(&(ref ty, _)) = self.has_variable(&name) {
-            return Err(TyperError::ValueAlreadyDefined(name, ParseType::Value(ty.clone()), ParseType::Unknown))
+            return Err(TyperError::ValueAlreadyDefined(name, self.ir_type_to_error_type(ty), ErrorType::Unknown))
         };
         // Try to add the function
         match self.functions.entry(name.clone()) {
@@ -262,7 +445,7 @@ impl GlobalContext {
                 // Fail if the overload already exists
                 for &FunctionOverload(_, _, ref args) in &occupied.get().1 {
                     if *args == function_type.2 {
-                        return Err(TyperError::ValueAlreadyDefined(name, ParseType::Unknown, ParseType::Unknown))
+                        return Err(TyperError::ValueAlreadyDefined(name, ErrorType::Unknown, ErrorType::Unknown))
                     }
                 };
                 // Insert a new overload
@@ -278,14 +461,18 @@ impl GlobalContext {
 
     fn find_variable_recur(&self, name: &String, scopes_up: u32) -> Result<TypedExpression, TyperError> {
         match self.functions.get(name) {
-            Some(tys) => Ok(TypedExpression::Function(tys.clone())),
-            None => {
-                match self.variables.find_variable(name, scopes_up) {
-                    Some(tys) => Ok(tys),
-                    None => Err(TyperError::UnknownIdentifier(name.clone()))
-                }
-            },
-        }
+            Some(tys) => return Ok(TypedExpression::Function(tys.clone())),
+            None => { },
+        };
+        match self.types.find_variable(name) {
+            Some(tys) => return Ok(tys),
+            None => { },
+        };
+        match self.variables.find_variable(name, scopes_up) {
+            Some(tys) => return Ok(tys),
+            None => { },
+        };
+        Err(TyperError::UnknownIdentifier(name.clone()))
     }
 
     fn make_function_id(&mut self) -> ir::FunctionId {
@@ -295,7 +482,7 @@ impl GlobalContext {
     }
 
     fn insert_variable(&mut self, name: String, typename: ir::Type) -> Result<ir::VariableId, TyperError> {
-        self.variables.insert_variable(name, typename)
+        self.variables.insert_variable(name, typename, &self.types)
     }
 
     fn has_variable(&self, name: &String) -> Option<&(ir::Type, ir::VariableId)> {
@@ -307,11 +494,24 @@ impl GlobalContext {
         self.find_variable_recur(name, 0)
     }
 
-    fn find_struct(&self, name: &String) -> Option<&ir::StructDefinition> {
-        self.structs.get(name)
+    fn insert_struct(&mut self, name: &String, members: HashMap<String, ir::Type>) -> Option<ir::StructId> {
+        self.types.insert_struct(name, members)
+    }
+
+    fn find_struct_member(&self, id: &ir::StructId, member_name: &String) -> Result<ir::Type, TyperError> {
+        self.types.find_struct_member(id, member_name)
+    }
+
+    fn insert_cbuffer(&mut self, name: &String, members: HashMap<String, ir::Type>) -> Option<ir::ConstantBufferId> {
+        self.types.insert_cbuffer(name, members)
+    }
+
+    fn get_type_block(&self) -> &TypeBlock {
+        &self.types
     }
 
     fn destruct(self) -> ir::GlobalDeclarations {
+        let (structs, constants) = self.types.destruct();
         ir::GlobalDeclarations {
             variables: self.variables.destruct(),
             functions: self.functions.iter().fold(HashMap::new(),
@@ -325,7 +525,25 @@ impl GlobalContext {
                     map
                 }
             ),
+            structs: structs,
+            constants: constants,
         }
+    }
+}
+
+impl StructIdFinder for GlobalContext {
+    fn find_struct_id(&self, name: &String) -> Result<ir::StructId, TyperError> {
+        self.types.find_struct_id(name)
+    }
+}
+
+impl ErrorTypeContext for GlobalContext {
+    fn ir_type_to_error_type(&self, ty: &ir::Type) -> ErrorType {
+        self.types.ir_type_to_error_type(ty)
+    }
+
+    fn typed_expression_to_error_type(&self, texp: &TypedExpression) -> ErrorType {
+        self.types.typed_expression_to_error_type(texp)
     }
 }
 
@@ -352,17 +570,37 @@ impl ScopeContext {
     }
 
     fn insert_variable(&mut self, name: String, typename: ir::Type) -> Result<ir::VariableId, TyperError> {
-        self.variables.insert_variable(name, typename)
+         let type_block = self.parent.get_type_block();
+         let variables = &mut self.variables;
+        variables.insert_variable(name, typename, type_block)
     }
 
     fn find_variable(&self, name: &String) -> Result<TypedExpression, TyperError> {
         self.find_variable_recur(name, 0)
     }
 
-    fn find_struct(&self, name: &String) -> Option<&ir::StructDefinition> {
-        self.parent.find_struct(name)
+    fn find_struct_member(&self, id: &ir::StructId, member_name: &String) -> Result<ir::Type, TyperError> {
+        self.parent.find_struct_member(id, member_name)
     }
 
+    fn get_type_block(&self) -> &TypeBlock {
+        self.parent.get_type_block()
+    }
+}
+
+impl StructIdFinder for ScopeContext {
+    fn find_struct_id(&self, name: &String) -> Result<ir::StructId, TyperError> {
+        self.parent.find_struct_id(name)
+    }
+}
+
+impl ErrorTypeContext for ScopeContext {
+    fn ir_type_to_error_type(&self, ty: &ir::Type) -> ErrorType {
+        self.parent.ir_type_to_error_type(ty)
+    }
+    fn typed_expression_to_error_type(&self, texp: &TypedExpression) -> ErrorType {
+        self.parent.typed_expression_to_error_type(texp)
+    }
 }
 
 impl Context {
@@ -374,12 +612,96 @@ impl Context {
         }
     }
 
-    fn find_struct(&self, name: &String) -> Option<&ir::StructDefinition> {
+    fn find_struct_id(&self, name: &String) -> Result<ir::StructId, TyperError> {
         match *self {
-            Context::Global(ref global) => global.find_struct(name),
-            Context::Scope(ref scope) => scope.find_struct(name),
+            Context::Global(ref global) => global.find_struct_id(name),
+            Context::Scope(ref scope) => scope.find_struct_id(name),
         }
     }
+
+    fn find_struct_member(&self, id: &ir::StructId, member_name: &String) -> Result<ir::Type, TyperError> {
+        match *self {
+            Context::Global(ref global) => global.find_struct_member(id, member_name),
+            Context::Scope(ref scope) => scope.find_struct_member(id, member_name),
+        }
+    }
+
+    fn get_type_block(&self) -> &TypeBlock {
+        match *self {
+            Context::Global(ref global) => global.get_type_block(),
+            Context::Scope(ref scope) => scope.get_type_block(),
+        }
+    }
+}
+
+impl StructIdFinder for Context {
+    fn find_struct_id(&self, name: &String) -> Result<ir::StructId, TyperError> {
+        match *self {
+            Context::Global(ref global) => global.find_struct_id(name),
+            Context::Scope(ref scope) => scope.find_struct_id(name),
+        }
+    }
+}
+
+impl ErrorTypeContext for Context {
+    fn ir_type_to_error_type(&self, ty: &ir::Type) -> ErrorType {
+        match *self {
+            Context::Global(ref global) => global.ir_type_to_error_type(ty),
+            Context::Scope(ref scope) => scope.ir_type_to_error_type(ty),
+        }
+    }
+    fn typed_expression_to_error_type(&self, texp: &TypedExpression) -> ErrorType {
+        match *self {
+            Context::Global(ref global) => global.typed_expression_to_error_type(texp),
+            Context::Scope(ref scope) => scope.typed_expression_to_error_type(texp),
+        }
+    }
+}
+
+fn parse_structuredtype(ty: &ast::StructuredType, struct_finder: &StructIdFinder) -> Result<ir::StructuredType, TyperError> {
+    Ok(match *ty {
+        ast::StructuredType::Data(ref data_type) => ir::StructuredType::Data(data_type.clone()),
+        ast::StructuredType::Custom(ref name) => ir::StructuredType::Struct(try!(struct_finder.find_struct_id(name))),
+    })
+}
+
+fn parse_objecttype(ty: &ast::ObjectType, struct_finder: &StructIdFinder) -> Result<ir::ObjectType, TyperError> {
+    Ok(match *ty {
+        ast::ObjectType::Buffer(ref data_type) => ir::ObjectType::Buffer(data_type.clone()),
+        ast::ObjectType::RWBuffer(ref data_type) => ir::ObjectType::RWBuffer(data_type.clone()),
+        ast::ObjectType::ByteAddressBuffer => ir::ObjectType::ByteAddressBuffer,
+        ast::ObjectType::RWByteAddressBuffer => ir::ObjectType::RWByteAddressBuffer,
+        ast::ObjectType::StructuredBuffer(ref structured_type) => ir::ObjectType::StructuredBuffer(try!(parse_structuredtype(structured_type, struct_finder))),
+        ast::ObjectType::RWStructuredBuffer(ref structured_type) => ir::ObjectType::RWStructuredBuffer(try!(parse_structuredtype(structured_type, struct_finder))),
+        ast::ObjectType::AppendStructuredBuffer(ref structured_type) => ir::ObjectType::AppendStructuredBuffer(try!(parse_structuredtype(structured_type, struct_finder))),
+        ast::ObjectType::ConsumeStructuredBuffer(ref structured_type) => ir::ObjectType::ConsumeStructuredBuffer(try!(parse_structuredtype(structured_type, struct_finder))),
+        ast::ObjectType::Texture1D(ref data_type) => ir::ObjectType::Texture1D(data_type.clone()),
+        ast::ObjectType::Texture1DArray(ref data_type) => ir::ObjectType::Texture1DArray(data_type.clone()),
+        ast::ObjectType::Texture2D(ref data_type) => ir::ObjectType::Texture2D(data_type.clone()),
+        ast::ObjectType::Texture2DArray(ref data_type) => ir::ObjectType::Texture2DArray(data_type.clone()),
+        ast::ObjectType::Texture2DMS(ref data_type) => ir::ObjectType::Texture2DMS(data_type.clone()),
+        ast::ObjectType::Texture2DMSArray(ref data_type) => ir::ObjectType::Texture2DMSArray(data_type.clone()),
+        ast::ObjectType::Texture3D(ref data_type) => ir::ObjectType::Texture3D(data_type.clone()),
+        ast::ObjectType::TextureCube(ref data_type) => ir::ObjectType::TextureCube(data_type.clone()),
+        ast::ObjectType::TextureCubeArray(ref data_type) => ir::ObjectType::TextureCubeArray(data_type.clone()),
+        ast::ObjectType::RWTexture1D(ref data_type) => ir::ObjectType::RWTexture1D(data_type.clone()),
+        ast::ObjectType::RWTexture1DArray(ref data_type) => ir::ObjectType::RWTexture1DArray(data_type.clone()),
+        ast::ObjectType::RWTexture2D(ref data_type) => ir::ObjectType::RWTexture2D(data_type.clone()),
+        ast::ObjectType::RWTexture2DArray(ref data_type) => ir::ObjectType::RWTexture2DArray(data_type.clone()),
+        ast::ObjectType::RWTexture3D(ref data_type) => ir::ObjectType::RWTexture3D(data_type.clone()),
+        ast::ObjectType::InputPatch => ir::ObjectType::InputPatch,
+        ast::ObjectType::OutputPatch => ir::ObjectType::OutputPatch,
+    })
+}
+
+fn parse_type(ty: &ast::Type, struct_finder: &StructIdFinder) -> Result<ir::Type, TyperError> {
+    Ok(match *ty {
+        ast::Type::Void => ir::Type::Void,
+        ast::Type::Structured(ref structured_type) => ir::Type::Structured(try!(parse_structuredtype(structured_type, struct_finder))),
+        ast::Type::SamplerState => ir::Type::SamplerState,
+        ast::Type::Object(ref object_type) => ir::Type::Object(try!(parse_objecttype(object_type, struct_finder))),
+        ast::Type::Array(ref array_type) => ir::Type::Array(Box::new(try!(parse_type(array_type, struct_finder)))),
+    })
 }
 
 fn get_intrinsics() -> HashMap<String, UnresolvedFunction> {
@@ -479,14 +801,14 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
                 TypedExpression::Value(expr_ir, expr_ty) => {
                     Ok(TypedExpression::Value(ir::Expression::UnaryOperation(op.clone(), Box::new(expr_ir)), expr_ty))
                 },
-                _ => Err(TyperError::UnaryOperationWrongTypes(op.clone(), ParseType::Unknown)),
+                _ => Err(TyperError::UnaryOperationWrongTypes(op.clone(), ErrorType::Unknown)),
             }
         },
         &ast::Expression::BinaryOperation(ref op, ref lhs, ref rhs) => {
             let lhs_texp = try!(parse_expr(lhs, context));
             let rhs_texp = try!(parse_expr(rhs, context));
-            let lhs_pt = lhs_texp.to_parsetype();
-            let rhs_pt = rhs_texp.to_parsetype();
+            let lhs_pt = context.typed_expression_to_error_type(&lhs_texp);
+            let rhs_pt = context.typed_expression_to_error_type(&rhs_texp);
             let (lhs_ir, lhs_type) = match lhs_texp {
                 TypedExpression::Value(expr_ir, expr_ty) => (expr_ir, expr_ty),
                 _ => return Err(TyperError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt)),
@@ -532,26 +854,16 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
         },
         &ast::Expression::Member(ref composite, ref member) => {
             let composite_texp = try!(parse_expr(composite, context));
-            let composite_pt = composite_texp.to_parsetype();
+            let composite_pt = context.typed_expression_to_error_type(&composite_texp);
             let (composite_ir, composite_ty) = match composite_texp {
                 TypedExpression::Value(composite_ir, composite_type) => (composite_ir, composite_type),
-                _ => return Err(TyperError::TypeDoesNotHaveMembers(composite_texp.to_parsetype())),
+                _ => return Err(TyperError::TypeDoesNotHaveMembers(composite_pt)),
             };
             let ety = match &composite_ty {
-                &ir::Type::Structured(ir::StructuredType::Custom(ref user_defined_name)) => {
-                    match context.find_struct(user_defined_name) {
-                        Some(struct_def) => {
-                            fn find_struct_member(struct_def: &ir::StructDefinition, member: &String, struct_type: &ir::Type) -> Result<ir::Type, TyperError> {
-                                for struct_member in &struct_def.members {
-                                    if &struct_member.name == member {
-                                        return Ok(struct_member.typename.clone())
-                                    }
-                                }
-                                Err(TyperError::UnknownTypeMember(ParseType::Value(struct_type.clone()), member.clone()))
-                            }
-                            try!(find_struct_member(struct_def, member, &composite_ty))
-                        },
-                        None => return Err(TyperError::UnknownType(composite_pt)),
+                &ir::Type::Structured(ir::StructuredType::Struct(ref id)) => {
+                    match context.find_struct_member(id, member) {
+                        Ok(ty) => ty,
+                        Err(err) => return Err(err),
                     }
                 }
                 &ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Vector(ref scalar, ref x))) => {
@@ -616,7 +928,10 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
                 let expr_texp = try!(parse_expr(param, context));
                 let (expr_ir, expr_ty) = match expr_texp {
                     TypedExpression::Value(expr_ir, expr_ty) => (expr_ir, expr_ty),
-                    texp => return Err(TyperError::FunctionPassedToAnotherFunction(func_texp.to_parsetype(), texp.to_parsetype())),
+                    texp => return Err(TyperError::FunctionPassedToAnotherFunction(
+                        context.typed_expression_to_error_type(&func_texp),
+                        context.typed_expression_to_error_type(&texp)
+                    )),
                 };
                 params_ir.push(expr_ir);
                 params_types.push(expr_ty);
@@ -635,12 +950,13 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
         },
         &ast::Expression::Cast(ref ty, ref expr) => {
             let expr_texp = try!(parse_expr(expr, context));
-            let expr_pt = expr_texp.to_parsetype();
+            let expr_pt = context.typed_expression_to_error_type(&expr_texp);
             match expr_texp {
                 TypedExpression::Value(expr_ir, _) => {
-                    Ok(TypedExpression::Value(ir::Expression::Cast(ty.clone(), Box::new(expr_ir)), ty.clone()))
+                    let ir_type = try!(parse_type(ty, context));
+                    Ok(TypedExpression::Value(ir::Expression::Cast(ir_type.clone(), Box::new(expr_ir)), ir_type))
                 },
-                _ => Err(TyperError::InvalidCast(expr_pt, ParseType::Value(ty.clone()))),
+                _ => Err(TyperError::InvalidCast(expr_pt, ErrorType::Value(ty.clone()))),
             }
         },
     }
@@ -657,7 +973,7 @@ fn parse_vardef(ast: &ast::VarDef, context: ScopeContext) -> Result<(ir::VarDef,
         None => None,
     };
     let var_name = ast.name.clone();
-    let var_type = ast.typename.clone();
+    let var_type = try!(parse_type(&ast.typename, &context));
     let mut context = context;
     let var_id = try!(context.insert_variable(var_name.clone(), var_type.clone()));
     let vd_ir = ir::VarDef { id: var_id, typename: var_type, assignment: assign_ir };
@@ -750,23 +1066,55 @@ fn parse_statement_vec(ast: &[ast::Statement], context: ScopeContext) -> Result<
 }
 
 fn parse_rootdefinition_struct(sd: &ast::StructDefinition, mut context: GlobalContext) -> Result<(ir::RootDefinition, GlobalContext), TyperError> {
-    let struct_def = sd.clone();
-    match context.structs.insert(struct_def.name.clone(), struct_def.clone()) {
-        Some(_) => return Err(TyperError::StructAlreadyDefined(struct_def.name.clone())),
-        None => { },
+    let mut members = vec![];
+    let mut member_map = HashMap::new();
+    for ast_member in &sd.members {
+        let name = ast_member.name.clone();
+        let typename = try!(parse_type(&ast_member.typename, &context));
+        member_map.insert(name.clone(), typename.clone());
+        members.push(ir::StructMember {
+            name: name,
+            typename: typename,
+        });
     };
-    Ok((ir::RootDefinition::Struct(struct_def), context))
+    let name = &sd.name;
+    match context.insert_struct(name, member_map) {
+        Some(id) => {
+            let struct_def = ir::StructDefinition {
+                id: id,
+                members: members,
+            };
+            Ok((ir::RootDefinition::Struct(struct_def), context))
+        },
+        None => Err(TyperError::StructAlreadyDefined(name.clone())),
+    }
 }
 
 fn parse_rootdefinition_constantbuffer(cb: &ast::ConstantBuffer, mut context: GlobalContext, globals: &mut ir::GlobalTable) -> Result<(ir::RootDefinition, GlobalContext), TyperError> {
     let cb_name = cb.name.clone();
-    let cb_type = ir::Type::custom(&cb_name);
-    let cb_id = try!(context.insert_variable(cb_name.clone(), cb_type.clone()));
-    let cb_ir = ir::ConstantBuffer { id: cb_id, members: cb.members.clone() };
+    let mut members = vec![];
+    let mut members_map = HashMap::new();
+    for member in &cb.members {
+        let var_name = member.name.clone();
+        let var_type = try!(parse_type(&member.typename, &context));
+        let var_offset = member.offset.clone();
+        members_map.insert(var_name.clone(), var_type.clone());
+        members.push(ir::ConstantVariable {
+            name: var_name,
+            typename: var_type,
+            offset: var_offset,
+        });
+    };
+    let id = match context.insert_cbuffer(&cb_name, members_map) {
+        Some(id) => id,
+        None => return Err(TyperError::ConstantBufferAlreadyDefined(cb_name.clone())),
+    };
+    let cb_ir = ir::ConstantBuffer { id: id, members: members };
     match cb.slot {
         Some(ast::ConstantSlot(slot)) => {
-            match globals.constants.insert(slot, cb_name.clone()) {
-                Some(currently_used_by) => return Err(TyperError::ConstantSlotAlreadyUsed(currently_used_by.clone(), cb_name.clone())),
+            match globals.constants.insert(slot, cb_ir.id.clone()) {
+                // Todo: ConstantSlotAlreadyUsed should get name of previously used slot
+                Some(_) => return Err(TyperError::ConstantSlotAlreadyUsed(cb_name.clone())),
                 None => { },
             }
         },
@@ -777,7 +1125,7 @@ fn parse_rootdefinition_constantbuffer(cb: &ast::ConstantBuffer, mut context: Gl
 
 fn parse_rootdefinition_globalvariable(gv: &ast::GlobalVariable, mut context: GlobalContext, globals: &mut ir::GlobalTable) -> Result<(ir::RootDefinition, GlobalContext), TyperError> {
     let var_name = gv.name.clone();
-    let var_type = gv.typename.clone();
+    let var_type = try!(parse_type(&gv.typename, &context));
     let var_id = try!(context.insert_variable(var_name.clone(), var_type.clone()));
     let gv_ir = ir::GlobalVariable { id: var_id, typename: var_type };
     let entry = ir::GlobalEntry { id: var_id, typename: gv_ir.typename.clone() };
@@ -805,20 +1153,21 @@ fn parse_rootdefinition_function(fd: &ast::FunctionDefinition, mut context: Glob
     let func_params = {
         let mut vec = vec![];
         for param in &fd.params {
-            let var_id = try!(scoped_context.insert_variable(param.name.clone(), param.typename.clone()));
+            let var_type = try!(parse_type(&param.typename, &context));
+            let var_id = try!(scoped_context.insert_variable(param.name.clone(), var_type.clone()));
             vec.push(ir::FunctionParam {
                 id: var_id,
-                typename: param.typename.clone(),
+                typename: var_type,
             });
         }
         vec
     };
     let (body_ir, scoped_context) = try!(parse_statement_vec(&fd.body, scoped_context));
     let decls = scoped_context.destruct();
-
+    let return_type = try!(parse_type(&fd.returntype, &context));
     let fd_ir = ir::FunctionDefinition {
         id: context.make_function_id(),
-        returntype: fd.returntype.clone(),
+        returntype: return_type,
         params: func_params,
         body: body_ir,
         scope: decls,
@@ -839,7 +1188,8 @@ fn parse_rootdefinition_kernel(fd: &ast::FunctionDefinition, context: GlobalCont
     let kernel_params = {
         let mut vec = vec![];
         for param in &fd.params {
-            let var_id = try!(scoped_context.insert_variable(param.name.clone(), param.typename.clone()));
+            let var_type = try!(parse_type(&param.typename, &context));
+            let var_id = try!(scoped_context.insert_variable(param.name.clone(), var_type.clone()));
             vec.push(ir::KernelParam(var_id,
                 match &param.semantic {
                     &Some(ast::Semantic::DispatchThreadId) => ir::KernelSemantic::DispatchThreadId,
@@ -953,8 +1303,8 @@ fn test_typeparse() {
                 params: vec![],
                 body: vec![
                     ast::Statement::Empty,
-                    ast::Statement::Var(ast::VarDef { name: "a".to_string(), typename: ir::Type::uint(), assignment: None }),
-                    ast::Statement::Var(ast::VarDef { name: "b".to_string(), typename: ir::Type::uint(), assignment: None }),
+                    ast::Statement::Var(ast::VarDef { name: "a".to_string(), typename: ast::Type::uint(), assignment: None }),
+                    ast::Statement::Var(ast::VarDef { name: "b".to_string(), typename: ast::Type::uint(), assignment: None }),
                     ast::Statement::Expression(
                         ast::Expression::BinaryOperation(ast::BinOp::Assignment,
                             Box::new(ast::Expression::Variable("a".to_string())),
@@ -964,7 +1314,7 @@ fn test_typeparse() {
                     ast::Statement::If(
                         ast::Condition::Assignment(ast::VarDef {
                             name: "c".to_string(),
-                            typename: ir::Type::uint(),
+                            typename: ast::Type::uint(),
                             assignment: Some(ast::Expression::Variable("a".to_string()))
                         }),
                         Box::new(ast::Statement::Empty),

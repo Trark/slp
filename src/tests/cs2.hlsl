@@ -8,6 +8,16 @@ struct myStruct
     uint index;
 };
 
+struct testStruct_0
+{
+    uint index;
+};
+
+cbuffer myConstants : register(b0)
+{
+    uint g_offset;
+};
+
 void myFunc(uint x)
 {
 }
@@ -21,13 +31,16 @@ void myFunc(float x)
 void CSMAIN(uint3 dtid : SV_DispatchThreadID)
 {
     uint myFunc_1;
-    uint b = 2;
-    myFunc_1 = b;
-    b = g_myInBuffer.Load(0);
-    g_myOutBuffer[b] = myFunc_1;
+    uint alias_var = 2;
+    int index = dtid.x + g_offset;
+    myFunc_1 = g_myInBuffer.Load(index);
+    g_myOutBuffer[index] = myFunc_1;
+    uint testStruct = 0;
     {
-        float4 b = float4(1.0f, 2.4f, 0.3f, 3.4f);
-        uint g = myFunc_1;
+        float4 alias_var = float4(1.0f, 2.4f, 0.3f, 3.4f);
+        float4 receive = alias_var;
+        uint testStruct = 1;
+        testStruct_0 data;
     }
     myFunc(4.0f);
 }
