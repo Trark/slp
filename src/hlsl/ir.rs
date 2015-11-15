@@ -19,12 +19,34 @@ pub enum Intrinsic {
 }
 
 pub use super::ast::Literal as Literal;
+
+/// Id to function (in global scope)
 pub type FunctionId = u32;
+/// Id to variable in current scope
+pub type VariableId = u32;
+/// Number of scope levels to go up
+pub type ScopeRef = u32;
+/// Reference to a variable, combining both id and scope level
+#[derive(PartialEq, Debug, Clone)]
+pub struct VariableRef(pub VariableId, pub ScopeRef);
+
+/// Map of declarations in the current scope
+#[derive(PartialEq, Debug, Clone)]
+pub struct ScopedDeclarations {
+    pub variables: HashMap<VariableId, String>,
+}
+
+/// Map of declarations in the global scope
+#[derive(PartialEq, Debug, Clone)]
+pub struct GlobalDeclarations {
+    pub functions: HashMap<FunctionId, String>,
+    pub variables: HashMap<VariableId, String>,
+}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
     Literal(Literal),
-    Variable(String),
+    Variable(VariableRef),
     Function(FunctionId),
     UnaryOperation(UnaryOp, Box<Expression>),
     BinaryOperation(BinOp, Box<Expression>, Box<Expression>),
@@ -37,7 +59,7 @@ pub enum Expression {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct VarDef {
-    pub name: String,
+    pub id: VariableId,
     pub typename: Type,
     pub assignment: Option<Expression>,
 }
@@ -52,10 +74,10 @@ pub enum Condition {
 pub enum Statement {
     Expression(Expression),
     Var(VarDef),
-    Block(Vec<Statement>),
-    If(Condition, Box<Statement>),
-    For(Condition, Condition, Condition, Box<Statement>),
-    While(Condition, Box<Statement>),
+    Block(Vec<Statement>, ScopedDeclarations),
+    If(Condition, Box<Statement>, ScopedDeclarations),
+    For(Condition, Condition, Condition, Box<Statement>, ScopedDeclarations),
+    While(Condition, Box<Statement>, ScopedDeclarations),
     Return(Expression),
 }
 
@@ -68,26 +90,31 @@ pub use super::ast::ConstantVariable as ConstantVariable;
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct ConstantBuffer {
-    pub name: String,
+    pub id: VariableId,
     pub members: Vec<ConstantVariable>,
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct GlobalVariable {
-    pub name: String,
+    pub id: VariableId,
     pub typename: Type,
 }
 
 pub use super::ast::FunctionAttribute as FunctionAttribute;
-pub use super::ast::FunctionParam as FunctionParam;
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct FunctionParam {
+    pub id: VariableId,
+    pub typename: Type,
+}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct FunctionDefinition {
     pub id: FunctionId,
-    pub original_name: String,
     pub returntype: Type,
     pub params: Vec<FunctionParam>,
     pub body: Vec<Statement>,
+    pub scope: ScopedDeclarations,
     pub attributes: Vec<FunctionAttribute>,
 }
 
@@ -103,13 +130,14 @@ pub enum KernelSemantic {
 pub struct Dimension(pub u64, pub u64, pub u64);
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct KernelParam(pub String, pub KernelSemantic);
+pub struct KernelParam(pub VariableId, pub KernelSemantic);
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Kernel {
     pub group_dimensions: Dimension,
     pub params: Vec<KernelParam>,
     pub body: Vec<Statement>,
+    pub scope: ScopedDeclarations,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -124,7 +152,7 @@ pub enum RootDefinition {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct GlobalEntry {
-    pub name: String,
+    pub id: VariableId,
     pub typename: ast::Type,
 }
 
@@ -140,6 +168,7 @@ pub struct GlobalTable {
 pub struct Module {
     pub entry_point: String,
     pub global_table: GlobalTable,
+    pub global_declarations: GlobalDeclarations,
     pub root_definitions: Vec<RootDefinition>,
 }
 

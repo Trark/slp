@@ -16,6 +16,8 @@ pub enum TranspileError {
     GlobalFoundThatIsntInKernelParams(src::GlobalVariable),
 
     UnknownFunctionId(src::FunctionId),
+    InvalidVariableRef,
+    UnknownVariableId,
 }
 
 impl error::Error for TranspileError {
@@ -27,6 +29,8 @@ impl error::Error for TranspileError {
             TranspileError::CouldNotGetEquivalentDataType(_) => "could not find equivalent clc type",
             TranspileError::GlobalFoundThatIsntInKernelParams(_) => "non-parameter global found",
             TranspileError::UnknownFunctionId(_) => "unknown function id",
+            TranspileError::InvalidVariableRef => "invalid variable ref",
+            TranspileError::UnknownVariableId => "unknown variable id",
         }
     }
 }
@@ -42,14 +46,121 @@ type KernelParams = Vec<dst::KernelParam>;
 struct Context {
     kernel_params: KernelParams,
     function_name_map: HashMap<src::FunctionId, String>,
+
+    variable_scopes: Vec<HashMap<src::VariableId, String>>,
 }
 
 impl Context {
+
+    fn new(globals: &src::GlobalDeclarations) -> Context {
+        let mut context = Context {
+            kernel_params: vec![],
+            function_name_map: HashMap::new(),
+            variable_scopes: vec![globals.variables.clone()],
+        };
+        context.add_functions(&globals.functions);
+        context
+    }
+
     fn get_function(&self, id: &src::FunctionId) -> Result<dst::Expression, TranspileError> {
+        Ok(dst::Expression::Variable(try!(self.get_function_name(id))))
+    }
+
+    fn get_function_name(&self, id: &src::FunctionId) -> Result<String, TranspileError> {
         match self.function_name_map.get(id) {
-            Some(v) => Ok(dst::Expression::Variable(v.clone())),
+            Some(v) => Ok(v.clone()),
             None => Err(TranspileError::UnknownFunctionId(id.clone())),
         }
+    }
+
+    /// Get the expression to access an in scope variable
+    fn get_variable_ref(&self, var_ref: &src::VariableRef) -> Result<dst::Expression, TranspileError> {
+        let scopes_up = var_ref.1 as usize;
+        if scopes_up >= self.variable_scopes.len() {
+            return Err(TranspileError::UnknownVariableId)
+        };
+        let scope = self.variable_scopes.len() - scopes_up - 1;
+        match self.variable_scopes[scope].get(&var_ref.0) {
+            Some(v) => Ok(dst::Expression::Variable(v.clone())),
+            None => Err(TranspileError::UnknownVariableId),
+        }
+    }
+
+    /// Get the name of a variable declared in the current block
+    fn get_variable_id(&self, id: &src::VariableId) -> Result<String, TranspileError> {
+        match self.variable_scopes[self.variable_scopes.len() - 1].get(id) {
+            Some(v) => Ok(v.clone()),
+            None => Err(TranspileError::UnknownVariableId),
+        }
+    }
+
+    fn is_free(&self, identifier: &str) -> bool {
+        for func_name in self.function_name_map.values() {
+            if func_name == identifier {
+                return false;
+            }
+        }
+        for scope in &self.variable_scopes {
+            for var in scope.values() {
+                if var == identifier {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    fn make_identifier(&self, name: &str) -> String {
+        if self.is_free(name) {
+            return name.to_string();
+        }
+        let mut index = 0;
+        loop {
+            let test_name = name.to_string() + "_" + &index.to_string();
+            if self.is_free(&test_name) {
+                return test_name;
+            }
+            index = index + 1;
+        }
+    }
+
+    fn add_functions(&mut self, functions: &HashMap<src::FunctionId, String>) {
+        let mut grouped_functions: HashMap<String, Vec<src::FunctionId>> = HashMap::new();
+        for (id, name) in functions.iter() {
+            match grouped_functions.entry(name.clone()) {
+                Entry::Occupied(mut occupied) => { occupied.get_mut().push(id.clone()); },
+                Entry::Vacant(vacant) => { vacant.insert(vec![id.clone()]); },
+            }
+        };
+        for (key, ids) in grouped_functions {
+            assert!(ids.len() > 0);
+            if ids.len() == 1 {
+                let identifier = self.make_identifier(&key);
+                let ret = self.function_name_map.insert(ids[0], identifier);
+                assert_eq!(ret, None);
+            } else {
+                for id in ids {
+                    let gen = key.clone() + "_" + &id.to_string();
+                    let identifier = self.make_identifier(&gen);
+                    let ret = self.function_name_map.insert(id, identifier);
+                    assert_eq!(ret, None);
+                }
+            }
+        };
+    }
+
+    fn push_scope(&mut self, decls: &src::ScopedDeclarations) {
+        self.variable_scopes.push(HashMap::new());
+        for (var_id, var_name) in &decls.variables {
+            let identifier = self.make_identifier(&var_name);
+            let map = self.variable_scopes.last_mut().unwrap();
+            map.insert(var_id.clone(), identifier);
+        }
+    }
+
+    fn pop_scope(&mut self) {
+        assert!(self.variable_scopes.len() > 1);
+        self.variable_scopes.pop();
     }
 }
 
@@ -127,7 +238,7 @@ fn transpile_intrinsic(intrinsic: &src::Intrinsic, context: &Context) -> Result<
 fn transpile_expression(expression: &src::Expression, context: &Context) -> Result<dst::Expression, TranspileError> {
     match expression {
         &src::Expression::Literal(ref lit) => Ok(dst::Expression::Literal(try!(transpile_literal(lit)))),
-        &src::Expression::Variable(ref name) => Ok(dst::Expression::Variable(name.clone())),
+        &src::Expression::Variable(ref var_ref) => context.get_variable_ref(var_ref),
         &src::Expression::Function(ref id) => context.get_function(id),
         &src::Expression::UnaryOperation(_, _) => unimplemented!(),
         &src::Expression::BinaryOperation(ref binop, ref lhs, ref rhs) => {
@@ -158,25 +269,37 @@ fn transpile_expression(expression: &src::Expression, context: &Context) -> Resu
 
 fn transpile_vardef(vardef: &src::VarDef, context: &Context) -> Result<dst::VarDef, TranspileError> {
     Ok(dst::VarDef {
-        name: vardef.name.clone(),
+        name: try!(context.get_variable_id(&vardef.id)),
         typename: try!(transpile_type(&vardef.typename)),
         assignment: match &vardef.assignment { &None => None, &Some(ref expr) => Some(try!(transpile_expression(expr, context))) },
     })
 }
 
-fn transpile_statement(statement: &src::Statement, context: &Context) -> Result<dst::Statement, TranspileError> {
+fn transpile_statement(statement: &src::Statement, context: &mut Context) -> Result<dst::Statement, TranspileError> {
     match statement {
         &src::Statement::Expression(ref expr) => Ok(dst::Statement::Expression(try!(transpile_expression(expr, context)))),
         &src::Statement::Var(ref vd) => Ok(dst::Statement::Var(try!(transpile_vardef(vd, context)))),
-        &src::Statement::Block(_) => unimplemented!(),
-        &src::Statement::If(_, _) => unimplemented!(),
-        &src::Statement::For(_, _, _, _) => unimplemented!(),
-        &src::Statement::While(_, _) => unimplemented!(),
+        &src::Statement::Block(ref statements, ref decls) => {
+            context.push_scope(decls);
+            let cl_statements = try!(statements.iter().fold(Ok(vec![]),
+                |result, statement| {
+                    let mut vec = try!(result);
+                    let cl_statement = try!(transpile_statement(statement, context));
+                    vec.push(cl_statement);
+                    Ok(vec)
+                }
+            ));
+            context.pop_scope();
+            Ok(dst::Statement::Block(cl_statements))
+        },
+        &src::Statement::If(_, _, _) => unimplemented!(),
+        &src::Statement::For(_, _, _, _, _) => unimplemented!(),
+        &src::Statement::While(_, _, _) => unimplemented!(),
         &src::Statement::Return(_) => unimplemented!(),
     }
 }
 
-fn transpile_statements(statements: &[src::Statement], context: &Context) -> Result<Vec<dst::Statement>, TranspileError> {
+fn transpile_statements(statements: &[src::Statement], context: &mut Context) -> Result<Vec<dst::Statement>, TranspileError> {
     let mut cl_statements = vec![];
     for statement in statements {
         cl_statements.push(try!(transpile_statement(statement, context)));
@@ -184,22 +307,22 @@ fn transpile_statements(statements: &[src::Statement], context: &Context) -> Res
     Ok(cl_statements)
 }
 
-fn transpile_param(param: &src::FunctionParam) -> Result<dst::FunctionParam, TranspileError> {
+fn transpile_param(param: &src::FunctionParam, context: &Context) -> Result<dst::FunctionParam, TranspileError> {
     Ok(dst::FunctionParam {
-        name: param.name.clone(),
+        name: try!(context.get_variable_id(&param.id)),
         typename: try!(transpile_type(&param.typename)),
     })
 }
 
-fn transpile_params(params: &[src::FunctionParam]) -> Result<Vec<dst::FunctionParam>, TranspileError> {
+fn transpile_params(params: &[src::FunctionParam], context: &Context) -> Result<Vec<dst::FunctionParam>, TranspileError> {
     let mut cl_params = vec![];
     for param in params {
-        cl_params.push(try!(transpile_param(param)));
+        cl_params.push(try!(transpile_param(param, context)));
     }
     Ok(cl_params)
 }
 
-fn transpile_kernel_input_semantic(param: &src::KernelParam) -> Result<dst::Statement, TranspileError> {
+fn transpile_kernel_input_semantic(param: &src::KernelParam, context: &Context) -> Result<dst::Statement, TranspileError> {
     match &param.1 {
         &src::KernelSemantic::DispatchThreadId => {
             let typename = try!(transpile_type(&param.1.get_type()));
@@ -213,7 +336,7 @@ fn transpile_kernel_input_semantic(param: &src::KernelParam) -> Result<dst::Stat
                 _ => unimplemented!(),
             };
             Ok(dst::Statement::Var(dst::VarDef {
-                name: param.0.clone(),
+                name: try!(context.get_variable_id(&param.0)),
                 typename: typename,
                 assignment: Some(assign),
             }))
@@ -224,15 +347,15 @@ fn transpile_kernel_input_semantic(param: &src::KernelParam) -> Result<dst::Stat
     }
 }
 
-fn transpile_kernel_input_semantics(params: &[src::KernelParam]) -> Result<Vec<dst::Statement>, TranspileError> {
+fn transpile_kernel_input_semantics(params: &[src::KernelParam], context: &Context) -> Result<Vec<dst::Statement>, TranspileError> {
     let mut cl_params = vec![];
     for param in params {
-        cl_params.push(try!(transpile_kernel_input_semantic(param)));
+        cl_params.push(try!(transpile_kernel_input_semantic(param, context)));
     }
     Ok(cl_params)
 }
 
-fn transpile_rootdefinition(rootdef: &src::RootDefinition, context: &Context) -> Result<Option<dst::RootDefinition>, TranspileError> {
+fn transpile_rootdefinition(rootdef: &src::RootDefinition, context: &mut Context) -> Result<Option<dst::RootDefinition>, TranspileError> {
     match rootdef {
         &src::RootDefinition::Struct(ref structdefinition) => {
             Ok(Some(dst::RootDefinition::Struct(dst::StructDefinition {
@@ -254,24 +377,31 @@ fn transpile_rootdefinition(rootdef: &src::RootDefinition, context: &Context) ->
         &src::RootDefinition::SamplerState => unimplemented!{},
         &src::RootDefinition::ConstantBuffer(_) => unimplemented!{},
         &src::RootDefinition::GlobalVariable(ref gv) => {
-            if context.kernel_params.iter().any(|gp| { gp.name == gv.name }) {
+            let global_name = try!(context.get_variable_id(&gv.id));
+            if context.kernel_params.iter().any(|gp| { gp.name == global_name }) {
                 return Ok(None)
             } else {
                 return Err(TranspileError::GlobalFoundThatIsntInKernelParams(gv.clone()))
             }
         },
         &src::RootDefinition::Function(ref func) => {
+            context.push_scope(&func.scope);
+            let params = try!(transpile_params(&func.params, context));
+            let body = try!(transpile_statements(&func.body, context));
+            context.pop_scope();
             let cl_func = dst::FunctionDefinition {
-                name: func.original_name.clone() + "_" + &func.id.to_string(),
+                name: try!(context.get_function_name(&func.id)),
                 returntype: try!(transpile_type(&func.returntype)),
-                params: try!(transpile_params(&func.params)),
-                body: try!(transpile_statements(&func.body, context)),
+                params: params,
+                body: body,
             };
             Ok(Some(dst::RootDefinition::Function(cl_func)))
         }
         &src::RootDefinition::Kernel(ref kernel) => {
-            let mut body = try!(transpile_kernel_input_semantics(&kernel.params));
+            context.push_scope(&kernel.scope);
+            let mut body = try!(transpile_kernel_input_semantics(&kernel.params, context));
             let mut main_body = try!(transpile_statements(&kernel.body, context));
+            context.pop_scope();
             body.append(&mut main_body);
             let cl_kernel = dst::Kernel {
                 params: context.kernel_params.clone(),
@@ -282,7 +412,7 @@ fn transpile_rootdefinition(rootdef: &src::RootDefinition, context: &Context) ->
     }
 }
 
-fn transpile_global(table: &src::GlobalTable) -> Result<KernelParams, TranspileError> {
+fn transpile_global(table: &src::GlobalTable, context: &Context) -> Result<KernelParams, TranspileError> {
     let mut global_params: KernelParams = vec![];
     // Todo: Pick slot numbers better
     for (_, global_entry) in &table.r_resources {
@@ -293,7 +423,7 @@ fn transpile_global(table: &src::GlobalTable) -> Result<KernelParams, TranspileE
             ty => return Err(TranspileError::TypeIsNotAllowedAsGlobal(ty.clone())),
         };
         let param = dst::KernelParam {
-            name: global_entry.name.clone(),
+            name: try!(context.get_variable_id(&global_entry.id)),
             typename: cl_type,
         };
         global_params.push(param);
@@ -306,7 +436,7 @@ fn transpile_global(table: &src::GlobalTable) -> Result<KernelParams, TranspileE
             ty => return Err(TranspileError::TypeIsNotAllowedAsGlobal(ty.clone())),
         };
         let param = dst::KernelParam {
-            name: global_entry.name.clone(),
+            name: try!(context.get_variable_id(&global_entry.id)),
             typename: cl_type,
         };
         global_params.push(param);
@@ -314,46 +444,14 @@ fn transpile_global(table: &src::GlobalTable) -> Result<KernelParams, TranspileE
     Ok(global_params)
 }
 
-fn create_function_names(rootdefs: &[src::RootDefinition]) -> Result<HashMap<src::FunctionId, String>, TranspileError> {
-    let mut grouped_functions: HashMap<String, Vec<src::FunctionId>> = HashMap::new();
-    for rootdef in rootdefs {
-        match rootdef {
-            &src::RootDefinition::Function(ref func) => {
-                match grouped_functions.entry(func.original_name.clone()) {
-                    Entry::Occupied(mut occupied) => { occupied.get_mut().push(func.id); },
-                    Entry::Vacant(vacant) => { vacant.insert(vec![func.id]); },
-                }
-            },
-            _ => { },
-        }
-    };
-    let mut name_map: HashMap<src::FunctionId, String> = HashMap::new();
-    for (key, ids) in grouped_functions {
-        assert!(ids.len() > 0);
-        if ids.len() == 1 {
-            let ret = name_map.insert(ids[0], key);
-            assert_eq!(ret, None);
-        } else {
-            for (idx, id) in ids.iter().enumerate() {
-                let gen = key.clone() + "_" + &idx.to_string();
-                let ret = name_map.insert(*id, gen);
-                assert_eq!(ret, None);
-            }
-        }
-    };
-    Ok(name_map)
-}
-
 pub fn transpile(module: &src::Module) -> Result<dst::Module, TranspileError> {
 
-    let context = Context {
-        kernel_params: try!(transpile_global(&module.global_table)),
-        function_name_map: try!(create_function_names(&module.root_definitions)),
-    };
+    let mut context = Context::new(&module.global_declarations);
+    context.kernel_params = try!(transpile_global(&module.global_table, &context));
 
     let mut cl_defs = vec![];
     for rootdef in &module.root_definitions {
-        match try!(transpile_rootdefinition(rootdef, &context)) {
+        match try!(transpile_rootdefinition(rootdef, &mut context)) {
             Some(def) => cl_defs.push(def),
             None => { },
         }

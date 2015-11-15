@@ -253,16 +253,31 @@ fn print_vardef(vardef: &VarDef, printer: &mut Printer) {
         },
         &None => { },
     };
+    printer.print(";");
+}
+
+fn print_block(block: &[Statement], printer: &mut Printer) {
+    printer.print("{");
+    printer.indent();
+    for statement in block {
+        print_statement(statement, printer);
+    }
+    printer.unindent();
+    printer.line();
+    printer.print("}");
 }
 
 fn print_statement(statement: &Statement, printer: &mut Printer) {
     printer.line();
     match statement {
-        &Statement::Expression(ref expr) => print_expression(expr, printer),
+        &Statement::Expression(ref expr) => {
+            print_expression(expr, printer);
+            printer.print(";");
+        },
         &Statement::Var(ref vd) => print_vardef(vd, printer),
+        &Statement::Block(ref statements) => print_block(&statements, printer),
         _ => unimplemented!(),
     }
-    printer.print(";");
 }
 
 fn print_statements(statements: &[Statement], printer: &mut Printer) {

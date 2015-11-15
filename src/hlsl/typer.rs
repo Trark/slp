@@ -14,8 +14,8 @@ pub enum TyperError {
     StructAlreadyDefined(String),
 
     ConstantSlotAlreadyUsed(String, String),
-    ReadResourceSlotAlreadyUsed(String, String),
-    ReadWriteResourceSlotAlreadyUsed(String, String),
+    ReadResourceSlotAlreadyUsed(ir::VariableId, ir::VariableId),
+    ReadWriteResourceSlotAlreadyUsed(ir::VariableId, ir::VariableId),
 
     UnknownIdentifier(String),
     UnknownType(ParseType),
@@ -160,16 +160,32 @@ enum TypedExpression {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-struct Context {
+struct VariableBlock {
+    variables: HashMap<String, (ir::Type, ir::VariableId)>,
+    next_free_variable_id: ir::VariableId,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+struct GlobalContext {
     structs: HashMap<String, ir::StructDefinition>,
 
     functions: HashMap<String, UnresolvedFunction>,
-
-    // Variables visible in the current context. Maps names to types
-    // One map per scope level (nearer the front is a wider scope)
-    variables: Vec<HashMap<String, ir::Type>>,
-
     next_free_function_id: ir::FunctionId,
+
+    variables: VariableBlock,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+struct ScopeContext {
+    parent: Box<Context>,
+
+    variables: VariableBlock,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+enum Context {
+    Global(GlobalContext),
+    Scope(ScopeContext),
 }
 
 impl UnresolvedFunction {
@@ -190,32 +206,56 @@ impl TypedExpression {
     }
 }
 
-impl Context {
-    pub fn new() -> Context {
-        Context { structs: HashMap::new(), functions: get_intrinsics(), variables: vec![HashMap::new()], next_free_function_id: 0 }
+impl VariableBlock {
+    fn new() -> VariableBlock {
+        VariableBlock { variables: HashMap::new(), next_free_variable_id: 0 }
     }
 
-    pub fn insert_variable(&mut self, name: String, typename: ir::Type) -> Result<(), TyperError> {
-        assert!(self.variables.len() > 0);
-        if let Ok(ety) = self.find_variable(&name) {
-            return Err(TyperError::ValueAlreadyDefined(name, ety.to_parsetype(), ParseType::Value(typename)))
+    fn insert_variable(&mut self, name: String, typename: ir::Type) -> Result<ir::VariableId, TyperError> {
+        if let Some(&(ref ty, _)) = self.has_variable(&name) {
+            return Err(TyperError::ValueAlreadyDefined(name, ParseType::Value(ty.clone()), ParseType::Value(typename)))
         };
-        let last = self.variables.len() - 1;
-        match self.variables[last].entry(name.clone()) {
-            Entry::Occupied(occupied) => Err(TyperError::ValueAlreadyDefined(name, ParseType::Value(occupied.get().clone()), ParseType::Value(typename))),
-            Entry::Vacant(vacant) => { vacant.insert(typename); Ok(()) },
+        match self.variables.entry(name.clone()) {
+            Entry::Occupied(occupied) => Err(TyperError::ValueAlreadyDefined(name, ParseType::Value(occupied.get().0.clone()), ParseType::Value(typename))),
+            Entry::Vacant(vacant) => {
+                let id = self.next_free_variable_id;
+                self.next_free_variable_id = self.next_free_variable_id + 1;
+                vacant.insert((typename, id)); Ok(id)
+            },
         }
+    }
+
+    fn has_variable(&self, name: &String) -> Option<&(ir::Type, ir::VariableId)> {
+        self.variables.get(name)
+    }
+
+    fn find_variable(&self, name: &String, scopes_up: u32) -> Option<TypedExpression> {
+        match self.variables.get(name) {
+            Some(&(ref ty, ref id)) => return Some(TypedExpression::Value(ir::Expression::Variable(ir::VariableRef(id.clone(), scopes_up)), ty.clone())),
+            None => None,
+        }
+    }
+
+    fn destruct(self) -> HashMap<ir::VariableId, String> {
+        self.variables.iter().fold(HashMap::new(),
+            |mut map, (name, &(_, ref id))| {
+                map.insert(id.clone(), name.clone());
+                map
+            }
+        )
+    }
+}
+
+impl GlobalContext {
+    fn new() -> GlobalContext {
+        GlobalContext { structs: HashMap::new(), functions: get_intrinsics(), next_free_function_id: 0, variables: VariableBlock::new() }
     }
 
     pub fn insert_function(&mut self, name: String, function_type: FunctionOverload) -> Result<(), TyperError> {
         // Error if a variable of the same name already exists
-        assert_eq!(self.variables.len(), 1);
-        for map in self.variables.iter().rev() {
-            match map.get(&name) {
-                Some(ty) => return Err(TyperError::ValueAlreadyDefined(name, ParseType::Value(ty.clone()), ParseType::Unknown)),
-                None => { },
-            }
-        }
+        if let Some(&(ref ty, _)) = self.has_variable(&name) {
+            return Err(TyperError::ValueAlreadyDefined(name, ParseType::Value(ty.clone()), ParseType::Unknown))
+        };
         // Try to add the function
         match self.functions.entry(name.clone()) {
             Entry::Occupied(mut occupied) => {
@@ -236,36 +276,109 @@ impl Context {
         }
     }
 
-    pub fn find_variable(&self, name: &String) -> Result<TypedExpression, TyperError> {
+    fn find_variable_recur(&self, name: &String, scopes_up: u32) -> Result<TypedExpression, TyperError> {
         match self.functions.get(name) {
-            Some(tys) => return Ok(TypedExpression::Function(tys.clone())),
-            None => { },
-        }
-        for map in self.variables.iter().rev() {
-            match map.get(name) {
-                Some(ty) => return Ok(TypedExpression::Value(ir::Expression::Variable(name.clone()), ty.clone())),
-                None => { },
-            }
-        }
-        Err(TyperError::UnknownIdentifier(name.clone()))
-    }
-
-    pub fn scoped(&self) -> Context {
-        let mut scoped_vars = self.variables.clone();
-        scoped_vars.push(HashMap::new());
-        Context {
-            structs: self.structs.clone(),
-            functions: self.functions.clone(),
-            variables: scoped_vars,
-            next_free_function_id: 0,
+            Some(tys) => Ok(TypedExpression::Function(tys.clone())),
+            None => {
+                match self.variables.find_variable(name, scopes_up) {
+                    Some(tys) => Ok(tys),
+                    None => Err(TyperError::UnknownIdentifier(name.clone()))
+                }
+            },
         }
     }
 
     fn make_function_id(&mut self) -> ir::FunctionId {
-        assert_eq!(self.variables.len(), 1);
         let value = self.next_free_function_id;
         self.next_free_function_id = self.next_free_function_id + 1;
         value
+    }
+
+    fn insert_variable(&mut self, name: String, typename: ir::Type) -> Result<ir::VariableId, TyperError> {
+        self.variables.insert_variable(name, typename)
+    }
+
+    fn has_variable(&self, name: &String) -> Option<&(ir::Type, ir::VariableId)> {
+        self.variables.has_variable(name)
+    }
+
+    #[allow(dead_code)]
+    fn find_variable(&self, name: &String) -> Result<TypedExpression, TyperError> {
+        self.find_variable_recur(name, 0)
+    }
+
+    fn find_struct(&self, name: &String) -> Option<&ir::StructDefinition> {
+        self.structs.get(name)
+    }
+
+    fn destruct(self) -> ir::GlobalDeclarations {
+        ir::GlobalDeclarations {
+            variables: self.variables.destruct(),
+            functions: self.functions.iter().fold(HashMap::new(),
+                |mut map, (_, &UnresolvedFunction(ref name, ref overloads))| {
+                    for overload in overloads {
+                        match overload.0 {
+                            FunctionName::User(id) => { map.insert(id, name.clone()); },
+                            _ => { },
+                        }
+                    }
+                    map
+                }
+            ),
+        }
+    }
+}
+
+impl ScopeContext {
+    fn from_scope(parent: &ScopeContext) -> ScopeContext {
+        ScopeContext { parent: Box::new(Context::Scope(parent.clone())), variables: VariableBlock::new() }
+    }
+
+    fn from_global(parent: &GlobalContext) -> ScopeContext {
+        ScopeContext { parent: Box::new(Context::Global(parent.clone())), variables: VariableBlock::new() }
+    }
+
+    fn find_variable_recur(&self, name: &String, scopes_up: u32) -> Result<TypedExpression, TyperError> {
+        match self.variables.find_variable(name, scopes_up) {
+            Some(texp) => return Ok(texp),
+            None => self.parent.find_variable_recur(name, scopes_up + 1),
+        }
+    }
+
+    fn destruct(self) -> ir::ScopedDeclarations {
+        ir::ScopedDeclarations {
+            variables: self.variables.destruct()
+        }
+    }
+
+    fn insert_variable(&mut self, name: String, typename: ir::Type) -> Result<ir::VariableId, TyperError> {
+        self.variables.insert_variable(name, typename)
+    }
+
+    fn find_variable(&self, name: &String) -> Result<TypedExpression, TyperError> {
+        self.find_variable_recur(name, 0)
+    }
+
+    fn find_struct(&self, name: &String) -> Option<&ir::StructDefinition> {
+        self.parent.find_struct(name)
+    }
+
+}
+
+impl Context {
+
+    fn find_variable_recur(&self, name: &String, scopes_up: u32) -> Result<TypedExpression, TyperError> {
+        match *self {
+            Context::Global(ref global) => global.find_variable_recur(name, scopes_up),
+            Context::Scope(ref scope) => scope.find_variable_recur(name, scopes_up),
+        }
+    }
+
+    fn find_struct(&self, name: &String) -> Option<&ir::StructDefinition> {
+        match *self {
+            Context::Global(ref global) => global.find_struct(name),
+            Context::Scope(ref scope) => scope.find_struct(name),
+        }
     }
 }
 
@@ -357,7 +470,7 @@ fn parse_literal(ast: &ast::Literal) -> Result<TypedExpression, TyperError> {
     }
 }
 
-fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpression, TyperError> {
+fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpression, TyperError> {
     match ast {
         &ast::Expression::Literal(ref lit) => parse_literal(lit),
         &ast::Expression::Variable(ref s) => Ok(try!(context.find_variable(s))),
@@ -426,7 +539,7 @@ fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpressio
             };
             let ety = match &composite_ty {
                 &ir::Type::Structured(ir::StructuredType::Custom(ref user_defined_name)) => {
-                    match context.structs.get(user_defined_name) {
+                    match context.find_struct(user_defined_name) {
                         Some(struct_def) => {
                             fn find_struct_member(struct_def: &ir::StructDefinition, member: &String, struct_type: &ir::Type) -> Result<ir::Type, TyperError> {
                                 for struct_member in &struct_def.members {
@@ -533,7 +646,7 @@ fn parse_expr(ast: &ast::Expression, context: &Context) -> Result<TypedExpressio
     }
 }
 
-fn parse_vardef(ast: &ast::VarDef, context: Context) -> Result<(ir::VarDef, Context), TyperError> {
+fn parse_vardef(ast: &ast::VarDef, context: ScopeContext) -> Result<(ir::VarDef, ScopeContext), TyperError> {
     let assign_ir = match ast.assignment {
         Some(ref expr) => {
             match try!(parse_expr(expr, &context)) {
@@ -543,13 +656,15 @@ fn parse_vardef(ast: &ast::VarDef, context: Context) -> Result<(ir::VarDef, Cont
         },
         None => None,
     };
-    let vd_ir = ir::VarDef { name: ast.name.clone(), typename: ast.typename.clone(), assignment: assign_ir };
+    let var_name = ast.name.clone();
+    let var_type = ast.typename.clone();
     let mut context = context;
-    try!(context.insert_variable(vd_ir.name.clone(), vd_ir.typename.clone()));
+    let var_id = try!(context.insert_variable(var_name.clone(), var_type.clone()));
+    let vd_ir = ir::VarDef { id: var_id, typename: var_type, assignment: assign_ir };
     Ok((vd_ir, context))
 }
 
-fn parse_condition(ast: &ast::Condition, context: Context) -> Result<(ir::Condition, Context), TyperError> {
+fn parse_condition(ast: &ast::Condition, context: ScopeContext) -> Result<(ir::Condition, ScopeContext), TyperError> {
     match ast {
         &ast::Condition::Expr(ref expr) => {
             let expr_ir = match try!(parse_expr(expr, &context)) {
@@ -565,7 +680,8 @@ fn parse_condition(ast: &ast::Condition, context: Context) -> Result<(ir::Condit
     }
 }
 
-fn parse_statement(ast: &ast::Statement, context: Context) -> Result<(Option<ir::Statement>, Context), TyperError> {
+fn parse_statement(ast: &ast::Statement, context: ScopeContext) -> Result<(Option<ir::Statement>, ScopeContext), TyperError> {
+    fn empty_block() -> ir::Statement { ir::Statement::Block(vec![], ir::ScopedDeclarations { variables: HashMap::new() }) }
     match ast {
         &ast::Statement::Empty => Ok((None, context)),
         &ast::Statement::Expression(ref expr) => {
@@ -579,29 +695,36 @@ fn parse_statement(ast: &ast::Statement, context: Context) -> Result<(Option<ir:
             Ok((Some(ir::Statement::Var(vd_ir)), context))
         },
         &ast::Statement::Block(ref statement_vec) => {
-            let scoped_context = context.scoped();
-            let statements = try!(parse_statement_vec(statement_vec, scoped_context));
-            Ok((Some(ir::Statement::Block(statements)), context))
+            let scoped_context = ScopeContext::from_scope(&context);
+            let (statements, scoped_context) = try!(parse_statement_vec(statement_vec, scoped_context));
+            let decls = scoped_context.destruct();
+            Ok((Some(ir::Statement::Block(statements, decls)), context))
         },
         &ast::Statement::If(ref cond, ref statement) => {
-            let (cond_ir, context) = try!(parse_condition(cond, context));
-            let (statement_ir_opt, context) = try!(parse_statement(statement, context));
-            let statement_ir = Box::new(match statement_ir_opt { Some(statement_ir) => statement_ir, None => ir::Statement::Block(vec![]) });
-            Ok((Some(ir::Statement::If(cond_ir, statement_ir)), context))
+            let scoped_context = ScopeContext::from_scope(&context);
+            let (cond_ir, scoped_context) = try!(parse_condition(cond, scoped_context));
+            let (statement_ir_opt, scoped_context) = try!(parse_statement(statement, scoped_context));
+            let decls = scoped_context.destruct();
+            let statement_ir = Box::new(match statement_ir_opt { Some(statement_ir) => statement_ir, None => empty_block() });
+            Ok((Some(ir::Statement::If(cond_ir, statement_ir, decls)), context))
         },
         &ast::Statement::For(ref init, ref cond, ref iter, ref statement) =>  {
-            let (init_ir, context) = try!(parse_condition(init, context));
-            let (cond_ir, context) = try!(parse_condition(cond, context));
-            let (iter_ir, context) = try!(parse_condition(iter, context));
-            let (statement_ir_opt, context) = try!(parse_statement(statement, context));
-            let statement_ir = Box::new(match statement_ir_opt { Some(statement_ir) => statement_ir, None => ir::Statement::Block(vec![]) });
-            Ok((Some(ir::Statement::For(init_ir, cond_ir, iter_ir, statement_ir)), context))
+            let scoped_context = ScopeContext::from_scope(&context);
+            let (init_ir, scoped_context) = try!(parse_condition(init, scoped_context));
+            let (cond_ir, scoped_context) = try!(parse_condition(cond, scoped_context));
+            let (iter_ir, scoped_context) = try!(parse_condition(iter, scoped_context));
+            let (statement_ir_opt, scoped_context) = try!(parse_statement(statement, scoped_context));
+            let decls = scoped_context.destruct();
+            let statement_ir = Box::new(match statement_ir_opt { Some(statement_ir) => statement_ir, None => empty_block() });
+            Ok((Some(ir::Statement::For(init_ir, cond_ir, iter_ir, statement_ir, decls)), context))
         },
         &ast::Statement::While(ref cond, ref statement) => {
-            let (cond_ir, context) = try!(parse_condition(cond, context));
-            let (statement_ir_opt, context) = try!(parse_statement(statement, context));
-            let statement_ir = Box::new(match statement_ir_opt { Some(statement_ir) => statement_ir, None => ir::Statement::Block(vec![]) });
-            Ok((Some(ir::Statement::While(cond_ir, statement_ir)), context))
+            let scoped_context = ScopeContext::from_scope(&context);
+            let (cond_ir, scoped_context) = try!(parse_condition(cond, scoped_context));
+            let (statement_ir_opt, scoped_context) = try!(parse_statement(statement, scoped_context));
+            let decls = scoped_context.destruct();
+            let statement_ir = Box::new(match statement_ir_opt { Some(statement_ir) => statement_ir, None => empty_block() });
+            Ok((Some(ir::Statement::While(cond_ir, statement_ir, decls)), context))
         },
         &ast::Statement::Return(ref expr) => {
             match try!(parse_expr(expr, &context)) {
@@ -612,7 +735,7 @@ fn parse_statement(ast: &ast::Statement, context: Context) -> Result<(Option<ir:
     }
 }
 
-fn parse_statement_vec(ast: &Vec<ast::Statement>, context: Context) -> Result<Vec<ir::Statement>, TyperError> {
+fn parse_statement_vec(ast: &[ast::Statement], context: ScopeContext) -> Result<(Vec<ir::Statement>, ScopeContext), TyperError> {
     let mut context = context;
     let mut body_ir = vec![];
     for statement_ast in ast {
@@ -623,10 +746,10 @@ fn parse_statement_vec(ast: &Vec<ast::Statement>, context: Context) -> Result<Ve
         };
         context = next_context;
     }
-    Ok(body_ir)
+    Ok((body_ir, context))
 }
 
-fn parse_rootdefinition_struct(sd: &ast::StructDefinition, mut context: Context) -> Result<(ir::RootDefinition, Context), TyperError> {
+fn parse_rootdefinition_struct(sd: &ast::StructDefinition, mut context: GlobalContext) -> Result<(ir::RootDefinition, GlobalContext), TyperError> {
     let struct_def = sd.clone();
     match context.structs.insert(struct_def.name.clone(), struct_def.clone()) {
         Some(_) => return Err(TyperError::StructAlreadyDefined(struct_def.name.clone())),
@@ -635,13 +758,15 @@ fn parse_rootdefinition_struct(sd: &ast::StructDefinition, mut context: Context)
     Ok((ir::RootDefinition::Struct(struct_def), context))
 }
 
-fn parse_rootdefinition_constantbuffer(cb: &ast::ConstantBuffer, mut context: Context, globals: &mut ir::GlobalTable) -> Result<(ir::RootDefinition, Context), TyperError> {
-    let cb_ir = ir::ConstantBuffer { name: cb.name.clone(), members: cb.members.clone() };
-    try!(context.insert_variable(cb_ir.name.clone(), ir::Type::custom(&cb_ir.name[..])));
+fn parse_rootdefinition_constantbuffer(cb: &ast::ConstantBuffer, mut context: GlobalContext, globals: &mut ir::GlobalTable) -> Result<(ir::RootDefinition, GlobalContext), TyperError> {
+    let cb_name = cb.name.clone();
+    let cb_type = ir::Type::custom(&cb_name);
+    let cb_id = try!(context.insert_variable(cb_name.clone(), cb_type.clone()));
+    let cb_ir = ir::ConstantBuffer { id: cb_id, members: cb.members.clone() };
     match cb.slot {
         Some(ast::ConstantSlot(slot)) => {
-            match globals.constants.insert(slot, cb_ir.name.clone()) {
-                Some(currently_used_by) => return Err(TyperError::ConstantSlotAlreadyUsed(currently_used_by.clone(), cb_ir.name.clone())),
+            match globals.constants.insert(slot, cb_name.clone()) {
+                Some(currently_used_by) => return Err(TyperError::ConstantSlotAlreadyUsed(currently_used_by.clone(), cb_name.clone())),
                 None => { },
             }
         },
@@ -650,20 +775,22 @@ fn parse_rootdefinition_constantbuffer(cb: &ast::ConstantBuffer, mut context: Co
     Ok((ir::RootDefinition::ConstantBuffer(cb_ir), context))
 }
 
-fn parse_rootdefinition_globalvariable(gv: &ast::GlobalVariable, mut context: Context, globals: &mut ir::GlobalTable) -> Result<(ir::RootDefinition, Context), TyperError> {
-    let gv_ir = ir::GlobalVariable { name: gv.name.clone(), typename: gv.typename.clone() };
-    try!(context.insert_variable(gv_ir.name.clone(), gv_ir.typename.clone()));
-    let entry = ir::GlobalEntry { name: gv_ir.name.clone(), typename: gv_ir.typename.clone() };
+fn parse_rootdefinition_globalvariable(gv: &ast::GlobalVariable, mut context: GlobalContext, globals: &mut ir::GlobalTable) -> Result<(ir::RootDefinition, GlobalContext), TyperError> {
+    let var_name = gv.name.clone();
+    let var_type = gv.typename.clone();
+    let var_id = try!(context.insert_variable(var_name.clone(), var_type.clone()));
+    let gv_ir = ir::GlobalVariable { id: var_id, typename: var_type };
+    let entry = ir::GlobalEntry { id: var_id, typename: gv_ir.typename.clone() };
     match gv.slot {
         Some(ast::GlobalSlot::ReadSlot(slot)) => {
             match globals.r_resources.insert(slot, entry) {
-                Some(currently_used_by) => return Err(TyperError::ReadResourceSlotAlreadyUsed(currently_used_by.name.clone(), gv_ir.name.clone())),
+                Some(currently_used_by) => return Err(TyperError::ReadResourceSlotAlreadyUsed(currently_used_by.id.clone(), gv_ir.id.clone())),
                 None => { },
             }
         },
         Some(ast::GlobalSlot::ReadWriteSlot(slot)) => {
             match globals.rw_resources.insert(slot, entry) {
-                Some(currently_used_by) => return Err(TyperError::ReadWriteResourceSlotAlreadyUsed(currently_used_by.name.clone(), gv_ir.name.clone())),
+                Some(currently_used_by) => return Err(TyperError::ReadWriteResourceSlotAlreadyUsed(currently_used_by.id.clone(), gv_ir.id.clone())),
                 None => { },
             }
         },
@@ -672,20 +799,29 @@ fn parse_rootdefinition_globalvariable(gv: &ast::GlobalVariable, mut context: Co
     Ok((ir::RootDefinition::GlobalVariable(gv_ir), context))
 }
 
-fn parse_rootdefinition_function(fd: &ast::FunctionDefinition, mut context: Context) -> Result<(ir::RootDefinition, Context), TyperError> {
-    let body_ir = {
-        let mut scoped_context = context.scoped();
+fn parse_rootdefinition_function(fd: &ast::FunctionDefinition, mut context: GlobalContext) -> Result<(ir::RootDefinition, GlobalContext), TyperError> {
+
+    let mut scoped_context = ScopeContext::from_global(&context);
+    let func_params = {
+        let mut vec = vec![];
         for param in &fd.params {
-            try!(scoped_context.insert_variable(param.name.clone(), param.typename.clone()));
+            let var_id = try!(scoped_context.insert_variable(param.name.clone(), param.typename.clone()));
+            vec.push(ir::FunctionParam {
+                id: var_id,
+                typename: param.typename.clone(),
+            });
         }
-        try!(parse_statement_vec(&fd.body, scoped_context))
+        vec
     };
+    let (body_ir, scoped_context) = try!(parse_statement_vec(&fd.body, scoped_context));
+    let decls = scoped_context.destruct();
+
     let fd_ir = ir::FunctionDefinition {
         id: context.make_function_id(),
-        original_name: fd.name.clone(),
         returntype: fd.returntype.clone(),
-        params: fd.params.clone(),
+        params: func_params,
         body: body_ir,
+        scope: decls,
         attributes: fd.attributes.clone(),
     };
     let func_type = FunctionOverload(
@@ -693,22 +829,18 @@ fn parse_rootdefinition_function(fd: &ast::FunctionDefinition, mut context: Cont
         fd_ir.returntype.clone(),
         fd_ir.params.iter().map(|p| { p.typename.clone() }).collect()
     );
-    try!(context.insert_function(fd_ir.original_name.clone(), func_type));
+    try!(context.insert_function(fd.name.clone(), func_type));
     Ok((ir::RootDefinition::Function(fd_ir), context))
 }
 
-fn parse_rootdefinition_kernel(fd: &ast::FunctionDefinition, context: Context) -> Result<(ir::RootDefinition, Context), TyperError> {
-    let body_ir = {
-        let mut scoped_context = context.scoped();
-        for param in &fd.params {
-            try!(scoped_context.insert_variable(param.name.clone(), param.typename.clone()));
-        }
-        try!(parse_statement_vec(&fd.body, scoped_context))
-    };
+fn parse_rootdefinition_kernel(fd: &ast::FunctionDefinition, context: GlobalContext) -> Result<(ir::RootDefinition, GlobalContext), TyperError> {
+
+    let mut scoped_context = ScopeContext::from_global(&context);
     let kernel_params = {
         let mut vec = vec![];
         for param in &fd.params {
-            vec.push(ir::KernelParam(param.name.clone(),
+            let var_id = try!(scoped_context.insert_variable(param.name.clone(), param.typename.clone()));
+            vec.push(ir::KernelParam(var_id,
                 match &param.semantic {
                     &Some(ast::Semantic::DispatchThreadId) => ir::KernelSemantic::DispatchThreadId,
                     &Some(_) => return Err(TyperError::KernelHasParamWithBadSemantic(param.clone())),
@@ -718,6 +850,9 @@ fn parse_rootdefinition_kernel(fd: &ast::FunctionDefinition, context: Context) -
         }
         vec
     };
+    let (body_ir, scoped_context) = try!(parse_statement_vec(&fd.body, scoped_context));
+    let decls = scoped_context.destruct();
+
     fn find_dispatch_dimensions(attributes: &[ast::FunctionAttribute]) -> Result<ir::Dimension, TyperError> {
         for attribute in attributes {
             match attribute {
@@ -730,11 +865,12 @@ fn parse_rootdefinition_kernel(fd: &ast::FunctionDefinition, context: Context) -
         group_dimensions: try!(find_dispatch_dimensions(&fd.attributes[..])),
         params: kernel_params,
         body: body_ir,
+        scope: decls,
     };
     Ok((ir::RootDefinition::Kernel(kernel), context))
 }
 
-fn parse_rootdefinition(ast: &ast::RootDefinition, context: Context, globals: &mut ir::GlobalTable, entry_point: &str) -> Result<(ir::RootDefinition, Context), TyperError> {
+fn parse_rootdefinition(ast: &ast::RootDefinition, context: GlobalContext, globals: &mut ir::GlobalTable, entry_point: &str) -> Result<(ir::RootDefinition, GlobalContext), TyperError> {
     match ast {
         &ast::RootDefinition::Struct(ref sd) => parse_rootdefinition_struct(sd, context),
         &ast::RootDefinition::SamplerState => Ok((ir::RootDefinition::SamplerState, context)),
@@ -746,15 +882,25 @@ fn parse_rootdefinition(ast: &ast::RootDefinition, context: Context, globals: &m
 }
 
 pub fn typeparse(ast: &ast::Module) -> Result<ir::Module, TyperError> {
-    let mut context = Context::new();
+    let mut context = GlobalContext::new();
 
-    let mut ir = ir::Module { entry_point: ast.entry_point.clone(), global_table: ir::GlobalTable::new(), root_definitions: vec![] };
+    let mut global_table = ir::GlobalTable::new();
+    let mut root_definitions = vec![];
 
     for def in &ast.root_definitions {
-        let (def_ir, next_context) = try!(parse_rootdefinition(&def, context, &mut ir.global_table, &ir.entry_point[..]));
-        ir.root_definitions.push(def_ir);
+        let (def_ir, next_context) = try!(parse_rootdefinition(&def, context, &mut global_table, &ast.entry_point.clone()));
+        root_definitions.push(def_ir);
         context = next_context;
     }
+
+    let global_declarations = context.destruct();
+
+    let ir = ir::Module {
+        entry_point: ast.entry_point.clone(),
+        global_table: global_table,
+        root_definitions: root_definitions,
+        global_declarations: global_declarations,
+    };
 
     // Ensure we have one kernel function
     let mut has_kernel = false;
