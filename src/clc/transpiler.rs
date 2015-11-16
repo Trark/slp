@@ -356,6 +356,16 @@ fn transpile_vardef(vardef: &src::VarDef, context: &Context) -> Result<dst::VarD
     })
 }
 
+fn transpile_condition(cond: &src::Condition, context: &Context) -> Result<dst::Condition, TranspileError> {
+    match *cond {
+        src::Condition::Expr(ref expr) => {
+            let expr_ir = try!(transpile_expression(expr, &context));
+            Ok(dst::Condition::Expr(expr_ir))
+        },
+        src::Condition::Assignment(_) => unimplemented!(),
+    }
+}
+
 fn transpile_statement(statement: &src::Statement, context: &mut Context) -> Result<dst::Statement, TranspileError> {
     match statement {
         &src::Statement::Expression(ref expr) => Ok(dst::Statement::Expression(try!(transpile_expression(expr, context)))),
@@ -373,7 +383,13 @@ fn transpile_statement(statement: &src::Statement, context: &mut Context) -> Res
             context.pop_scope();
             Ok(dst::Statement::Block(cl_statements))
         },
-        &src::Statement::If(_, _, _) => unimplemented!(),
+        &src::Statement::If(ref cond, ref statement, ref decls) => {
+            context.push_scope(decls);
+            let cl_cond = try!(transpile_condition(cond, context));
+            let cl_statement = Box::new(try!(transpile_statement(statement, context)));
+            context.pop_scope();
+            Ok(dst::Statement::If(cl_cond, cl_statement))
+        },
         &src::Statement::For(_, _, _, _, _) => unimplemented!(),
         &src::Statement::While(_, _, _) => unimplemented!(),
         &src::Statement::Return(_) => unimplemented!(),

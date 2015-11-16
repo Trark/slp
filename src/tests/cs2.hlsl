@@ -36,6 +36,7 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     myFunc_1 = g_myInBuffer.Load(index);
     g_myOutBuffer[index] = myFunc_1;
     uint testStruct = 0;
+    if (myFunc_1)
     {
         float4 alias_var = float4(1.0f, 2.4f, 0.3f, 3.4f);
         float4 receive = alias_var;

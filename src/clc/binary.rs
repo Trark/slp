@@ -288,6 +288,13 @@ fn print_vardef(vardef: &VarDef, printer: &mut Printer) {
     printer.print(";");
 }
 
+fn print_condition(cond: &Condition, printer: &mut Printer) {
+    match *cond {
+        Condition::Expr(ref expr) => print_expression(expr, printer),
+        Condition::Assignment(_) => unimplemented!(),
+    }
+}
+
 fn print_block(block: &[Statement], printer: &mut Printer) {
     printer.print("{");
     printer.indent();
@@ -308,6 +315,14 @@ fn print_statement(statement: &Statement, printer: &mut Printer) {
         },
         &Statement::Var(ref vd) => print_vardef(vd, printer),
         &Statement::Block(ref statements) => print_block(&statements, printer),
+        &Statement::If(ref cond, ref statement) => {
+            printer.print("if");
+            printer.space();
+            printer.print("(");
+            print_condition(cond, printer);
+            printer.print(")");
+            print_statement(statement, printer);
+        },
         _ => unimplemented!(),
     }
 }

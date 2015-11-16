@@ -34,6 +34,7 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __constant ui
 	myFunc_1_0 = g_myInBuffer[index];
 	g_myOutBuffer[index] = myFunc_1_0;
 	uint testStruct = 0;
+	if (myFunc_1_0)
 	{
 		float4 alias_var_0 = (float4)(1.0f, 2.4f, 0.3f, 3.4f);
 		float4 receive = alias_var_0;
