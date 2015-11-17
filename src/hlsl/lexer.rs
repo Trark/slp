@@ -310,6 +310,28 @@ named!(rightanglebracket<Token>, chain!(
     }
 ));
 
+named!(symbol_equals<Token>, chain!(
+    tag!("=") ~
+    next: opt!(tag!("=")),
+    || {
+        match next {
+            Some(_) => Token::DoubleEquals,
+            _ => Token::Equals,
+        }
+    }
+));
+
+named!(symbol_exclamation<Token>, chain!(
+    tag!("!") ~
+    next: opt!(tag!("=")),
+    || {
+        match next {
+            Some(_) => Token::ExclamationEquals,
+            _ => Token::ExclamationPoint,
+        }
+    }
+));
+
 named!(token_no_whitespace<Token>, alt!(
 
     identifier => { |id| Token::Id(id) } |
@@ -337,10 +359,10 @@ named!(token_no_whitespace<Token>, alt!(
     tag!("|") => { |_| Token::VerticalBar } |
     tag!("&") => { |_| Token::Ampersand } |
     tag!("^") => { |_| Token::Hat } |
-    tag!("=") => { |_| Token::Equals } |
+    symbol_equals |
     tag!("#") => { |_| Token::Hash } |
     tag!("@") => { |_| Token::At } |
-    tag!("!") => { |_| Token::ExclamationPoint } |
+    symbol_exclamation |
     tag!("~") => { |_| Token::Tilde } |
     tag!(".") => { |_| Token::Period } |
 

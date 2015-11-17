@@ -276,6 +276,7 @@ fn transpile_binop(binop: &src::BinOp) -> Result<dst::BinOp, TranspileError> {
         &src::BinOp::Divide => Ok(dst::BinOp::Divide),
         &src::BinOp::Modulus => Ok(dst::BinOp::Modulus),
         &src::BinOp::Assignment => Ok(dst::BinOp::Assignment),
+        _ => unimplemented!(),
     }
 }
 

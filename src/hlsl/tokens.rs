@@ -60,6 +60,8 @@ pub enum Token {
     ExclamationPoint,
     Tilde,
     Period,
+    DoubleEquals,
+    ExclamationEquals,
 
     If,
     For,

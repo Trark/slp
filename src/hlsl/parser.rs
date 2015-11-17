@@ -533,10 +533,84 @@ fn expr_p4(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
     )
 }
 
+fn expr_p5(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
+
+    fn parse_op(input: &[Token]) -> IResult<&[Token], BinOp, ParseErrorReason> {
+        alt!(input,
+            chain!(token!(Token::LeftAngleBracket(FollowedBy::Token)) ~ token!(Token::LeftAngleBracket(_)), || { BinOp::LeftShift }) |
+            chain!(token!(Token::RightAngleBracket(FollowedBy::Token)) ~ token!(Token::RightAngleBracket(_)), || { BinOp::RightShift })
+        )
+    }
+
+    fn parse_rights(input: &[Token]) -> IResult<&[Token], (BinOp, Expression), ParseErrorReason> {
+        chain!(input,
+            op: parse_op ~
+            right: expr_p4,
+            || { return (op, right) }
+        )
+    }
+
+    chain!(input,
+        left: expr_p4 ~
+        rights: many0!(parse_rights),
+        || { combine_rights(left, rights) }
+    )
+}
+
+fn expr_p6(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
+
+    fn parse_op(input: &[Token]) -> IResult<&[Token], BinOp, ParseErrorReason> {
+        alt!(input,
+            chain!(token!(Token::LeftAngleBracket(FollowedBy::Token)) ~ token!(Token::Equals), || { BinOp::LessEqual }) |
+            chain!(token!(Token::RightAngleBracket(FollowedBy::Token)) ~ token!(Token::Equals), || { BinOp::GreaterEqual }) |
+            token!(Token::LeftAngleBracket(_)) => { |_| BinOp::LessThan } |
+            token!(Token::RightAngleBracket(_)) => { |_| BinOp::GreaterThan }
+        )
+    }
+
+    fn parse_rights(input: &[Token]) -> IResult<&[Token], (BinOp, Expression), ParseErrorReason> {
+        chain!(input,
+            op: parse_op ~
+            right: expr_p5,
+            || { return (op, right) }
+        )
+    }
+
+    chain!(input,
+        left: expr_p5 ~
+        rights: many0!(parse_rights),
+        || { combine_rights(left, rights) }
+    )
+}
+
+fn expr_p7(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
+
+    fn parse_op(input: &[Token]) -> IResult<&[Token], BinOp, ParseErrorReason> {
+        alt!(input,
+            token!(Token::DoubleEquals) => { |_| BinOp::Equality } |
+            token!(Token::ExclamationEquals) => { |_| BinOp::Inequality }
+        )
+    }
+
+    fn parse_rights(input: &[Token]) -> IResult<&[Token], (BinOp, Expression), ParseErrorReason> {
+        chain!(input,
+            op: parse_op ~
+            right: expr_p6,
+            || { return (op, right) }
+        )
+    }
+
+    chain!(input,
+        left: expr_p6 ~
+        rights: many0!(parse_rights),
+        || { combine_rights(left, rights) }
+    )
+}
+
 fn expr_p15(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
     alt!(input,
-        chain!(lhs: expr_p4 ~ token!(Token::Equals) ~ rhs: expr_p15, || { Expression::BinaryOperation(BinOp::Assignment, Box::new(lhs), Box::new(rhs)) }) |
-        expr_p4
+        chain!(lhs: expr_p7 ~ token!(Token::Equals) ~ rhs: expr_p15, || { Expression::BinaryOperation(BinOp::Assignment, Box::new(lhs), Box::new(rhs)) }) |
+        expr_p7
     )
 }
 
@@ -777,6 +851,31 @@ fn exp_var(var_name: &'static str) -> Expression { Expression::Variable(var_name
 fn bexp_var(var_name: &'static str) -> Box<Expression> { Box::new(exp_var(var_name)) }
 
 #[cfg(test)]
+fn parse_result_from_str<T>(parse_func: Box<Fn(&[Token]) -> IResult<&[Token], T, ParseErrorReason>>) -> Box<Fn(&'static str) -> Result<T, ParseErrorReason>> where T: 'static {
+    Box::new(move |string: &'static str| {
+        let modified_string = string.to_string() + "\n";
+        let input = &modified_string[..].as_bytes();
+        let lex_result = super::lexer::lex(input);
+        match lex_result {
+            Ok(TokenStream(stream)) => {
+                match parse_func(&stream[..]) {
+                    IResult::Done(rem, exp) => {
+                        if rem == &[Token::Eof] {
+                            Ok(exp)
+                        } else {
+                            Err(ParseErrorReason::FailedToParse)
+                        }
+                    },
+                    IResult::Incomplete(_) => Err(ParseErrorReason::UnexpectedEndOfStream),
+                    _ => Err(ParseErrorReason::FailedToParse),
+                }
+            }
+            Err(error) => panic!("Failed to lex `{:?}`", error)
+        }
+    })
+}
+
+#[cfg(test)]
 fn parse_from_str<T>(parse_func: Box<Fn(&[Token]) -> IResult<&[Token], T, ParseErrorReason>>) -> Box<Fn(&'static str) -> T> where T: 'static {
     Box::new(move |string: &'static str| {
         let modified_string = string.to_string() + "\n";
@@ -813,6 +912,7 @@ fn test_expr() {
     ));
 
     let expr_str = parse_from_str(Box::new(expr));
+    let expr_str_fail = parse_result_from_str(Box::new(expr));
 
     assert_eq!(expr_str("a"), exp_var("a"));
     assert_eq!(expr_str("4"), Expression::Literal(Literal::Int(4)));
@@ -874,6 +974,22 @@ fn test_expr() {
     assert_eq!(expr_str("-a"), Expression::UnaryOperation(UnaryOp::Minus, bexp_var("a")));
     assert_eq!(expr_str("!a"), Expression::UnaryOperation(UnaryOp::LogicalNot, bexp_var("a")));
     assert_eq!(expr_str("~a"), Expression::UnaryOperation(UnaryOp::BitwiseNot, bexp_var("a")));
+
+    assert_eq!(expr_str("a << b"), Expression::BinaryOperation(BinOp::LeftShift, bexp_var("a"), bexp_var("b")));
+    assert_eq!(expr_str("a >> b"), Expression::BinaryOperation(BinOp::RightShift, bexp_var("a"), bexp_var("b")));
+    assert_eq!(expr_str("a < b"), Expression::BinaryOperation(BinOp::LessThan, bexp_var("a"), bexp_var("b")));
+    assert_eq!(expr_str("a <= b"), Expression::BinaryOperation(BinOp::LessEqual, bexp_var("a"), bexp_var("b")));
+    assert_eq!(expr_str("a > b"), Expression::BinaryOperation(BinOp::GreaterThan, bexp_var("a"), bexp_var("b")));
+    assert_eq!(expr_str("a >= b"), Expression::BinaryOperation(BinOp::GreaterEqual, bexp_var("a"), bexp_var("b")));
+    assert_eq!(expr_str("a == b"), Expression::BinaryOperation(BinOp::Equality, bexp_var("a"), bexp_var("b")));
+    assert_eq!(expr_str("a != b"), Expression::BinaryOperation(BinOp::Inequality, bexp_var("a"), bexp_var("b")));
+
+    assert_eq!(expr_str_fail("a < < b"), Err(ParseErrorReason::FailedToParse));
+    assert_eq!(expr_str_fail("a > > b"), Err(ParseErrorReason::FailedToParse));
+    assert_eq!(expr_str_fail("a < = b"), Err(ParseErrorReason::FailedToParse));
+    assert_eq!(expr_str_fail("a > = b"), Err(ParseErrorReason::FailedToParse));
+    assert_eq!(expr_str_fail("a = = b"), Err(ParseErrorReason::FailedToParse));
+    assert_eq!(expr_str_fail("a ! = b"), Err(ParseErrorReason::FailedToParse));
 
     assert_eq!(expr_str("a[b]"),
         Expression::ArraySubscript(bexp_var("a"), bexp_var("b"))
