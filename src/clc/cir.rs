@@ -80,6 +80,14 @@ pub enum BinOp {
     Multiply,
     Divide,
     Modulus,
+    LeftShift,
+    RightShift,
+    LessThan,
+    LessEqual,
+    GreaterThan,
+    GreaterEqual,
+    Equality,
+    Inequality,
     Assignment,
 }
 

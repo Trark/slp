@@ -42,4 +42,8 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __constant ui
 		struct testStruct_0 data;
 	}
 	myFunc_1(4.0f);
+	for (uint x = 4u; x < 10u; ++x)
+	{
+		myFunc_0(x);
+	}
 }

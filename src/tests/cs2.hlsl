@@ -44,4 +44,8 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
         testStruct_0 data;
     }
     myFunc(4.0f);
+    for (uint x = 4u; x < 10u; ++x)
+    {
+        myFunc(x);
+    }
 }

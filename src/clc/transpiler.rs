@@ -268,15 +268,35 @@ fn transpile_type(hlsltype: &src::Type, context: &Context) -> Result<dst::Type, 
     }
 }
 
+fn transpile_unaryop(unaryop: &src::UnaryOp) -> Result<dst::UnaryOp, TranspileError> {
+    match *unaryop {
+        src::UnaryOp::PrefixIncrement => Ok(dst::UnaryOp::PrefixIncrement),
+        src::UnaryOp::PrefixDecrement => Ok(dst::UnaryOp::PrefixDecrement),
+        src::UnaryOp::PostfixIncrement => Ok(dst::UnaryOp::PostfixIncrement),
+        src::UnaryOp::PostfixDecrement => Ok(dst::UnaryOp::PostfixDecrement),
+        src::UnaryOp::Plus => Ok(dst::UnaryOp::Plus),
+        src::UnaryOp::Minus => Ok(dst::UnaryOp::Minus),
+        src::UnaryOp::LogicalNot => Ok(dst::UnaryOp::LogicalNot),
+        src::UnaryOp::BitwiseNot => Ok(dst::UnaryOp::BitwiseNot),
+    }
+}
+
 fn transpile_binop(binop: &src::BinOp) -> Result<dst::BinOp, TranspileError> {
-    match binop {
-        &src::BinOp::Add => Ok(dst::BinOp::Add),
-        &src::BinOp::Subtract => Ok(dst::BinOp::Subtract),
-        &src::BinOp::Multiply => Ok(dst::BinOp::Multiply),
-        &src::BinOp::Divide => Ok(dst::BinOp::Divide),
-        &src::BinOp::Modulus => Ok(dst::BinOp::Modulus),
-        &src::BinOp::Assignment => Ok(dst::BinOp::Assignment),
-        _ => unimplemented!(),
+    match *binop {
+        src::BinOp::Add => Ok(dst::BinOp::Add),
+        src::BinOp::Subtract => Ok(dst::BinOp::Subtract),
+        src::BinOp::Multiply => Ok(dst::BinOp::Multiply),
+        src::BinOp::Divide => Ok(dst::BinOp::Divide),
+        src::BinOp::Modulus => Ok(dst::BinOp::Modulus),
+        src::BinOp::LeftShift => Ok(dst::BinOp::LeftShift),
+        src::BinOp::RightShift => Ok(dst::BinOp::RightShift),
+        src::BinOp::LessThan => Ok(dst::BinOp::LessThan),
+        src::BinOp::LessEqual => Ok(dst::BinOp::LessEqual),
+        src::BinOp::GreaterThan => Ok(dst::BinOp::GreaterThan),
+        src::BinOp::GreaterEqual => Ok(dst::BinOp::GreaterEqual),
+        src::BinOp::Equality => Ok(dst::BinOp::Equality),
+        src::BinOp::Inequality => Ok(dst::BinOp::Inequality),
+        src::BinOp::Assignment => Ok(dst::BinOp::Assignment),
     }
 }
 
@@ -319,7 +339,11 @@ fn transpile_expression(expression: &src::Expression, context: &Context) -> Resu
             Ok(dst::Expression::MemberDeref(Box::new(dst::Expression::Variable(cbuffer_instance_name)), name.clone()))
         },
         &src::Expression::Function(ref id) => context.get_function(id),
-        &src::Expression::UnaryOperation(_, _) => unimplemented!(),
+        &src::Expression::UnaryOperation(ref unaryop, ref expr) => {
+            let cl_unaryop = try!(transpile_unaryop(unaryop));
+            let cl_expr = Box::new(try!(transpile_expression(expr, context)));
+            Ok(dst::Expression::UnaryOperation(cl_unaryop, cl_expr))
+        }
         &src::Expression::BinaryOperation(ref binop, ref lhs, ref rhs) => {
             let cl_binop = try!(transpile_binop(binop));
             let cl_lhs = Box::new(try!(transpile_expression(lhs, context)));
@@ -364,7 +388,10 @@ fn transpile_condition(cond: &src::Condition, context: &Context) -> Result<dst::
             let expr_ir = try!(transpile_expression(expr, &context));
             Ok(dst::Condition::Expr(expr_ir))
         },
-        src::Condition::Assignment(_) => unimplemented!(),
+        src::Condition::Assignment(ref vd) => {
+            let cl_vardef = try!(transpile_vardef(vd, &context));
+            Ok(dst::Condition::Assignment(cl_vardef))
+        },
     }
 }
 
@@ -392,7 +419,15 @@ fn transpile_statement(statement: &src::Statement, context: &mut Context) -> Res
             context.pop_scope();
             Ok(dst::Statement::If(cl_cond, cl_statement))
         },
-        &src::Statement::For(_, _, _, _, _) => unimplemented!(),
+        &src::Statement::For(ref init, ref cond, ref update, ref statement, ref decls) => {
+            context.push_scope(decls);
+            let cl_init = try!(transpile_condition(init, context));
+            let cl_cond = try!(transpile_expression(cond, context));
+            let cl_update = try!(transpile_expression(update, context));
+            let cl_statement = Box::new(try!(transpile_statement(statement, context)));
+            context.pop_scope();
+            Ok(dst::Statement::For(cl_init, cl_cond, cl_update, cl_statement))
+        },
         &src::Statement::While(_, _, _) => unimplemented!(),
         &src::Statement::Return(_) => unimplemented!(),
     }

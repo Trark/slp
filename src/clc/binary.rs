@@ -124,6 +124,30 @@ fn print_typename(typename: &Type, printer: &mut Printer) {
     };
 }
 
+fn print_unaryoperation(unaryop: &UnaryOp, expr: &Box<Expression>, last_precedence: u32, printer: &mut Printer) {
+
+    let (op_symbol, op_prec, after) = match *unaryop {
+        UnaryOp::PrefixIncrement => ("++", 2, false),
+        UnaryOp::PrefixDecrement => ("--", 2, false),
+        UnaryOp::PostfixIncrement => ("++", 1, true),
+        UnaryOp::PostfixDecrement => ("--", 1, true),
+        UnaryOp::Plus => ("+", 2, false),
+        UnaryOp::Minus => ("-", 2, false),
+        UnaryOp::LogicalNot => ("!", 2, false),
+        UnaryOp::BitwiseNot => ("~", 2, false),
+    };
+
+    if last_precedence <= op_prec { printer.print("("); }
+    if !after {
+        printer.print(op_symbol);
+    }
+    print_expression_inner(expr, op_prec, printer);
+    if after {
+        printer.print(op_symbol);
+    }
+    if last_precedence <= op_prec { printer.print(")"); }
+}
+
 fn print_binaryoperation(binop: &BinOp, lhs: &Box<Expression>, rhs: &Box<Expression>, last_precedence: u32, printer: &mut Printer) {
 
     let op_symbol = match binop {
@@ -132,6 +156,14 @@ fn print_binaryoperation(binop: &BinOp, lhs: &Box<Expression>, rhs: &Box<Express
         &BinOp::Multiply => "*",
         &BinOp::Divide => "/",
         &BinOp::Modulus => "%",
+        &BinOp::LeftShift => "<<",
+        &BinOp::RightShift => ">>",
+        &BinOp::LessThan => "<",
+        &BinOp::LessEqual => "<=",
+        &BinOp::GreaterThan => ">",
+        &BinOp::GreaterEqual => ">=",
+        &BinOp::Equality => "==",
+        &BinOp::Inequality => "!=",
         &BinOp::Assignment => "=",
     };
 
@@ -141,6 +173,14 @@ fn print_binaryoperation(binop: &BinOp, lhs: &Box<Expression>, rhs: &Box<Express
         &BinOp::Multiply => 3,
         &BinOp::Divide => 3,
         &BinOp::Modulus => 3,
+        &BinOp::LeftShift => 5,
+        &BinOp::RightShift => 5,
+        &BinOp::LessThan => 6,
+        &BinOp::LessEqual => 6,
+        &BinOp::GreaterThan => 6,
+        &BinOp::GreaterEqual => 6,
+        &BinOp::Equality => 7,
+        &BinOp::Inequality => 7,
         &BinOp::Assignment => 14,
     };
 
@@ -216,6 +256,7 @@ fn print_expression_inner(expression: &Expression, last_precedence: u32, printer
         &Expression::Literal(ref lit) => print_literal(lit, printer),
         &Expression::Constructor(ref cons) => print_constructor(cons, printer),
         &Expression::Variable(ref name) => printer.print(name),
+        &Expression::UnaryOperation(ref unaryop, ref expr) => print_unaryoperation(unaryop, expr, last_precedence, printer),
         &Expression::BinaryOperation(ref binop, ref lhs, ref rhs) => print_binaryoperation(binop, lhs, rhs, last_precedence, printer),
         &Expression::ArraySubscript(ref array, ref sub) => {
             let prec = 1;
@@ -285,14 +326,13 @@ fn print_vardef(vardef: &VarDef, printer: &mut Printer) {
         },
         &None => { },
     };
-    printer.print(";");
 }
 
 #[allow(dead_code)]
 fn print_condition(cond: &Condition, printer: &mut Printer) {
     match *cond {
         Condition::Expr(ref expr) => print_expression(expr, printer),
-        Condition::Assignment(_) => unimplemented!(),
+        Condition::Assignment(ref vd) => print_vardef(vd, printer),
     }
 }
 
@@ -314,13 +354,30 @@ fn print_statement(statement: &Statement, printer: &mut Printer) {
             print_expression(expr, printer);
             printer.print(";");
         },
-        &Statement::Var(ref vd) => print_vardef(vd, printer),
+        &Statement::Var(ref vd) => {
+            print_vardef(vd, printer);
+            printer.print(";");
+        },
         &Statement::Block(ref statements) => print_block(&statements, printer),
         &Statement::If(ref cond, ref statement) => {
             printer.print("if");
             printer.space();
             printer.print("(");
             print_expression(cond, printer);
+            printer.print(")");
+            print_statement(statement, printer);
+        },
+        &Statement::For(ref init, ref cond, ref update, ref statement) => {
+            printer.print("for");
+            printer.space();
+            printer.print("(");
+            print_condition(init, printer);
+            printer.print(";");
+            printer.space();
+            print_expression(cond, printer);
+            printer.print(";");
+            printer.space();
+            print_expression(update, printer);
             printer.print(")");
             print_statement(statement, printer);
         },
