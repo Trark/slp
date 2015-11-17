@@ -569,21 +569,21 @@ fn condition(input: &[Token]) -> IResult<&[Token], Condition, ParseErrorReason> 
 fn statement(input: &[Token]) -> IResult<&[Token], Statement, ParseErrorReason> {
     alt!(input,
         token!(Token::Semicolon) => { |_| { Statement::Empty } } |
-        chain!(token!(Token::If) ~ token!(Token::LeftParen) ~ cond: condition ~ token!(Token::RightParen) ~ inner_statement: statement, || { Statement::If(cond, Box::new(inner_statement)) }) |
+        chain!(token!(Token::If) ~ token!(Token::LeftParen) ~ cond: expr ~ token!(Token::RightParen) ~ inner_statement: statement, || { Statement::If(cond, Box::new(inner_statement)) }) |
         chain!(token!(Token::LeftBrace) ~ statements: many0!(statement) ~ token!(Token::RightBrace), || { Statement::Block(statements) }) |
         chain!(
             token!(Token::For) ~
             token!(Token::LeftParen) ~
             init: condition ~
             token!(Token::Semicolon) ~
-            cond: condition ~
+            cond: expr ~
             token!(Token::Semicolon) ~
-            inc: condition ~
+            inc: expr ~
             token!(Token::RightParen) ~
             inner: statement,
             || { Statement::For(init, cond, inc, Box::new(inner)) }
         ) |
-        chain!(token!(Token::While) ~ token!(Token::LeftParen) ~ cond: condition ~ token!(Token::RightParen) ~ inner: statement, || { Statement::While(cond, Box::new(inner)) }) |
+        chain!(token!(Token::While) ~ token!(Token::LeftParen) ~ cond: expr ~ token!(Token::RightParen) ~ inner: statement, || { Statement::While(cond, Box::new(inner)) }) |
         chain!(var: vardef ~ token!(Token::Semicolon), || { Statement::Var(var) }) |
         chain!(token!(Token::Return) ~ expression_statement: expr ~ token!(Token::Semicolon), || { Statement::Return(expression_statement) }) |
         chain!(expression_statement: expr ~ token!(Token::Semicolon), || { Statement::Expression(expression_statement) })
@@ -981,17 +981,11 @@ fn test_statement() {
 
     // If statement
     assert_eq!(statement_str("if(a)func();"),
-        Statement::If(Condition::Expr(exp_var("a")), Box::new(Statement::Expression(Expression::Call(bexp_var("func"), vec![]))))
+        Statement::If(exp_var("a"), Box::new(Statement::Expression(Expression::Call(bexp_var("func"), vec![]))))
     );
     assert_eq!(statement_str("if(a)func();"), statement_str("if (a) func(); "));
     assert_eq!(statement_str("if (a)\n{\n\tone();\n\ttwo();\n}"),
-        Statement::If(Condition::Expr(exp_var("a")), Box::new(Statement::Block(vec![
-            Statement::Expression(Expression::Call(bexp_var("one"), vec![])),
-            Statement::Expression(Expression::Call(bexp_var("two"), vec![]))
-        ])))
-    );
-    assert_eq!(statement_str("if (uint x = y)\n{\n\tone();\n\ttwo();\n}"),
-        Statement::If(Condition::Assignment(VarDef::new("x".to_string(), Type::uint(), Some(exp_var("y")))), Box::new(Statement::Block(vec![
+        Statement::If(exp_var("a"), Box::new(Statement::Block(vec![
             Statement::Expression(Expression::Call(bexp_var("one"), vec![])),
             Statement::Expression(Expression::Call(bexp_var("two"), vec![]))
         ])))
@@ -999,13 +993,7 @@ fn test_statement() {
 
     // While loops
     assert_eq!(statement_str("while (a)\n{\n\tone();\n\ttwo();\n}"),
-        Statement::While(Condition::Expr(exp_var("a")), Box::new(Statement::Block(vec![
-            Statement::Expression(Expression::Call(bexp_var("one"), vec![])),
-            Statement::Expression(Expression::Call(bexp_var("two"), vec![]))
-        ])))
-    );
-    assert_eq!(statement_str("while (int x = y)\n{\n\tone();\n\ttwo();\n}"),
-        Statement::While(Condition::Assignment(VarDef::new("x".to_string(), Type::int(), Some(exp_var("y")))), Box::new(Statement::Block(vec![
+        Statement::While(exp_var("a"), Box::new(Statement::Block(vec![
             Statement::Expression(Expression::Call(bexp_var("one"), vec![])),
             Statement::Expression(Expression::Call(bexp_var("two"), vec![]))
         ])))
@@ -1013,15 +1001,15 @@ fn test_statement() {
 
     // For loops
     assert_eq!(statement_str("for(a;b;c)func();"),
-        Statement::For(Condition::Expr(exp_var("a")), Condition::Expr(exp_var("b")), Condition::Expr(exp_var("c")), Box::new(
+        Statement::For(Condition::Expr(exp_var("a")), exp_var("b"), exp_var("c"), Box::new(
             Statement::Expression(Expression::Call(bexp_var("func"), vec![]))
         ))
     );
     assert_eq!(statement_str("for (uint i = 0; i; i++) { func(); }"),
         Statement::For(
             Condition::Assignment(VarDef::new("i".to_string(), Type::uint(), Some(Expression::Literal(Literal::Int(0))))),
-            Condition::Expr(exp_var("i")),
-            Condition::Expr(Expression::UnaryOperation(UnaryOp::PostfixIncrement, bexp_var("i"))),
+            exp_var("i"),
+            Expression::UnaryOperation(UnaryOp::PostfixIncrement, bexp_var("i")),
             Box::new(Statement::Block(vec![Statement::Expression(Expression::Call(bexp_var("func"), vec![]))]))
         )
     );

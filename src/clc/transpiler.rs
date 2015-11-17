@@ -356,6 +356,7 @@ fn transpile_vardef(vardef: &src::VarDef, context: &Context) -> Result<dst::VarD
     })
 }
 
+#[allow(dead_code)]
 fn transpile_condition(cond: &src::Condition, context: &Context) -> Result<dst::Condition, TranspileError> {
     match *cond {
         src::Condition::Expr(ref expr) => {
@@ -385,7 +386,7 @@ fn transpile_statement(statement: &src::Statement, context: &mut Context) -> Res
         },
         &src::Statement::If(ref cond, ref statement, ref decls) => {
             context.push_scope(decls);
-            let cl_cond = try!(transpile_condition(cond, context));
+            let cl_cond = try!(transpile_expression(cond, context));
             let cl_statement = Box::new(try!(transpile_statement(statement, context)));
             context.pop_scope();
             Ok(dst::Statement::If(cl_cond, cl_statement))
@@ -630,14 +631,10 @@ fn test_transpile() {
                             Box::new(hlsl::ast::Expression::Variable("b".to_string()))
                         )
                     ),
-                    //hlsl::ast::Statement::If(
-                    //    hlsl::ast::Condition::Assignment(hlsl::ast::VarDef {
-                    //        name: "c".to_string(),
-                    //        typename: hlsl::ast::Type::uint(),
-                    //        assignment: Some(hlsl::ast::Expression::Variable("a".to_string()))
-                    //    }),
-                    //    Box::new(hlsl::ast::Statement::Empty),
-                    //),
+                    hlsl::ast::Statement::If(
+                        hlsl::ast::Expression::Variable("b".to_string()),
+                        Box::new(hlsl::ast::Statement::Empty),
+                    ),
                     //hlsl::ast::Statement::Expression(
                     //    hlsl::ast::Expression::BinaryOperation(hlsl::ast::BinOp::Assignment,
                     //        Box::new(hlsl::ast::Expression::ArraySubscript(

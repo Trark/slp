@@ -151,9 +151,9 @@ pub enum Statement {
     Expression(Expression),
     Var(VarDef),
     Block(Vec<Statement>),
-    If(Condition, Box<Statement>),
-    For(Condition, Condition, Condition, Box<Statement>),
-    While(Condition, Box<Statement>),
+    If(Expression, Box<Statement>),
+    For(Condition, Expression, Expression, Box<Statement>),
+    While(Expression, Box<Statement>),
     Return(Expression),
 }
 

@@ -962,6 +962,15 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
     }
 }
 
+fn parse_expr_value_only(expr: &ast::Expression, context: &ScopeContext) -> Result<ir::Expression, TyperError> {
+    let expr_ir = try!(parse_expr(expr, context));
+    match expr_ir {
+        TypedExpression::Value(expr, _) => Ok(expr),
+        TypedExpression::Function(_) => Err(TyperError::FunctionNotCalled),
+        TypedExpression::Method(_) => Err(TyperError::FunctionNotCalled),
+    }
+}
+
 fn parse_vardef(ast: &ast::VarDef, context: ScopeContext) -> Result<(ir::VarDef, ScopeContext), TyperError> {
     let assign_ir = match ast.assignment {
         Some(ref expr) => {
@@ -1018,7 +1027,7 @@ fn parse_statement(ast: &ast::Statement, context: ScopeContext) -> Result<(Optio
         },
         &ast::Statement::If(ref cond, ref statement) => {
             let scoped_context = ScopeContext::from_scope(&context);
-            let (cond_ir, scoped_context) = try!(parse_condition(cond, scoped_context));
+            let cond_ir = try!(parse_expr_value_only(cond, &scoped_context));
             let (statement_ir_opt, scoped_context) = try!(parse_statement(statement, scoped_context));
             let decls = scoped_context.destruct();
             let statement_ir = Box::new(match statement_ir_opt { Some(statement_ir) => statement_ir, None => empty_block() });
@@ -1027,8 +1036,8 @@ fn parse_statement(ast: &ast::Statement, context: ScopeContext) -> Result<(Optio
         &ast::Statement::For(ref init, ref cond, ref iter, ref statement) =>  {
             let scoped_context = ScopeContext::from_scope(&context);
             let (init_ir, scoped_context) = try!(parse_condition(init, scoped_context));
-            let (cond_ir, scoped_context) = try!(parse_condition(cond, scoped_context));
-            let (iter_ir, scoped_context) = try!(parse_condition(iter, scoped_context));
+            let cond_ir = try!(parse_expr_value_only(cond, &scoped_context));
+            let iter_ir = try!(parse_expr_value_only(iter, &scoped_context));
             let (statement_ir_opt, scoped_context) = try!(parse_statement(statement, scoped_context));
             let decls = scoped_context.destruct();
             let statement_ir = Box::new(match statement_ir_opt { Some(statement_ir) => statement_ir, None => empty_block() });
@@ -1036,7 +1045,7 @@ fn parse_statement(ast: &ast::Statement, context: ScopeContext) -> Result<(Optio
         },
         &ast::Statement::While(ref cond, ref statement) => {
             let scoped_context = ScopeContext::from_scope(&context);
-            let (cond_ir, scoped_context) = try!(parse_condition(cond, scoped_context));
+            let cond_ir = try!(parse_expr_value_only(cond, &scoped_context));
             let (statement_ir_opt, scoped_context) = try!(parse_statement(statement, scoped_context));
             let decls = scoped_context.destruct();
             let statement_ir = Box::new(match statement_ir_opt { Some(statement_ir) => statement_ir, None => empty_block() });
@@ -1312,11 +1321,7 @@ fn test_typeparse() {
                         )
                     ),
                     ast::Statement::If(
-                        ast::Condition::Assignment(ast::VarDef {
-                            name: "c".to_string(),
-                            typename: ast::Type::uint(),
-                            assignment: Some(ast::Expression::Variable("a".to_string()))
-                        }),
+                        ast::Expression::Variable("b".to_string()),
                         Box::new(ast::Statement::Empty),
                     ),
                     ast::Statement::Expression(

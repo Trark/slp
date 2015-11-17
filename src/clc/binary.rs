@@ -288,6 +288,7 @@ fn print_vardef(vardef: &VarDef, printer: &mut Printer) {
     printer.print(";");
 }
 
+#[allow(dead_code)]
 fn print_condition(cond: &Condition, printer: &mut Printer) {
     match *cond {
         Condition::Expr(ref expr) => print_expression(expr, printer),
@@ -319,7 +320,7 @@ fn print_statement(statement: &Statement, printer: &mut Printer) {
             printer.print("if");
             printer.space();
             printer.print("(");
-            print_condition(cond, printer);
+            print_expression(cond, printer);
             printer.print(")");
             print_statement(statement, printer);
         },
