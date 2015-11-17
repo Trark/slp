@@ -744,17 +744,17 @@ fn write_function(function: ResolvedFunction, param_values: Vec<ir::Expression>)
             return Ok(TypedExpression::Value(ir::Expression::Call(Box::new(ir::Expression::Function(id)), param_values), return_type))
         },
     };
-    Ok(TypedExpression::Value(match intrinsic {
+    Ok(TypedExpression::Value(ir::Expression::Intrinsic(Box::new(match intrinsic {
         IntrinsicFunction::Float4 => {
             assert_eq!(param_values.len(), 4);
-            ir::Expression::Intrinsic(ir::Intrinsic::Float4(
-                Box::new(param_values[0].clone()),
-                Box::new(param_values[1].clone()),
-                Box::new(param_values[2].clone()),
-                Box::new(param_values[3].clone())
-            ))
+            ir::Intrinsic::Float4(
+                param_values[0].clone(),
+                param_values[1].clone(),
+                param_values[2].clone(),
+                param_values[3].clone()
+            )
         },
-    }, return_type))
+    })), return_type))
 }
 
 fn write_method(method: ResolvedMethod, param_values: Vec<ir::Expression>) -> Result<TypedExpression, TyperError> {
@@ -763,22 +763,22 @@ fn write_method(method: ResolvedMethod, param_values: Vec<ir::Expression>) -> Re
         MethodName::Intrinsic(intrinsic) => intrinsic,
         _ => unreachable!(),
     };
-    Ok(TypedExpression::Value(match intrinsic {
+    Ok(TypedExpression::Value(ir::Expression::Intrinsic(Box::new(match intrinsic {
         IntrinsicMethod::BufferLoad => {
             assert_eq!(param_values.len(), 1);
-            ir::Expression::Intrinsic(ir::Intrinsic::BufferLoad(
-                Box::new(object_ir),
-                Box::new(param_values[0].clone())
-            ))
+            ir::Intrinsic::BufferLoad(
+                object_ir,
+                param_values[0].clone()
+            )
         },
         IntrinsicMethod::StructuredBufferLoad => {
             assert_eq!(param_values.len(), 1);
-            ir::Expression::Intrinsic(ir::Intrinsic::StructuredBufferLoad(
-                Box::new(object_ir),
-                Box::new(param_values[0].clone())
-            ))
+            ir::Intrinsic::StructuredBufferLoad(
+                object_ir,
+                param_values[0].clone()
+            )
         },
-    }, return_type))
+    })), return_type))
 }
 
 fn parse_literal(ast: &ast::Literal) -> Result<TypedExpression, TyperError> {

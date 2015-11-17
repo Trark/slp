@@ -67,10 +67,10 @@ pub use super::ast::UnaryOp as UnaryOp;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Intrinsic {
-    Float4(Box<Expression>, Box<Expression>, Box<Expression>, Box<Expression>),
+    Float4(Expression, Expression, Expression, Expression),
 
-    BufferLoad(Box<Expression>, Box<Expression>),
-    StructuredBufferLoad(Box<Expression>, Box<Expression>),
+    BufferLoad(Expression, Expression),
+    StructuredBufferLoad(Expression, Expression),
 }
 
 pub use super::ast::Literal as Literal;
@@ -116,7 +116,7 @@ pub enum Expression {
     Member(Box<Expression>, String),
     Call(Box<Expression>, Vec<Expression>),
     Cast(Type, Box<Expression>),
-    Intrinsic(Intrinsic),
+    Intrinsic(Box<Intrinsic>),
 }
 
 #[derive(PartialEq, Debug, Clone)]
