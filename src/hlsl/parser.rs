@@ -72,12 +72,12 @@ fn parse_datatype(input: &[Token]) -> IResult<&[Token], DataType, ParseErrorReas
     // Parse scalar type as part of a string
     fn parse_scalartype_str(input: &[u8]) -> IResult<&[u8], ScalarType> {
         alt!(input,
-            chain!(tag!("b") ~ tag!("o") ~ tag!("o") ~ tag!("l"), || { ScalarType::Bool }) |
-            chain!(tag!("i") ~ tag!("n") ~ tag!("t"), || { ScalarType::Int }) |
-            chain!(tag!("u") ~ tag!("i") ~ tag!("n") ~ tag!("t"), || { ScalarType::UInt }) |
-            chain!(tag!("d") ~ tag!("w") ~ tag!("o") ~ tag!("r") ~ tag!("d"), || { ScalarType::UInt }) |
-            chain!(tag!("f") ~ tag!("l") ~ tag!("o") ~ tag!("a") ~ tag!("t"), || { ScalarType::Float }) |
-            chain!(tag!("d") ~ tag!("o") ~ tag!("u") ~ tag!("b") ~ tag!("l") ~ tag!("e"), || { ScalarType::Double })
+            complete!(tag!("bool")) => { |_| ScalarType::Bool } |
+            complete!(tag!("int")) => { |_| ScalarType::Int } |
+            complete!(tag!("uint")) => { |_| ScalarType::UInt } |
+            complete!(tag!("dword")) => { |_| ScalarType::UInt } |
+            complete!(tag!("float")) => { |_| ScalarType::Float } |
+            complete!(tag!("double")) => { |_| ScalarType::Double }
         )
     }
 
