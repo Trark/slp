@@ -5,6 +5,8 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use super::ir;
 use super::ast;
+use super::intrinsics;
+use super::intrinsics::IntrinsicFactory;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum TyperError {
@@ -53,13 +55,8 @@ pub type ParamArray = Vec<ParamType>;
 pub type ClassType = ir::Type;
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum IntrinsicFunction {
-    Float4,
-}
-
-#[derive(PartialEq, Debug, Clone)]
 pub enum FunctionName {
-    Intrinsic(IntrinsicFunction),
+    Intrinsic(intrinsics::IntrinsicFactory),
     User(ir::FunctionId),
 }
 
@@ -658,6 +655,27 @@ impl ErrorTypeContext for Context {
     }
 }
 
+/// Create a map of all the intrinsic functions we need to parse
+fn get_intrinsics() -> HashMap<String, UnresolvedFunction> {
+
+    let funcs = intrinsics::get_intrinsics();
+
+    let mut strmap: HashMap<String, UnresolvedFunction> = HashMap::new();
+    for &(ref return_type, ref name, ref params, ref factory) in funcs {
+        let overload = FunctionOverload(FunctionName::Intrinsic(factory.clone()), return_type.clone(), params.to_vec());
+        match strmap.entry(name.to_string()) {
+            Entry::Occupied(mut occupied) => {
+                let &mut UnresolvedFunction(_, ref mut overloads) = occupied.get_mut();
+                overloads.push(overload);
+            },
+            Entry::Vacant(vacant) => {
+                vacant.insert(UnresolvedFunction(name.to_string(), vec![overload]));
+            },
+        }
+    }
+    strmap
+}
+
 fn parse_structuredtype(ty: &ast::StructuredType, struct_finder: &StructIdFinder) -> Result<ir::StructuredType, TyperError> {
     Ok(match *ty {
         ast::StructuredType::Data(ref data_type) => ir::StructuredType::Data(data_type.clone()),
@@ -704,20 +722,6 @@ fn parse_type(ty: &ast::Type, struct_finder: &StructIdFinder) -> Result<ir::Type
     })
 }
 
-fn get_intrinsics() -> HashMap<String, UnresolvedFunction> {
-    let mut map = HashMap::new();
-
-    fn t_float() -> ir::Type { ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(ir::ScalarType::Float))) };
-    fn t_float4() -> ir::Type { ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Vector(ir::ScalarType::Float, 4))) };
-
-    let (float4_str, float4_func) = ("float4".to_string(), FunctionName::Intrinsic(IntrinsicFunction::Float4));
-    map.insert(float4_str.clone(), UnresolvedFunction(float4_str.clone(), vec![
-        FunctionOverload(float4_func, t_float4(), vec![t_float(), t_float(), t_float(), t_float()])
-    ]));
-
-    map
-}
-
 fn find_function_type(function: UnresolvedFunction, actual_params: ParamArray) -> Result<ResolvedFunction, TyperError> {
     for overload in &function.1 {
         if overload.2 == actual_params {
@@ -738,23 +742,17 @@ fn find_method_type(method: UnresolvedMethod, actual_params: ParamArray) -> Resu
 
 fn write_function(function: ResolvedFunction, param_values: Vec<ir::Expression>) -> Result<TypedExpression, TyperError> {
     let ResolvedFunction(FunctionOverload(name, return_type, _)) = function;
-    let intrinsic = match name {
-        FunctionName::Intrinsic(intrinsic) => intrinsic,
+    match name {
+        FunctionName::Intrinsic(factory) => {
+            Ok(TypedExpression::Value(
+                ir::Expression::Intrinsic(Box::new(factory.create_intrinsic(&param_values))),
+                return_type
+            ))
+        },
         FunctionName::User(id) => {
-            return Ok(TypedExpression::Value(ir::Expression::Call(Box::new(ir::Expression::Function(id)), param_values), return_type))
+            Ok(TypedExpression::Value(ir::Expression::Call(Box::new(ir::Expression::Function(id)), param_values), return_type))
         },
-    };
-    Ok(TypedExpression::Value(ir::Expression::Intrinsic(Box::new(match intrinsic {
-        IntrinsicFunction::Float4 => {
-            assert_eq!(param_values.len(), 4);
-            ir::Intrinsic::Float4(
-                param_values[0].clone(),
-                param_values[1].clone(),
-                param_values[2].clone(),
-                param_values[3].clone()
-            )
-        },
-    })), return_type))
+    }
 }
 
 fn write_method(method: ResolvedMethod, param_values: Vec<ir::Expression>) -> Result<TypedExpression, TyperError> {

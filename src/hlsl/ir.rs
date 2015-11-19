@@ -53,12 +53,20 @@ pub enum Type {
 
 impl Type {
     pub fn from_scalar(scalar: ScalarType) -> Type { Type::Structured(StructuredType::Data(DataType::Scalar(scalar))) }
+    pub fn from_vector(scalar: ScalarType, dimension: u32) -> Type { Type::Structured(StructuredType::Data(DataType::Vector(scalar, dimension))) }
 
+    pub fn bool() -> Type { Type::from_scalar(ScalarType::Bool) }
+    pub fn booln(dim: u32) -> Type { Type::from_vector(ScalarType::Bool, dim) }
     pub fn uint() -> Type { Type::from_scalar(ScalarType::UInt) }
+    pub fn uintn(dim: u32) -> Type { Type::from_vector(ScalarType::UInt, dim) }
     pub fn int() -> Type { Type::from_scalar(ScalarType::Int) }
-    pub fn long() -> Type { Type::from_scalar(ScalarType::Int) }
+    pub fn intn(dim: u32) -> Type { Type::from_vector(ScalarType::Int, dim) }
     pub fn float() -> Type { Type::from_scalar(ScalarType::Float) }
+    pub fn floatn(dim: u32) -> Type { Type::from_vector(ScalarType::Float, dim) }
     pub fn double() -> Type { Type::from_scalar(ScalarType::Double) }
+    pub fn doublen(dim: u32) -> Type { Type::from_vector(ScalarType::Double, dim) }
+
+    pub fn long() -> Type { Type::from_scalar(ScalarType::Int) }
     pub fn float4x4() -> Type { Type::Structured(StructuredType::Data(DataType::Matrix(ScalarType::Float, 4, 4))) }
 }
 
@@ -67,6 +75,23 @@ pub use super::ast::UnaryOp as UnaryOp;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Intrinsic {
+
+    AllMemoryBarrier,
+    AllMemoryBarrierWithGroupSync,
+
+    AsInt(Expression),
+    AsUInt(Expression),
+    AsFloat(Expression),
+    AsDouble(Expression, Expression),
+
+    Clamp(Expression, Expression, Expression),
+
+    Min(Expression, Expression),
+    Max(Expression, Expression),
+
+    // Constructors are here for the moment but should
+    // probably be their own dedicated node
+    // The varying number of parameters makes them awkward to parse
     Float4(Expression, Expression, Expression, Expression),
 
     BufferLoad(Expression, Expression),

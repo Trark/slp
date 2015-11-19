@@ -327,6 +327,7 @@ fn transpile_intrinsic(intrinsic: &src::Intrinsic, context: &Context) -> Result<
             Ok(dst::Expression::ArraySubscript(cl_buffer, cl_loc))
         },
         &src::Intrinsic::StructuredBufferLoad(_, _) => unimplemented!(),
+        _ => unimplemented!(),
     }
 }
 

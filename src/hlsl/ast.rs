@@ -78,18 +78,6 @@ pub enum Type {
     Array(Box<Type>),
 }
 
-impl Type {
-    pub fn from_scalar(scalar: ScalarType) -> Type { Type::Structured(StructuredType::Data(DataType::Scalar(scalar))) }
-
-    pub fn uint() -> Type { Type::from_scalar(ScalarType::UInt) }
-    pub fn int() -> Type { Type::from_scalar(ScalarType::Int) }
-    pub fn long() -> Type { Type::from_scalar(ScalarType::Int) }
-    pub fn float() -> Type { Type::from_scalar(ScalarType::Float) }
-    pub fn double() -> Type { Type::from_scalar(ScalarType::Double) }
-    pub fn float4x4() -> Type { Type::Structured(StructuredType::Data(DataType::Matrix(ScalarType::Float, 4, 4))) }
-    pub fn custom(name: &str) -> Type { Type::Structured(StructuredType::Custom(name.to_string())) }
-}
-
 #[derive(PartialEq, Debug, Clone)]
 pub enum BinOp {
     Add,
@@ -272,4 +260,17 @@ pub enum RootDefinition {
 pub struct Module {
     pub entry_point: String,
     pub root_definitions: Vec<RootDefinition>,
+}
+
+
+impl Type {
+    pub fn from_scalar(scalar: ScalarType) -> Type { Type::Structured(StructuredType::Data(DataType::Scalar(scalar))) }
+
+    pub fn uint() -> Type { Type::from_scalar(ScalarType::UInt) }
+    pub fn int() -> Type { Type::from_scalar(ScalarType::Int) }
+    pub fn long() -> Type { Type::from_scalar(ScalarType::Int) }
+    pub fn float() -> Type { Type::from_scalar(ScalarType::Float) }
+    pub fn double() -> Type { Type::from_scalar(ScalarType::Double) }
+    pub fn float4x4() -> Type { Type::Structured(StructuredType::Data(DataType::Matrix(ScalarType::Float, 4, 4))) }
+    pub fn custom(name: &str) -> Type { Type::Structured(StructuredType::Custom(name.to_string())) }
 }
