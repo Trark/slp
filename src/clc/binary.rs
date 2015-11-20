@@ -381,6 +381,14 @@ fn print_statement(statement: &Statement, printer: &mut Printer) {
             printer.print(")");
             print_statement(statement, printer);
         },
+        &Statement::While(ref cond, ref statement) => {
+            printer.print("while");
+            printer.space();
+            printer.print("(");
+            print_expression(cond, printer);
+            printer.print(")");
+            print_statement(statement, printer);
+        },
         _ => unimplemented!(),
     }
 }

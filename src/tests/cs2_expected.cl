@@ -46,4 +46,9 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __constant ui
 	{
 		myFunc_0(x);
 	}
+	int y = 10;
+	while (y > 0)
+	{
+		y--;
+	}
 }

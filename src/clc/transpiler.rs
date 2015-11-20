@@ -429,7 +429,13 @@ fn transpile_statement(statement: &src::Statement, context: &mut Context) -> Res
             context.pop_scope();
             Ok(dst::Statement::For(cl_init, cl_cond, cl_update, cl_statement))
         },
-        &src::Statement::While(_, _, _) => unimplemented!(),
+        &src::Statement::While(ref cond, ref statement, ref decls) => {
+            context.push_scope(decls);
+            let cl_cond = try!(transpile_expression(cond, context));
+            let cl_statement = Box::new(try!(transpile_statement(statement, context)));
+            context.pop_scope();
+            Ok(dst::Statement::While(cl_cond, cl_statement))
+        },
         &src::Statement::Return(_) => unimplemented!(),
     }
 }

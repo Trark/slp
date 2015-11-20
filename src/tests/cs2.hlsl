@@ -48,4 +48,9 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     {
         myFunc(x);
     }
+    int y = 10;
+    while (y > 0)
+    {
+        y--;
+    }
 }
