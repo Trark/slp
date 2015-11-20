@@ -400,41 +400,34 @@ fn transpile_statement(statement: &src::Statement, context: &mut Context) -> Res
     match statement {
         &src::Statement::Expression(ref expr) => Ok(dst::Statement::Expression(try!(transpile_expression(expr, context)))),
         &src::Statement::Var(ref vd) => Ok(dst::Statement::Var(try!(transpile_vardef(vd, context)))),
-        &src::Statement::Block(ref statements, ref decls) => {
+        &src::Statement::Block(src::ScopeBlock(ref statements, ref decls)) => {
             context.push_scope(decls);
-            let cl_statements = try!(statements.iter().fold(Ok(vec![]),
-                |result, statement| {
-                    let mut vec = try!(result);
-                    let cl_statement = try!(transpile_statement(statement, context));
-                    vec.push(cl_statement);
-                    Ok(vec)
-                }
-            ));
+            let cl_statements = try!(transpile_statements(statements, context));
             context.pop_scope();
             Ok(dst::Statement::Block(cl_statements))
         },
-        &src::Statement::If(ref cond, ref statement, ref decls) => {
+        &src::Statement::If(ref cond, src::ScopeBlock(ref statements, ref decls)) => {
             context.push_scope(decls);
             let cl_cond = try!(transpile_expression(cond, context));
-            let cl_statement = Box::new(try!(transpile_statement(statement, context)));
+            let cl_statements = try!(transpile_statements(statements, context));
             context.pop_scope();
-            Ok(dst::Statement::If(cl_cond, cl_statement))
+            Ok(dst::Statement::If(cl_cond, Box::new(dst::Statement::Block(cl_statements))))
         },
-        &src::Statement::For(ref init, ref cond, ref update, ref statement, ref decls) => {
+        &src::Statement::For(ref init, ref cond, ref update, src::ScopeBlock(ref statements, ref decls)) => {
             context.push_scope(decls);
             let cl_init = try!(transpile_condition(init, context));
             let cl_cond = try!(transpile_expression(cond, context));
             let cl_update = try!(transpile_expression(update, context));
-            let cl_statement = Box::new(try!(transpile_statement(statement, context)));
+            let cl_statements= try!(transpile_statements(statements, context));
             context.pop_scope();
-            Ok(dst::Statement::For(cl_init, cl_cond, cl_update, cl_statement))
+            Ok(dst::Statement::For(cl_init, cl_cond, cl_update, Box::new(dst::Statement::Block(cl_statements))))
         },
-        &src::Statement::While(ref cond, ref statement, ref decls) => {
+        &src::Statement::While(ref cond, src::ScopeBlock(ref statements, ref decls)) => {
             context.push_scope(decls);
             let cl_cond = try!(transpile_expression(cond, context));
-            let cl_statement = Box::new(try!(transpile_statement(statement, context)));
+            let cl_statements = try!(transpile_statements(statements, context));
             context.pop_scope();
-            Ok(dst::Statement::While(cl_cond, cl_statement))
+            Ok(dst::Statement::While(cl_cond, Box::new(dst::Statement::Block(cl_statements))))
         },
         &src::Statement::Return(_) => unimplemented!(),
     }

@@ -158,13 +158,16 @@ pub enum Condition {
 }
 
 #[derive(PartialEq, Debug, Clone)]
+pub struct ScopeBlock(pub Vec<Statement>, pub ScopedDeclarations);
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum Statement {
     Expression(Expression),
     Var(VarDef),
-    Block(Vec<Statement>, ScopedDeclarations),
-    If(Expression, Box<Statement>, ScopedDeclarations),
-    For(Condition, Expression, Expression, Box<Statement>, ScopedDeclarations),
-    While(Expression, Box<Statement>, ScopedDeclarations),
+    Block(ScopeBlock),
+    If(Expression, ScopeBlock),
+    For(Condition, Expression, Expression, ScopeBlock),
+    While(Expression, ScopeBlock),
     Return(Expression),
 }
 

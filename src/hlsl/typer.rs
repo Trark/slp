@@ -1003,8 +1003,37 @@ fn parse_condition(ast: &ast::Condition, context: ScopeContext) -> Result<(ir::C
     }
 }
 
+/// Parse the statement inside a block caused by an statement (if, for, while, etc),
+/// with the intention of merging the scope created by the outer statement and the
+/// scope of it's inner statement. This is to force a scope on single statements
+/// inside the outer statement and cause a name conflict on using the same variable
+/// in the inner statement as in the init expression of a for loop
+///
+/// A block statement will be parsed as if it doesn't create a new scope
+///
+/// Any other statement will be parsed normally (with the provided ScopeContext),
+/// meaning any declarations it makes will end up in the outer statements scoped
+/// declarations.
+///
+/// The given context is the newly created scoped context for the outer statement.
+/// block_context is consumed and turned into a declarations list because all uses
+/// of this execute it on the inner statement as the last operation in parsing a
+/// loop
+fn parse_scopeblock(ast: &ast::Statement, block_context: ScopeContext) -> Result<ir::ScopeBlock, TyperError> {
+    match *ast {
+        ast::Statement::Block(ref statement_vec) => {
+            let (statements, block_context) = try!(parse_statement_vec(statement_vec, block_context));
+            Ok(ir::ScopeBlock(statements, block_context.destruct()))
+        },
+        _ => {
+            let (ir_statement, block_context) = try!(parse_statement(ast, block_context));
+            let ir_vec = match ir_statement { Some(st) => vec![st], None => vec![] };
+            Ok(ir::ScopeBlock(ir_vec, block_context.destruct()))
+        },
+    }
+}
+
 fn parse_statement(ast: &ast::Statement, context: ScopeContext) -> Result<(Option<ir::Statement>, ScopeContext), TyperError> {
-    fn empty_block() -> ir::Statement { ir::Statement::Block(vec![], ir::ScopedDeclarations { variables: HashMap::new() }) }
     match ast {
         &ast::Statement::Empty => Ok((None, context)),
         &ast::Statement::Expression(ref expr) => {
@@ -1021,33 +1050,27 @@ fn parse_statement(ast: &ast::Statement, context: ScopeContext) -> Result<(Optio
             let scoped_context = ScopeContext::from_scope(&context);
             let (statements, scoped_context) = try!(parse_statement_vec(statement_vec, scoped_context));
             let decls = scoped_context.destruct();
-            Ok((Some(ir::Statement::Block(statements, decls)), context))
+            Ok((Some(ir::Statement::Block(ir::ScopeBlock(statements, decls))), context))
         },
         &ast::Statement::If(ref cond, ref statement) => {
             let scoped_context = ScopeContext::from_scope(&context);
             let cond_ir = try!(parse_expr_value_only(cond, &scoped_context));
-            let (statement_ir_opt, scoped_context) = try!(parse_statement(statement, scoped_context));
-            let decls = scoped_context.destruct();
-            let statement_ir = Box::new(match statement_ir_opt { Some(statement_ir) => statement_ir, None => empty_block() });
-            Ok((Some(ir::Statement::If(cond_ir, statement_ir, decls)), context))
+            let scope_block = try!(parse_scopeblock(statement, scoped_context));
+            Ok((Some(ir::Statement::If(cond_ir, scope_block)), context))
         },
         &ast::Statement::For(ref init, ref cond, ref iter, ref statement) =>  {
             let scoped_context = ScopeContext::from_scope(&context);
             let (init_ir, scoped_context) = try!(parse_condition(init, scoped_context));
             let cond_ir = try!(parse_expr_value_only(cond, &scoped_context));
             let iter_ir = try!(parse_expr_value_only(iter, &scoped_context));
-            let (statement_ir_opt, scoped_context) = try!(parse_statement(statement, scoped_context));
-            let decls = scoped_context.destruct();
-            let statement_ir = Box::new(match statement_ir_opt { Some(statement_ir) => statement_ir, None => empty_block() });
-            Ok((Some(ir::Statement::For(init_ir, cond_ir, iter_ir, statement_ir, decls)), context))
+            let scope_block = try!(parse_scopeblock(statement, scoped_context));
+            Ok((Some(ir::Statement::For(init_ir, cond_ir, iter_ir, scope_block)), context))
         },
         &ast::Statement::While(ref cond, ref statement) => {
             let scoped_context = ScopeContext::from_scope(&context);
             let cond_ir = try!(parse_expr_value_only(cond, &scoped_context));
-            let (statement_ir_opt, scoped_context) = try!(parse_statement(statement, scoped_context));
-            let decls = scoped_context.destruct();
-            let statement_ir = Box::new(match statement_ir_opt { Some(statement_ir) => statement_ir, None => empty_block() });
-            Ok((Some(ir::Statement::While(cond_ir, statement_ir, decls)), context))
+            let scope_block = try!(parse_scopeblock(statement, scoped_context));
+            Ok((Some(ir::Statement::While(cond_ir, scope_block)), context))
         },
         &ast::Statement::Return(ref expr) => {
             match try!(parse_expr(expr, &context)) {
