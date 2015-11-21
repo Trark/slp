@@ -54,4 +54,5 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
         y--;
         myFunc((uint)y);
     }
+    float u = y + 5.4f;
 }

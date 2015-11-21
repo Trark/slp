@@ -3,6 +3,7 @@
 #[derive(PartialEq, Debug, Clone)]
 pub enum ScalarType {
     Bool,
+    UntypedInt,
     Int,
     UInt,
     Half,

@@ -47,9 +47,10 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __constant ui
 		myFunc_0(x);
 	}
 	int y = 10;
-	while (y > 0)
+	while (y > (int)0)
 	{
 		y--;
 		myFunc_0((uint)y);
 	}
+	float u = (float)y + 5.4f;
 }

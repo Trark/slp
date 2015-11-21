@@ -242,6 +242,7 @@ fn transpile_scalartype(scalartype: &src::ScalarType) -> Result<dst::Scalar, Tra
         &src::ScalarType::Half => Ok(dst::Scalar::Half),
         &src::ScalarType::Float => Ok(dst::Scalar::Float),
         &src::ScalarType::Double => Ok(dst::Scalar::Double),
+        &src::ScalarType::UntypedInt => panic!(),
     }
 }
 

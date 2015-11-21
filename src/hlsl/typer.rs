@@ -7,6 +7,7 @@ use super::ir;
 use super::ast;
 use super::intrinsics;
 use super::intrinsics::IntrinsicFactory;
+use super::casting::ImplicitConversion;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum TyperError {
@@ -781,13 +782,95 @@ fn write_method(method: ResolvedMethod, param_values: Vec<ir::Expression>) -> Re
 
 fn parse_literal(ast: &ast::Literal) -> Result<TypedExpression, TyperError> {
     match ast {
-        &ast::Literal::Int(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Int(i)), ir::Type::int())),
+        &ast::Literal::Int(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Int(i)), ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(ir::ScalarType::UntypedInt))))),
         &ast::Literal::Uint(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Uint(i)), ir::Type::uint())),
-        &ast::Literal::Long(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Long(i)), ir::Type::long())),
+        &ast::Literal::Long(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Long(i)), ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(ir::ScalarType::UntypedInt))))),
         &ast::Literal::Half(f) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Half(f)), ir::Type::float())),
         &ast::Literal::Float(f) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Float(f)), ir::Type::float())),
         &ast::Literal::Double(f) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Double(f)), ir::Type::double())),
     }
+}
+
+fn resolve_arithmetic_types(binop: &ir::BinOp, left: &ir::Type, right: &ir::Type, context: &ScopeContext) -> Result<(ImplicitConversion, ImplicitConversion), TyperError> {
+    use hlsl::ir::Type;
+    use hlsl::ir::StructuredType;
+    use hlsl::ir::DataType;
+    use hlsl::ir::ScalarType;
+
+    fn common_real_type(left: &ScalarType, right: &ScalarType) -> Result<ir::ScalarType, ()> {
+
+        // The limited number of hlsl types means these happen to always have one type being the common type
+        fn get_order(ty: &ScalarType) -> Result<u32, ()> {
+            match *ty {
+                ScalarType::Int => Ok(0),
+                ScalarType::UInt => Ok(1),
+                ScalarType::Half => Ok(2),
+                ScalarType::Float => Ok(3),
+                ScalarType::Double => Ok(4),
+                _ => Err(()),
+            }
+        }
+
+        let left = match *left { ScalarType::UntypedInt => ScalarType::Int, ScalarType::Bool => return Err(()), ref scalar => scalar.clone() };
+        let right = match *right { ScalarType::UntypedInt => ScalarType::Int, ScalarType::Bool => return Err(()), ref scalar => scalar.clone() };
+
+        let left_order = try!(get_order(&left));
+        let right_order = try!(get_order(&right));
+
+        if left_order > right_order { Ok(left) } else { Ok(right) }
+    }
+
+    fn do_noerror(_: &ir::BinOp, left: &ir::Type, right: &ir::Type) -> Result<(ImplicitConversion, ImplicitConversion), ()> {
+        let (left, right, common) = match (left, right) {
+            (&Type::Structured(StructuredType::Data(DataType::Scalar(ref ls))),
+                &ir::Type::Structured(ir::StructuredType::Data(DataType::Scalar(ref rs)))) => {
+                let common_scalar = try!(common_real_type(ls, rs));
+                let common = ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(common_scalar)));
+                (left, right, common)
+            },
+            (&Type::Structured(StructuredType::Data(DataType::Vector(ref ls, ref x1))),
+                &Type::Structured(StructuredType::Data(DataType::Vector(ref rs, ref x2)))) if x1 == x2 => {
+                let common_scalar = try!(common_real_type(ls, rs));
+                let common = ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Vector(common_scalar, *x2)));
+                (left, right, common)
+            },
+            (&Type::Structured(StructuredType::Data(DataType::Matrix(ref ls, ref x1, ref y1))),
+                &Type::Structured(StructuredType::Data(DataType::Matrix(ref rs, ref x2, ref y2)))) if x1 == x2 && y1 == y2 => {
+                let common_scalar = try!(common_real_type(ls, rs));
+                let common = ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Matrix(common_scalar, *x2, *y2)));
+                (left, right, common)
+            },
+            _ => return Err(()),
+        };
+        let lc = try!(ImplicitConversion::find(left, &common));
+        let rc = try!(ImplicitConversion::find(right, &common));
+        Ok((lc, rc))
+    }
+
+    match do_noerror(binop, left, right) {
+        Ok(res) => Ok(res),
+        Err(_) => Err(TyperError::BinaryOperationWrongTypes(binop.clone(), context.ir_type_to_error_type(left), context.ir_type_to_error_type(right))),
+    }
+}
+
+fn parse_expr_binop(op: &ast::BinOp, lhs: &ast::Expression, rhs: &ast::Expression, context: &ScopeContext) -> Result<TypedExpression, TyperError> {
+    let lhs_texp = try!(parse_expr(lhs, context));
+    let rhs_texp = try!(parse_expr(rhs, context));
+    let lhs_pt = context.typed_expression_to_error_type(&lhs_texp);
+    let rhs_pt = context.typed_expression_to_error_type(&rhs_texp);
+    let (lhs_ir, lhs_type) = match lhs_texp {
+        TypedExpression::Value(expr_ir, expr_ty) => (expr_ir, expr_ty),
+        _ => return Err(TyperError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt)),
+    };
+    let (rhs_ir, rhs_type) = match rhs_texp {
+        TypedExpression::Value(expr_ir, expr_ty) => (expr_ir, expr_ty),
+        _ => return Err(TyperError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt)),
+    };
+    let (lhs_cast, rhs_cast) = try!(resolve_arithmetic_types(op, &lhs_type, &rhs_type, context));
+    assert_eq!(lhs_cast.get_target_type(), rhs_cast.get_target_type());
+    let lhs_final = lhs_cast.apply(lhs_ir);
+    let rhs_final = rhs_cast.apply(rhs_ir);
+    Ok(TypedExpression::Value(ir::Expression::BinaryOperation(op.clone(), Box::new(lhs_final), Box::new(rhs_final)), rhs_cast.get_target_type()))
 }
 
 fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpression, TyperError> {
@@ -802,25 +885,7 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
                 _ => Err(TyperError::UnaryOperationWrongTypes(op.clone(), ErrorType::Unknown)),
             }
         },
-        &ast::Expression::BinaryOperation(ref op, ref lhs, ref rhs) => {
-            let lhs_texp = try!(parse_expr(lhs, context));
-            let rhs_texp = try!(parse_expr(rhs, context));
-            let lhs_pt = context.typed_expression_to_error_type(&lhs_texp);
-            let rhs_pt = context.typed_expression_to_error_type(&rhs_texp);
-            let (lhs_ir, lhs_type) = match lhs_texp {
-                TypedExpression::Value(expr_ir, expr_ty) => (expr_ir, expr_ty),
-                _ => return Err(TyperError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt)),
-            };
-            let (rhs_ir, rhs_type) = match rhs_texp {
-                TypedExpression::Value(expr_ir, expr_ty) => (expr_ir, expr_ty),
-                _ => return Err(TyperError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt)),
-            };
-            if lhs_type != rhs_type {
-                Err(TyperError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt))
-            } else {
-                Ok(TypedExpression::Value(ir::Expression::BinaryOperation(op.clone(), Box::new(lhs_ir), Box::new(rhs_ir)), lhs_type.clone()))
-            }
-        },
+        &ast::Expression::BinaryOperation(ref op, ref lhs, ref rhs) => parse_expr_binop(op, lhs, rhs, context),
         &ast::Expression::ArraySubscript(ref array, ref subscript) => {
             let array_texp = try!(parse_expr(array, context));
             let subscript_texp = try!(parse_expr(subscript, context));
@@ -843,12 +908,12 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
                 },
                 _ => return Err(TyperError::ArrayIndexingNonArrayType),
             };
-            match subscript_ty {
-                ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(ir::ScalarType::Int))) |
-                ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(ir::ScalarType::UInt))) => { },
-                _ => return Err(TyperError::ArraySubscriptIndexNotInteger),
+            let cast_to_int_result = ImplicitConversion::find(&subscript_ty, &ir::Type::int());
+            let subscript_final = match cast_to_int_result {
+                Err(_) => return Err(TyperError::ArraySubscriptIndexNotInteger),
+                Ok(cast) => cast.apply(subscript_ir),
             };
-            Ok(TypedExpression::Value(ir::Expression::ArraySubscript(Box::new(array_ir), Box::new(subscript_ir)), indexed_type))
+            Ok(TypedExpression::Value(ir::Expression::ArraySubscript(Box::new(array_ir), Box::new(subscript_final)), indexed_type))
         },
         &ast::Expression::Member(ref composite, ref member) => {
             let composite_texp = try!(parse_expr(composite, context));
