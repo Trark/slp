@@ -303,8 +303,16 @@ fn print_expression_inner(expression: &Expression, last_precedence: u32, printer
             }
             printer.print(")");
         },
+        &Expression::Cast(ref ty, ref expr) => {
+            let prec = 2;
+            if last_precedence <= prec { printer.print("(") }
+            printer.print("(");
+            print_typename(ty, printer);
+            printer.print(")");
+            print_expression_inner(expr, prec, printer);
+            if last_precedence <= prec { printer.print(")") }
+        },
         &Expression::Intrinsic(ref intrinsic) => print_intrinsic(intrinsic, printer),
-        _ => unimplemented!(),
     }
 }
 

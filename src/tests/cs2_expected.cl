@@ -50,5 +50,6 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __constant ui
 	while (y > 0)
 	{
 		y--;
+		myFunc_0((uint)y);
 	}
 }

@@ -369,7 +369,11 @@ fn transpile_expression(expression: &src::Expression, context: &Context) -> Resu
             };
             Ok(dst::Expression::Call(Box::new(func_expr), params_exprs))
         },
-        &src::Expression::Cast(_, _) => unimplemented!(),
+        &src::Expression::Cast(ref cast_type, ref expr) => {
+            let cl_type = try!(transpile_type(cast_type, context));
+            let cl_expr = Box::new(try!(transpile_expression(expr, context)));
+            Ok(dst::Expression::Cast(cl_type, cl_expr))
+        },
         &src::Expression::Intrinsic(ref intrinsic) => transpile_intrinsic(intrinsic, context),
     }
 }
