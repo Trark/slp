@@ -379,8 +379,8 @@ fn expr_paren(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason
     alt!(input,
         delimited!(token!(Token::LeftParen), expr, token!(Token::RightParen)) |
         parse_variablename => { |name| { Expression::Variable(name) } } |
-        token!(Token::LiteralInt(i) => Expression::Literal(Literal::Int(i))) |
-        token!(Token::LiteralUint(i) => Expression::Literal(Literal::Uint(i))) |
+        token!(Token::LiteralInt(i) => Expression::Literal(Literal::UntypedInt(i))) |
+        token!(Token::LiteralUint(i) => Expression::Literal(Literal::UInt(i))) |
         token!(Token::LiteralLong(i) => Expression::Literal(Literal::Long(i))) |
         token!(Token::LiteralHalf(i) => Expression::Literal(Literal::Half(i))) |
         token!(Token::LiteralFloat(i) => Expression::Literal(Literal::Float(i))) |
@@ -915,7 +915,7 @@ fn test_expr() {
     let expr_str_fail = parse_result_from_str(Box::new(expr));
 
     assert_eq!(expr_str("a"), exp_var("a"));
-    assert_eq!(expr_str("4"), Expression::Literal(Literal::Int(4)));
+    assert_eq!(expr_str("4"), Expression::Literal(Literal::UntypedInt(4)));
     assert_eq!(expr_str("a+b"), Expression::BinaryOperation(BinOp::Add, bexp_var("a"), bexp_var("b")));
     assert_eq!(expr_str("a*b"), Expression::BinaryOperation(BinOp::Multiply, bexp_var("a"), bexp_var("b")));
     assert_eq!(expr_str("a + b"), Expression::BinaryOperation(BinOp::Add, bexp_var("a"), bexp_var("b")));
@@ -1123,7 +1123,7 @@ fn test_statement() {
     );
     assert_eq!(statement_str("for (uint i = 0; i; i++) { func(); }"),
         Statement::For(
-            Condition::Assignment(VarDef::new("i".to_string(), Type::uint(), Some(Expression::Literal(Literal::Int(0))))),
+            Condition::Assignment(VarDef::new("i".to_string(), Type::uint(), Some(Expression::Literal(Literal::UntypedInt(0))))),
             exp_var("i"),
             Expression::UnaryOperation(UnaryOp::PostfixIncrement, bexp_var("i")),
             Box::new(Statement::Block(vec![Statement::Expression(Expression::Call(bexp_var("func"), vec![]))]))

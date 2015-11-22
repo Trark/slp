@@ -111,8 +111,9 @@ pub enum UnaryOp {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Literal {
+    UntypedInt(u64),
     Int(u64),
-    Uint(u64),
+    UInt(u64),
     Long(u64),
     Half(f32),
     Float(f32),

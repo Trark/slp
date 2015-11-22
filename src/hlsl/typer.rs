@@ -782,8 +782,9 @@ fn write_method(method: ResolvedMethod, param_values: Vec<ir::Expression>) -> Re
 
 fn parse_literal(ast: &ast::Literal) -> Result<TypedExpression, TyperError> {
     match ast {
-        &ast::Literal::Int(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Int(i)), ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(ir::ScalarType::UntypedInt))))),
-        &ast::Literal::Uint(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Uint(i)), ir::Type::uint())),
+        &ast::Literal::UntypedInt(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::UntypedInt(i)), ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(ir::ScalarType::UntypedInt))))),
+        &ast::Literal::Int(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Int(i)), ir::Type::int())),
+        &ast::Literal::UInt(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::UInt(i)), ir::Type::uint())),
         &ast::Literal::Long(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Long(i)), ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(ir::ScalarType::UntypedInt))))),
         &ast::Literal::Half(f) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Half(f)), ir::Type::float())),
         &ast::Literal::Float(f) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Float(f)), ir::Type::float())),
