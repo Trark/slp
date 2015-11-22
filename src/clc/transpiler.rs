@@ -77,17 +77,18 @@ impl Context {
                     Entry::Vacant(vacant) => { vacant.insert(vec![id.clone()]); },
                 }
             };
-            for (key, ids) in grouped_functions {
+            for (key, mut ids) in grouped_functions {
                 assert!(ids.len() > 0);
                 if ids.len() == 1 {
                     let identifier = context.make_identifier(&key);
                     let ret = context.function_name_map.insert(ids[0], identifier);
                     assert_eq!(ret, None);
                 } else {
-                    for id in ids {
-                        let gen = key.clone() + "_" + &id.to_string();
+                    ids.sort();
+                    for (index, id) in ids.iter().enumerate() {
+                        let gen = key.clone() + "_" + &index.to_string();
                         let identifier = context.make_identifier(&gen);
-                        let ret = context.function_name_map.insert(id, identifier);
+                        let ret = context.function_name_map.insert(*id, identifier);
                         assert_eq!(ret, None);
                     }
                 }
