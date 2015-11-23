@@ -8,6 +8,7 @@ use super::ast;
 use super::intrinsics;
 use super::intrinsics::IntrinsicFactory;
 use super::casting::ImplicitConversion;
+use super::casting::ConversionPriority;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum TyperError {
@@ -723,14 +724,7 @@ fn parse_type(ty: &ast::Type, struct_finder: &StructIdFinder) -> Result<ir::Type
     })
 }
 
-fn find_function_type(function: UnresolvedFunction, actual_params: ParamArray) -> Result<ResolvedFunction, TyperError> {
-    for overload in &function.1 {
-        if overload.2 == actual_params {
-            return Ok(ResolvedFunction(overload.clone()))
-        };
-    };
-    Err(TyperError::FunctionArgumentTypeMismatch(function, actual_params))
-}
+
 
 fn find_method_type(method: UnresolvedMethod, actual_params: ParamArray) -> Result<ResolvedMethod, TyperError> {
     for overload in &method.2 {
@@ -741,7 +735,60 @@ fn find_method_type(method: UnresolvedMethod, actual_params: ParamArray) -> Resu
     Err(TyperError::MethodArgumentTypeMismatch(method, actual_params))
 }
 
-fn write_function(function: ResolvedFunction, param_values: Vec<ir::Expression>) -> Result<TypedExpression, TyperError> {
+fn write_function(unresolved: UnresolvedFunction, param_types: ParamArray, param_values: Vec<ir::Expression>) -> Result<TypedExpression, TyperError> {
+
+    fn find_overload_casts(overload: &FunctionOverload, param_types: &ParamArray) -> Result<Vec<ImplicitConversion>, ()> {
+        let mut overload_casts = Vec::with_capacity(param_types.len());
+        for (required_type, source_type) in overload.2.iter().zip(param_types.iter()) {
+            if let Ok(cast) = ImplicitConversion::find(source_type, required_type) {
+                overload_casts.push(cast)
+            } else {
+                return Err(())
+            }
+        }
+        Ok(overload_casts)
+    }
+
+    fn find_function_type(function: UnresolvedFunction, param_types: &ParamArray) -> Result<ResolvedFunction, TyperError> {
+        let mut casts = Vec::with_capacity(function.1.len());
+        for overload in &function.1 {
+            if param_types.len() == overload.2.len() {
+                if let Ok(param_casts) = find_overload_casts(overload, param_types) {
+                    casts.push((overload.clone(), param_casts))
+                }
+            }
+        };
+        for &(ref candidate, ref candidate_casts) in &casts {
+            let mut winning = true;
+            for &(ref against, ref against_casts) in &casts {
+                if candidate == against {
+                    continue;
+                }
+                assert_eq!(candidate_casts.len(), against_casts.len());
+                let mut at_least_one_better_than = false;
+                let mut not_worse_than = true;
+                for (candidate_cast, against_cast) in candidate_casts.iter().zip(against_casts) {
+                    let candidate_rank = candidate_cast.get_rank();
+                    let against_rank = against_cast.get_rank();
+                    match candidate_rank.compare(&against_rank) {
+                        ConversionPriority::Better => at_least_one_better_than = true,
+                        ConversionPriority::Equal => { },
+                        ConversionPriority::Worse => not_worse_than = false,
+                    };
+                }
+                if !at_least_one_better_than || !not_worse_than {
+                    winning = false;
+                    break;
+                }
+            }
+            if winning {
+                return Ok(ResolvedFunction(candidate.clone()));
+            }
+        }
+        Err(TyperError::FunctionArgumentTypeMismatch(function, param_types.clone()))
+    }
+    let function = try!(find_function_type(unresolved, &param_types));
+
     let ResolvedFunction(FunctionOverload(name, return_type, _)) = function;
     match name {
         FunctionName::Intrinsic(factory) => {
@@ -1001,10 +1048,7 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
                 params_types.push(expr_ty);
             };
             match func_texp {
-                TypedExpression::Function(unresolved) => {
-                    let function = try!(find_function_type(unresolved, params_types));
-                    write_function(function, params_ir)
-                },
+                TypedExpression::Function(unresolved) => write_function(unresolved, params_types, params_ir),
                 TypedExpression::Method(unresolved) => {
                     let method = try!(find_method_type(unresolved, params_types));
                     write_method(method, params_ir)

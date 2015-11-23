@@ -27,13 +27,19 @@ use super::ir::*;
 // I was going to try to implement nice logic in here, but I honestly have no idea what rules govern these priorities.
 
 #[derive(PartialEq, Debug, Clone)]
-
 pub enum ConversionRank {
     Exact,
     Promotion,
     IntToBool,
     Conversion,
     HalfIsASecondClassCitizen,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum ConversionPriority {
+    Better,
+    Equal,
+    Worse,
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -48,6 +54,30 @@ struct NumericCast(ScalarType, ScalarType, NumericDimension);
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct ImplicitConversion(Type, Option<NumericCast>);
+
+impl ConversionRank {
+    pub fn compare(&self, other: &ConversionRank) -> ConversionPriority {
+        let my_order = self.order();
+        let other_order = other.order();
+        match (my_order < other_order, my_order <= other_order) {
+            (false, false) => ConversionPriority::Worse,
+            (false, true) => ConversionPriority::Equal,
+            (true, false) => unreachable!(),
+            (true, true) => ConversionPriority::Better,
+        }
+    }
+
+    fn order(&self) -> u32 {
+        match *self {
+            ConversionRank::Exact => 0,
+            ConversionRank::Promotion => 1,
+            ConversionRank::IntToBool => 2,
+            ConversionRank::Conversion => 3,
+            ConversionRank::HalfIsASecondClassCitizen => 4,
+        }
+    }
+}
+
 
 impl NumericCast {
 
