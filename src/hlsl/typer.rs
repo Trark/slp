@@ -34,8 +34,7 @@ pub enum TyperError {
     CallOnNonFunction,
 
     FunctionPassedToAnotherFunction(ErrorType, ErrorType),
-    FunctionArgumentTypeMismatch(UnresolvedFunction, ParamArray),
-    MethodArgumentTypeMismatch(UnresolvedMethod, ParamArray),
+    FunctionArgumentTypeMismatch(Vec<FunctionOverload>, ParamArray),
 
     UnaryOperationWrongTypes(ir::UnaryOp, ErrorType),
     BinaryOperationWrongTypes(ir::BinOp, ErrorType, ErrorType),
@@ -72,25 +71,10 @@ pub struct ResolvedFunction(pub FunctionOverload);
 pub struct UnresolvedFunction(pub String, pub Vec<FunctionOverload>);
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum IntrinsicMethod {
-    BufferLoad,
-    StructuredBufferLoad,
-}
+pub struct ResolvedMethod(pub ClassType, pub FunctionOverload, ir::Expression);
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum MethodName {
-    Intrinsic(IntrinsicMethod),
-    User(ir::FunctionId),
-}
-
-#[derive(PartialEq, Debug, Clone)]
-pub struct MethodOverload(pub MethodName, pub ReturnType, pub ParamArray);
-
-#[derive(PartialEq, Debug, Clone)]
-pub struct ResolvedMethod(pub ClassType, pub MethodOverload, ir::Expression);
-
-#[derive(PartialEq, Debug, Clone)]
-pub struct UnresolvedMethod(pub String, pub ClassType, pub Vec<MethodOverload>, ir::Expression);
+pub struct UnresolvedMethod(pub String, pub ClassType, pub Vec<FunctionOverload>, ir::Expression);
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum ErrorType {
@@ -126,7 +110,6 @@ impl error::Error for TyperError {
 
             TyperError::FunctionPassedToAnotherFunction(_, _) => "functions can not be passed to other functions",
             TyperError::FunctionArgumentTypeMismatch(_, _) => "wrong parameters given to function",
-            TyperError::MethodArgumentTypeMismatch(_, _) => "wrong paramters given to method",
 
             TyperError::UnaryOperationWrongTypes(_, _) => "operation does not support the given types",
             TyperError::BinaryOperationWrongTypes(_, _, _) => "operation does not support the given types",
@@ -724,18 +707,7 @@ fn parse_type(ty: &ast::Type, struct_finder: &StructIdFinder) -> Result<ir::Type
     })
 }
 
-
-
-fn find_method_type(method: UnresolvedMethod, actual_params: ParamArray) -> Result<ResolvedMethod, TyperError> {
-    for overload in &method.2 {
-        if overload.2 == actual_params {
-            return Ok(ResolvedMethod(method.1, overload.clone(), method.3))
-        };
-    };
-    Err(TyperError::MethodArgumentTypeMismatch(method, actual_params))
-}
-
-fn write_function(unresolved: UnresolvedFunction, param_types: ParamArray, param_values: Vec<ir::Expression>) -> Result<TypedExpression, TyperError> {
+fn find_function_type(overloads: &Vec<FunctionOverload>, param_types: &ParamArray) -> Result<FunctionOverload, TyperError> {
 
     fn find_overload_casts(overload: &FunctionOverload, param_types: &ParamArray) -> Result<Vec<ImplicitConversion>, ()> {
         let mut overload_casts = Vec::with_capacity(param_types.len());
@@ -749,45 +721,46 @@ fn write_function(unresolved: UnresolvedFunction, param_types: ParamArray, param
         Ok(overload_casts)
     }
 
-    fn find_function_type(function: UnresolvedFunction, param_types: &ParamArray) -> Result<ResolvedFunction, TyperError> {
-        let mut casts = Vec::with_capacity(function.1.len());
-        for overload in &function.1 {
-            if param_types.len() == overload.2.len() {
-                if let Ok(param_casts) = find_overload_casts(overload, param_types) {
-                    casts.push((overload.clone(), param_casts))
-                }
-            }
-        };
-        for &(ref candidate, ref candidate_casts) in &casts {
-            let mut winning = true;
-            for &(ref against, ref against_casts) in &casts {
-                if candidate == against {
-                    continue;
-                }
-                assert_eq!(candidate_casts.len(), against_casts.len());
-                let mut at_least_one_better_than = false;
-                let mut not_worse_than = true;
-                for (candidate_cast, against_cast) in candidate_casts.iter().zip(against_casts) {
-                    let candidate_rank = candidate_cast.get_rank();
-                    let against_rank = against_cast.get_rank();
-                    match candidate_rank.compare(&against_rank) {
-                        ConversionPriority::Better => at_least_one_better_than = true,
-                        ConversionPriority::Equal => { },
-                        ConversionPriority::Worse => not_worse_than = false,
-                    };
-                }
-                if !at_least_one_better_than || !not_worse_than {
-                    winning = false;
-                    break;
-                }
-            }
-            if winning {
-                return Ok(ResolvedFunction(candidate.clone()));
+    let mut casts = Vec::with_capacity(overloads.len());
+    for overload in overloads {
+        if param_types.len() == overload.2.len() {
+            if let Ok(param_casts) = find_overload_casts(overload, param_types) {
+                casts.push((overload.clone(), param_casts))
             }
         }
-        Err(TyperError::FunctionArgumentTypeMismatch(function, param_types.clone()))
+    };
+    for &(ref candidate, ref candidate_casts) in &casts {
+        let mut winning = true;
+        for &(ref against, ref against_casts) in &casts {
+            if candidate == against {
+                continue;
+            }
+            assert_eq!(candidate_casts.len(), against_casts.len());
+            let mut at_least_one_better_than = false;
+            let mut not_worse_than = true;
+            for (candidate_cast, against_cast) in candidate_casts.iter().zip(against_casts) {
+                let candidate_rank = candidate_cast.get_rank();
+                let against_rank = against_cast.get_rank();
+                match candidate_rank.compare(&against_rank) {
+                    ConversionPriority::Better => at_least_one_better_than = true,
+                    ConversionPriority::Equal => { },
+                    ConversionPriority::Worse => not_worse_than = false,
+                };
+            }
+            if !at_least_one_better_than || !not_worse_than {
+                winning = false;
+                break;
+            }
+        }
+        if winning {
+            return Ok(candidate.clone());
+        }
     }
-    let function = try!(find_function_type(unresolved, &param_types));
+    Err(TyperError::FunctionArgumentTypeMismatch(overloads.clone(), param_types.clone()))
+}
+
+fn write_function(unresolved: UnresolvedFunction, param_types: ParamArray, param_values: Vec<ir::Expression>) -> Result<TypedExpression, TyperError> {
+    let function = ResolvedFunction(try!(find_function_type(&unresolved.1, &param_types)));
 
     let ResolvedFunction(FunctionOverload(name, return_type, _)) = function;
     match name {
@@ -803,28 +776,19 @@ fn write_function(unresolved: UnresolvedFunction, param_types: ParamArray, param
     }
 }
 
-fn write_method(method: ResolvedMethod, param_values: Vec<ir::Expression>) -> Result<TypedExpression, TyperError> {
-    let ResolvedMethod(_, MethodOverload(name, return_type, _), object_ir) = method;
-    let intrinsic = match name {
-        MethodName::Intrinsic(intrinsic) => intrinsic,
-        _ => unreachable!(),
-    };
-    Ok(TypedExpression::Value(ir::Expression::Intrinsic(Box::new(match intrinsic {
-        IntrinsicMethod::BufferLoad => {
-            assert_eq!(param_values.len(), 1);
-            ir::Intrinsic::BufferLoad(
-                object_ir,
-                param_values[0].clone()
-            )
+fn write_method(unresolved: UnresolvedMethod, param_types: ParamArray, param_values: Vec<ir::Expression>) -> Result<TypedExpression, TyperError> {
+    let FunctionOverload(name, return_type, _) = try!(find_function_type(&unresolved.2, &param_types));
+    let mut param_values = param_values;
+    param_values.insert(0, unresolved.3);
+    match name {
+        FunctionName::Intrinsic(factory) => {
+            Ok(TypedExpression::Value(
+                ir::Expression::Intrinsic(Box::new(factory.create_intrinsic(&param_values))),
+                return_type
+            ))
         },
-        IntrinsicMethod::StructuredBufferLoad => {
-            assert_eq!(param_values.len(), 1);
-            ir::Intrinsic::StructuredBufferLoad(
-                object_ir,
-                param_values[0].clone()
-            )
-        },
-    })), return_type))
+        FunctionName::User(_) => panic!("User defined methods should not exist"),
+    }
 }
 
 fn parse_literal(ast: &ast::Literal) -> Result<TypedExpression, TyperError> {
@@ -998,8 +962,8 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
                             return Ok(TypedExpression::Method(UnresolvedMethod(
                                 "Buffer::Load".to_string(),
                                 ir::Type::Object(ir::ObjectType::Buffer(data_type.clone())),
-                                vec![MethodOverload(
-                                    MethodName::Intrinsic(IntrinsicMethod::BufferLoad),
+                                vec![FunctionOverload(
+                                    FunctionName::Intrinsic(IntrinsicFactory::Intrinsic2(ir::Intrinsic::BufferLoad)),
                                     ir::Type::Structured(ir::StructuredType::Data(data_type.clone())),
                                     vec![ir::Type::int()]
                                 )],
@@ -1015,8 +979,8 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
                             return Ok(TypedExpression::Method(UnresolvedMethod(
                                 "StructuredBuffer::Load".to_string(),
                                 ir::Type::Object(ir::ObjectType::StructuredBuffer(structured_type.clone())),
-                                vec![MethodOverload(
-                                    MethodName::Intrinsic(IntrinsicMethod::StructuredBufferLoad),
+                                vec![FunctionOverload(
+                                    FunctionName::Intrinsic(IntrinsicFactory::Intrinsic2(ir::Intrinsic::StructuredBufferLoad)),
                                     ir::Type::Structured(structured_type.clone()),
                                     vec![ir::Type::int()]
                                 )],
@@ -1049,10 +1013,7 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
             };
             match func_texp {
                 TypedExpression::Function(unresolved) => write_function(unresolved, params_types, params_ir),
-                TypedExpression::Method(unresolved) => {
-                    let method = try!(find_method_type(unresolved, params_types));
-                    write_method(method, params_ir)
-                },
+                TypedExpression::Method(unresolved) => write_method(unresolved, params_types, params_ir),
                 _ => return Err(TyperError::CallOnNonFunction),
             }
         },
