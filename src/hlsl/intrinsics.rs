@@ -86,7 +86,7 @@ use self::IntrinsicFactory::Intrinsic4 as I4;
 const INTRINSICS: &'static [IntrinsicDefinition] = & [
 
     (T_VOID, "AllMemoryBarrier", &[], I0(Intrinsic::AllMemoryBarrier)),
-    (T_VOID, "AllMemoryBarrierWithGroupSync", &[], I0(Intrinsic::AllMemoryBarrier)),
+    (T_VOID, "AllMemoryBarrierWithGroupSync", &[], I0(Intrinsic::AllMemoryBarrierWithGroupSync)),
 
     (T_INT, "asint", &[T_UINT], I1(Intrinsic::AsInt)),
     (T_INT1, "asint", &[T_UINT1], I1(Intrinsic::AsInt)),

@@ -315,8 +315,17 @@ fn transpile_literal(lit: &src::Literal) -> Result<dst::Literal, TranspileError>
 }
 
 fn transpile_intrinsic(intrinsic: &src::Intrinsic, context: &Context) -> Result<dst::Expression, TranspileError> {
-    match intrinsic {
-        &src::Intrinsic::Float4(ref x, ref y, ref z, ref w) => {
+    match *intrinsic {
+        src::Intrinsic::AllMemoryBarrier | src::Intrinsic::AllMemoryBarrierWithGroupSync => {
+            Ok(dst::Expression::Call(
+                Box::new(dst::Expression::Variable("barrier".to_string())),
+                vec![dst::Expression::BinaryOperation(dst::BinOp::BitwiseOr,
+                    Box::new(dst::Expression::Variable("CLK_LOCAL_MEM_FENCE".to_string())),
+                    Box::new(dst::Expression::Variable("CLK_GLOBAL_MEM_FENCE".to_string()))
+                )]
+            ))
+        },
+        src::Intrinsic::Float4(ref x, ref y, ref z, ref w) => {
             Ok(dst::Expression::Constructor(dst::Constructor::Float4(
                 Box::new(try!(transpile_expression(x, context))),
                 Box::new(try!(transpile_expression(y, context))),
@@ -324,12 +333,12 @@ fn transpile_intrinsic(intrinsic: &src::Intrinsic, context: &Context) -> Result<
                 Box::new(try!(transpile_expression(w, context)))
             )))
         },
-        &src::Intrinsic::BufferLoad(ref buffer, ref loc) => {
+        src::Intrinsic::BufferLoad(ref buffer, ref loc) => {
             let cl_buffer = Box::new(try!(transpile_expression(buffer, context)));
             let cl_loc = Box::new(try!(transpile_expression(loc, context)));
             Ok(dst::Expression::ArraySubscript(cl_buffer, cl_loc))
         },
-        &src::Intrinsic::StructuredBufferLoad(_, _) => unimplemented!(),
+        src::Intrinsic::StructuredBufferLoad(_, _) => unimplemented!(),
         _ => unimplemented!(),
     }
 }
