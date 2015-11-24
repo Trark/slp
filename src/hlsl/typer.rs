@@ -707,7 +707,7 @@ fn parse_type(ty: &ast::Type, struct_finder: &StructIdFinder) -> Result<ir::Type
     })
 }
 
-fn find_function_type(overloads: &Vec<FunctionOverload>, param_types: &ParamArray) -> Result<FunctionOverload, TyperError> {
+fn find_function_type(overloads: &Vec<FunctionOverload>, param_types: &ParamArray) -> Result<(FunctionOverload, Vec<ImplicitConversion>), TyperError> {
 
     fn find_overload_casts(overload: &FunctionOverload, param_types: &ParamArray) -> Result<Vec<ImplicitConversion>, ()> {
         let mut overload_casts = Vec::with_capacity(param_types.len());
@@ -753,16 +753,23 @@ fn find_function_type(overloads: &Vec<FunctionOverload>, param_types: &ParamArra
             }
         }
         if winning {
-            return Ok(candidate.clone());
+            return Ok((candidate.clone(), candidate_casts.clone()));
         }
     }
     Err(TyperError::FunctionArgumentTypeMismatch(overloads.clone(), param_types.clone()))
 }
 
-fn write_function(unresolved: UnresolvedFunction, param_types: ParamArray, param_values: Vec<ir::Expression>) -> Result<TypedExpression, TyperError> {
-    let function = ResolvedFunction(try!(find_function_type(&unresolved.1, &param_types)));
+fn apply_casts(casts: Vec<ImplicitConversion>, values: Vec<ir::Expression>) -> Vec<ir::Expression> {
+    assert_eq!(casts.len(), values.len());
+    values.iter().enumerate().map(|(index, value)| casts[index].apply(value.clone())).collect::<Vec<_>>()
+}
 
-    let ResolvedFunction(FunctionOverload(name, return_type, _)) = function;
+fn write_function(unresolved: UnresolvedFunction, param_types: ParamArray, param_values: Vec<ir::Expression>) -> Result<TypedExpression, TyperError> {
+    // Find the matching function overload
+    let (FunctionOverload(name, return_type, _), casts) = try!(find_function_type(&unresolved.1, &param_types));
+    // Apply implicit casts
+    let param_values = apply_casts(casts, param_values);
+
     match name {
         FunctionName::Intrinsic(factory) => {
             Ok(TypedExpression::Value(
@@ -777,9 +784,13 @@ fn write_function(unresolved: UnresolvedFunction, param_types: ParamArray, param
 }
 
 fn write_method(unresolved: UnresolvedMethod, param_types: ParamArray, param_values: Vec<ir::Expression>) -> Result<TypedExpression, TyperError> {
-    let FunctionOverload(name, return_type, _) = try!(find_function_type(&unresolved.2, &param_types));
-    let mut param_values = param_values;
+    // Find the matching method overload
+    let (FunctionOverload(name, return_type, _), casts) = try!(find_function_type(&unresolved.2, &param_types));
+    // Apply implicit casts
+    let mut param_values = apply_casts(casts, param_values);
+    // Add struct as implied first argument
     param_values.insert(0, unresolved.3);
+
     match name {
         FunctionName::Intrinsic(factory) => {
             Ok(TypedExpression::Value(

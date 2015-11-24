@@ -31,9 +31,9 @@ kernel void MyKernel()
 	testIntOrUInt_1((uint)0);
 	testIntOrFloat_0((int)0);
 	testIntOrFloat_1(0.0f);
-	testIntOrFloat_0(0);
-	testIntOrFloat_0(0u);
+	testIntOrFloat_0((int)0);
+	testIntOrFloat_0((int)0u);
 	testBoolOrFloat_0((bool)0);
 	testBoolOrFloat_1(0.0f);
-	testBoolOrFloat_0(0);
+	testBoolOrFloat_0((bool)0);
 }
