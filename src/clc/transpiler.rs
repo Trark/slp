@@ -8,6 +8,7 @@ use super::super::hlsl::ir as src;
 #[derive(PartialEq, Debug, Clone)]
 pub enum TranspileError {
     Unknown,
+    NotSupported,
 
     TypeIsNotAllowedAsGlobal(src::Type),
     CouldNotGetEquivalentType(src::Type),
@@ -26,6 +27,7 @@ impl error::Error for TranspileError {
     fn description(&self) -> &str {
         match *self {
             TranspileError::Unknown => "unknown transpiler error",
+            TranspileError::NotSupported => "feature not supported",
             TranspileError::TypeIsNotAllowedAsGlobal(_) => "global variable has unsupported type",
             TranspileError::CouldNotGetEquivalentType(_) => "could not find equivalent clc type",
             TranspileError::CouldNotGetEquivalentDataType(_) => "could not find equivalent clc type",
@@ -314,6 +316,17 @@ fn transpile_literal(lit: &src::Literal) -> Result<dst::Literal, TranspileError>
     }
 }
 
+fn write_func(name: &'static str, args: &[&src::Expression], context: &Context) -> Result<dst::Expression, TranspileError> {
+    Ok(dst::Expression::Call(
+        Box::new(dst::Expression::Variable(name.to_string())),
+        try!(args.iter().fold(Ok(vec![]), |result, exp| {
+            let mut vec = try!(result);
+            vec.push(try!(transpile_expression(exp, context)));
+            Ok(vec)
+        }))
+    ))
+}
+
 fn transpile_intrinsic(intrinsic: &src::Intrinsic, context: &Context) -> Result<dst::Expression, TranspileError> {
     match *intrinsic {
         src::Intrinsic::AllMemoryBarrier | src::Intrinsic::AllMemoryBarrierWithGroupSync => {
@@ -325,6 +338,56 @@ fn transpile_intrinsic(intrinsic: &src::Intrinsic, context: &Context) -> Result<
                 )]
             ))
         },
+        src::Intrinsic::AsIntU(ref e) => write_func("as_int", &[e], context),
+        src::Intrinsic::AsIntU1(ref e) => write_func("as_int", &[e], context),
+        src::Intrinsic::AsIntU2(ref e) => write_func("as_int2", &[e], context),
+        src::Intrinsic::AsIntU3(ref e) => write_func("as_int3", &[e], context),
+        src::Intrinsic::AsIntU4(ref e) => write_func("as_int4", &[e], context),
+        src::Intrinsic::AsIntF(ref e) => write_func("as_int", &[e], context),
+        src::Intrinsic::AsIntF1(ref e) => write_func("as_int", &[e], context),
+        src::Intrinsic::AsIntF2(ref e) => write_func("as_int2", &[e], context),
+        src::Intrinsic::AsIntF3(ref e) => write_func("as_int3", &[e], context),
+        src::Intrinsic::AsIntF4(ref e) => write_func("as_int4", &[e], context),
+        src::Intrinsic::AsUIntI(ref e) => write_func("as_uint", &[e], context),
+        src::Intrinsic::AsUIntI1(ref e) => write_func("as_uint", &[e], context),
+        src::Intrinsic::AsUIntI2(ref e) => write_func("as_uint2", &[e], context),
+        src::Intrinsic::AsUIntI3(ref e) => write_func("as_uint3", &[e], context),
+        src::Intrinsic::AsUIntI4(ref e) => write_func("as_uint4", &[e], context),
+        src::Intrinsic::AsUIntF(ref e) => write_func("as_uint", &[e], context),
+        src::Intrinsic::AsUIntF1(ref e) => write_func("as_uint", &[e], context),
+        src::Intrinsic::AsUIntF2(ref e) => write_func("as_uint2", &[e], context),
+        src::Intrinsic::AsUIntF3(ref e) => write_func("as_uint3", &[e], context),
+        src::Intrinsic::AsUIntF4(ref e) => write_func("as_uint4", &[e], context),
+        src::Intrinsic::AsFloatB(_) => return Err(TranspileError::NotSupported),
+        src::Intrinsic::AsFloatB1(_) => return Err(TranspileError::NotSupported),
+        src::Intrinsic::AsFloatB2(_) => return Err(TranspileError::NotSupported),
+        src::Intrinsic::AsFloatB3(_) => return Err(TranspileError::NotSupported),
+        src::Intrinsic::AsFloatB4(_) => return Err(TranspileError::NotSupported),
+        src::Intrinsic::AsFloatI(ref e) => write_func("as_float", &[e], context),
+        src::Intrinsic::AsFloatI1(ref e) => write_func("as_float", &[e], context),
+        src::Intrinsic::AsFloatI2(ref e) => write_func("as_float2", &[e], context),
+        src::Intrinsic::AsFloatI3(ref e) => write_func("as_float3", &[e], context),
+        src::Intrinsic::AsFloatI4(ref e) => write_func("as_float4", &[e], context),
+        src::Intrinsic::AsFloatU(ref e) => write_func("as_float", &[e], context),
+        src::Intrinsic::AsFloatU1(ref e) => write_func("as_float", &[e], context),
+        src::Intrinsic::AsFloatU2(ref e) => write_func("as_float2", &[e], context),
+        src::Intrinsic::AsFloatU3(ref e) => write_func("as_float3", &[e], context),
+        src::Intrinsic::AsFloatU4(ref e) => write_func("as_float4", &[e], context),
+        src::Intrinsic::AsFloatF(ref e) => write_func("as_float", &[e], context),
+        src::Intrinsic::AsFloatF1(ref e) => write_func("as_float", &[e], context),
+        src::Intrinsic::AsFloatF2(ref e) => write_func("as_float2", &[e], context),
+        src::Intrinsic::AsFloatF3(ref e) => write_func("as_float3", &[e], context),
+        src::Intrinsic::AsFloatF4(ref e) => write_func("as_float4", &[e], context),
+        src::Intrinsic::ClampI(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
+        src::Intrinsic::ClampI1(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
+        src::Intrinsic::ClampI2(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
+        src::Intrinsic::ClampI3(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
+        src::Intrinsic::ClampI4(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
+        src::Intrinsic::ClampF(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
+        src::Intrinsic::ClampF1(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
+        src::Intrinsic::ClampF2(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
+        src::Intrinsic::ClampF3(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
+        src::Intrinsic::ClampF4(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
         src::Intrinsic::Float4(ref x, ref y, ref z, ref w) => {
             Ok(dst::Expression::Constructor(dst::Constructor::Float4(
                 Box::new(try!(transpile_expression(x, context))),
