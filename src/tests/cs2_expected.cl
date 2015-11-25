@@ -29,16 +29,16 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __constant ui
 {
 	uint3 dtid = (uint3)(get_global_id(0u), get_global_id(1u), get_global_id(2u));
 	uint myFunc_1_0;
-	uint alias_var = 2;
-	int index = dtid.x + myConstants->g_offset;
+	uint alias_var = 2u;
+	int index = (int)(dtid.x + myConstants->g_offset);
 	myFunc_1_0 = g_myInBuffer[index];
 	g_myOutBuffer[index] = myFunc_1_0;
-	uint testStruct = 0;
+	uint testStruct = (uint)0;
 	if (myFunc_1_0)
 	{
 		float4 alias_var_0 = (float4)(1.0f, 2.4f, 0.3f, 3.4f);
 		float4 receive = alias_var_0;
-		uint testStruct_1 = 1;
+		uint testStruct_1 = (uint)1;
 		struct testStruct_0 data;
 	}
 	myFunc_1(4.0f);
@@ -46,7 +46,7 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __constant ui
 	{
 		myFunc_0(x);
 	}
-	int y = 10;
+	int y = (int)10;
 	while (y > (int)0)
 	{
 		y--;

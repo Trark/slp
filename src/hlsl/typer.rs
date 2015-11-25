@@ -41,6 +41,7 @@ pub enum TyperError {
 
     InvalidCast(ErrorType, ErrorType),
     FunctionTypeInInitExpression,
+    WrongTypeInInitExpression,
     FunctionNotCalled,
 
     KernelNotDefined,
@@ -116,6 +117,7 @@ impl error::Error for TyperError {
 
             TyperError::InvalidCast(_, _) => "invalid cast",
             TyperError::FunctionTypeInInitExpression => "function not called",
+            TyperError::WrongTypeInInitExpression => "wrong type in variable initialization",
             TyperError::FunctionNotCalled => "function not called",
 
             TyperError::KernelNotDefined => "entry point not found",
@@ -889,11 +891,44 @@ fn parse_expr_binop(op: &ast::BinOp, lhs: &ast::Expression, rhs: &ast::Expressio
         TypedExpression::Value(expr_ir, expr_ty) => (expr_ir, expr_ty),
         _ => return Err(TyperError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt)),
     };
-    let (lhs_cast, rhs_cast) = try!(resolve_arithmetic_types(op, &lhs_type, &rhs_type, context));
-    assert_eq!(lhs_cast.get_target_type(), rhs_cast.get_target_type());
-    let lhs_final = lhs_cast.apply(lhs_ir);
-    let rhs_final = rhs_cast.apply(rhs_ir);
-    Ok(TypedExpression::Value(ir::Expression::BinaryOperation(op.clone(), Box::new(lhs_final), Box::new(rhs_final)), rhs_cast.get_target_type()))
+    match *op {
+        ast::BinOp::Add |
+        ast::BinOp::Subtract |
+        ast::BinOp::Multiply |
+        ast::BinOp::Divide |
+        ast::BinOp::Modulus => {
+            let (lhs_cast, rhs_cast) = try!(resolve_arithmetic_types(op, &lhs_type, &rhs_type, context));
+            assert_eq!(lhs_cast.get_target_type(), rhs_cast.get_target_type());
+            let lhs_final = lhs_cast.apply(lhs_ir);
+            let rhs_final = rhs_cast.apply(rhs_ir);
+            Ok(TypedExpression::Value(ir::Expression::BinaryOperation(op.clone(), Box::new(lhs_final), Box::new(rhs_final)), rhs_cast.get_target_type()))
+        },
+        ast::BinOp::LeftShift |
+        ast::BinOp::RightShift => {
+            Err(TyperError::Unimplemented)
+        },
+        ast::BinOp::LessThan |
+        ast::BinOp::LessEqual |
+        ast::BinOp::GreaterThan |
+        ast::BinOp::GreaterEqual |
+        ast::BinOp::Equality |
+        ast::BinOp::Inequality => {
+            let (lhs_cast, rhs_cast) = try!(resolve_arithmetic_types(op, &lhs_type, &rhs_type, context));
+            assert_eq!(lhs_cast.get_target_type(), rhs_cast.get_target_type());
+            let lhs_final = lhs_cast.apply(lhs_ir);
+            let rhs_final = rhs_cast.apply(rhs_ir);
+            Ok(TypedExpression::Value(ir::Expression::BinaryOperation(op.clone(), Box::new(lhs_final), Box::new(rhs_final)), ir::Type::bool()))
+        },
+        ast::BinOp::Assignment => {
+            match ImplicitConversion::find(&rhs_type, &lhs_type) {
+                Ok(rhs_cast) => {
+                    let rhs_final = rhs_cast.apply(rhs_ir);
+                    Ok(TypedExpression::Value(ir::Expression::BinaryOperation(op.clone(), Box::new(lhs_ir), Box::new(rhs_final)), lhs_type))
+                },
+                Err(()) => Err(TyperError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt)),
+            }
+        },
+    }
 }
 
 fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpression, TyperError> {
@@ -1052,10 +1087,16 @@ fn parse_expr_value_only(expr: &ast::Expression, context: &ScopeContext) -> Resu
 }
 
 fn parse_vardef(ast: &ast::VarDef, context: ScopeContext) -> Result<(ir::VarDef, ScopeContext), TyperError> {
+    let var_type = try!(parse_type(&ast.typename, &context));
     let assign_ir = match ast.assignment {
         Some(ref expr) => {
             match try!(parse_expr(expr, &context)) {
-                TypedExpression::Value(expr_ir, _) => Some(expr_ir),
+                TypedExpression::Value(expr_ir, expt_ty) => {
+                    match ImplicitConversion::find(&expt_ty, &var_type) {
+                        Ok(rhs_cast) => Some(rhs_cast.apply(expr_ir)),
+                        Err(()) => return Err(TyperError::WrongTypeInInitExpression),
+                    }
+                },
                 _ => return Err(TyperError::FunctionTypeInInitExpression),
             }
         },

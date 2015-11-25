@@ -31,7 +31,7 @@ void myFunc(float x)
 void CSMAIN(uint3 dtid : SV_DispatchThreadID)
 {
     uint myFunc_1;
-    uint alias_var = 2;
+    uint alias_var = 2u;
     int index = dtid.x + g_offset;
     myFunc_1 = g_myInBuffer.Load(index);
     g_myOutBuffer[index] = myFunc_1;
