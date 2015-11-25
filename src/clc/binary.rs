@@ -77,7 +77,6 @@ fn print_dimension(dim: &VectorDimension, printer: &mut Printer) {
 
 fn print_scalar(scalar: &Scalar, printer: &mut Printer) {
     printer.print(match scalar {
-        &Scalar::Bool => "bool",
         &Scalar::Char => "char",
         &Scalar::UChar => "uchar",
         &Scalar::Short => "short",
@@ -104,6 +103,7 @@ fn print_address_space(address_space: &AddressSpace, printer: &mut Printer) {
 fn print_typename(typename: &Type, printer: &mut Printer) {
     match typename {
         &Type::Void => printer.print("void"),
+        &Type::Bool => printer.print("bool"),
         &Type::Scalar(ref scalar) => print_scalar(scalar, printer),
         &Type::Vector(ref scalar, ref dim) => {
             print_scalar(scalar, printer);

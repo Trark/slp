@@ -8,7 +8,6 @@ use super::super::hlsl::ir as src;
 #[derive(PartialEq, Debug, Clone)]
 pub enum TranspileError {
     Unknown,
-    NotSupported,
 
     TypeIsNotAllowedAsGlobal(src::Type),
     CouldNotGetEquivalentType(src::Type),
@@ -21,13 +20,14 @@ pub enum TranspileError {
     UnknownConstantBufferId(src::ConstantBufferId),
     InvalidVariableRef,
     UnknownVariableId,
+
+    BoolVectorsNotSupported,
 }
 
 impl error::Error for TranspileError {
     fn description(&self) -> &str {
         match *self {
             TranspileError::Unknown => "unknown transpiler error",
-            TranspileError::NotSupported => "feature not supported",
             TranspileError::TypeIsNotAllowedAsGlobal(_) => "global variable has unsupported type",
             TranspileError::CouldNotGetEquivalentType(_) => "could not find equivalent clc type",
             TranspileError::CouldNotGetEquivalentDataType(_) => "could not find equivalent clc type",
@@ -37,6 +37,7 @@ impl error::Error for TranspileError {
             TranspileError::UnknownConstantBufferId(_) => "unknown cbuffer id",
             TranspileError::InvalidVariableRef => "invalid variable ref",
             TranspileError::UnknownVariableId => "unknown variable id",
+            TranspileError::BoolVectorsNotSupported => "bool vectors not supported",
         }
     }
 }
@@ -239,7 +240,7 @@ impl Context {
 
 fn transpile_scalartype(scalartype: &src::ScalarType) -> Result<dst::Scalar, TranspileError> {
     match scalartype {
-        &src::ScalarType::Bool => Ok(dst::Scalar::Bool),
+        &src::ScalarType::Bool => Err(TranspileError::BoolVectorsNotSupported),
         &src::ScalarType::Int => Ok(dst::Scalar::Int),
         &src::ScalarType::UInt => Ok(dst::Scalar::UInt),
         &src::ScalarType::Half => Ok(dst::Scalar::Half),
@@ -251,6 +252,7 @@ fn transpile_scalartype(scalartype: &src::ScalarType) -> Result<dst::Scalar, Tra
 
 fn transpile_datatype(datatype: &src::DataType) -> Result<dst::Type, TranspileError> {
     match datatype {
+        &src::DataType::Scalar(src::ScalarType::Bool) => Ok(dst::Type::Bool),
         &src::DataType::Scalar(ref scalar) => Ok(dst::Type::Scalar(try!(transpile_scalartype(scalar)))),
         &src::DataType::Vector(ref scalar, 1) => Ok(dst::Type::Scalar(try!(transpile_scalartype(scalar)))),
         &src::DataType::Vector(ref scalar, 2) => Ok(dst::Type::Vector(try!(transpile_scalartype(scalar)), dst::VectorDimension::Two)),
@@ -358,11 +360,11 @@ fn transpile_intrinsic(intrinsic: &src::Intrinsic, context: &Context) -> Result<
         src::Intrinsic::AsUIntF2(ref e) => write_func("as_uint2", &[e], context),
         src::Intrinsic::AsUIntF3(ref e) => write_func("as_uint3", &[e], context),
         src::Intrinsic::AsUIntF4(ref e) => write_func("as_uint4", &[e], context),
-        src::Intrinsic::AsFloatB(_) => return Err(TranspileError::NotSupported),
-        src::Intrinsic::AsFloatB1(_) => return Err(TranspileError::NotSupported),
-        src::Intrinsic::AsFloatB2(_) => return Err(TranspileError::NotSupported),
-        src::Intrinsic::AsFloatB3(_) => return Err(TranspileError::NotSupported),
-        src::Intrinsic::AsFloatB4(_) => return Err(TranspileError::NotSupported),
+        src::Intrinsic::AsFloatB(_) => return Err(TranspileError::BoolVectorsNotSupported),
+        src::Intrinsic::AsFloatB1(_) => return Err(TranspileError::BoolVectorsNotSupported),
+        src::Intrinsic::AsFloatB2(_) => return Err(TranspileError::BoolVectorsNotSupported),
+        src::Intrinsic::AsFloatB3(_) => return Err(TranspileError::BoolVectorsNotSupported),
+        src::Intrinsic::AsFloatB4(_) => return Err(TranspileError::BoolVectorsNotSupported),
         src::Intrinsic::AsFloatI(ref e) => write_func("as_float", &[e], context),
         src::Intrinsic::AsFloatI1(ref e) => write_func("as_float", &[e], context),
         src::Intrinsic::AsFloatI2(ref e) => write_func("as_float2", &[e], context),

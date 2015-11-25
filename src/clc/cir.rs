@@ -10,7 +10,6 @@ pub enum AccessModifier {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Scalar {
-    Bool,
     Char,
     UChar,
     Short,
@@ -36,6 +35,7 @@ pub enum VectorDimension {
 #[derive(PartialEq, Debug, Clone)]
 pub enum Type {
     Void,
+    Bool,
     Scalar(Scalar),
     Vector(Scalar, VectorDimension),
     SizeT,
