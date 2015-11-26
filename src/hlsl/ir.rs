@@ -101,11 +101,6 @@ pub enum Intrinsic {
     AsUIntF3(Expression),
     AsUIntF4(Expression),
 
-    AsFloatB(Expression),
-    AsFloatB1(Expression),
-    AsFloatB2(Expression),
-    AsFloatB3(Expression),
-    AsFloatB4(Expression),
     AsFloatI(Expression),
     AsFloatI1(Expression),
     AsFloatI2(Expression),

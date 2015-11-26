@@ -55,11 +55,6 @@ impl IntrinsicFactory {
 pub type IntrinsicDefinition = (Type, &'static str, &'static [Type], IntrinsicFactory);
 
 const T_VOID: Type = Type::Void;
-const T_BOOL: Type = Type::Structured(StructuredType::Data(DataType::Scalar(ScalarType::Bool)));
-const T_BOOL1: Type = Type::Structured(StructuredType::Data(DataType::Vector(ScalarType::Bool, 1)));
-const T_BOOL2: Type = Type::Structured(StructuredType::Data(DataType::Vector(ScalarType::Bool, 2)));
-const T_BOOL3: Type = Type::Structured(StructuredType::Data(DataType::Vector(ScalarType::Bool, 3)));
-const T_BOOL4: Type = Type::Structured(StructuredType::Data(DataType::Vector(ScalarType::Bool, 4)));
 const T_INT: Type = Type::Structured(StructuredType::Data(DataType::Scalar(ScalarType::Int)));
 const T_INT1: Type = Type::Structured(StructuredType::Data(DataType::Vector(ScalarType::Int, 1)));
 const T_INT2: Type = Type::Structured(StructuredType::Data(DataType::Vector(ScalarType::Int, 2)));
@@ -110,11 +105,6 @@ const INTRINSICS: &'static [IntrinsicDefinition] = & [
     (T_UINT3, "asuint", &[T_FLOAT3], I1(Intrinsic::AsUIntF3)),
     (T_UINT4, "asuint", &[T_FLOAT4], I1(Intrinsic::AsUIntF4)),
 
-    (T_FLOAT, "asfloat", &[T_BOOL], I1(Intrinsic::AsFloatB)),
-    (T_FLOAT1, "asfloat", &[T_BOOL1], I1(Intrinsic::AsFloatB1)),
-    (T_FLOAT2, "asfloat", &[T_BOOL2], I1(Intrinsic::AsFloatB2)),
-    (T_FLOAT3, "asfloat", &[T_BOOL3], I1(Intrinsic::AsFloatB3)),
-    (T_FLOAT4, "asfloat", &[T_BOOL4], I1(Intrinsic::AsFloatB4)),
     (T_FLOAT, "asfloat", &[T_INT], I1(Intrinsic::AsFloatI)),
     (T_FLOAT1, "asfloat", &[T_INT1], I1(Intrinsic::AsFloatI1)),
     (T_FLOAT2, "asfloat", &[T_INT2], I1(Intrinsic::AsFloatI2)),
