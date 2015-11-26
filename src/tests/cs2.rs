@@ -2,7 +2,7 @@
 use hlsl_to_cl;
 
 const CS2_HLSL: &'static [u8] = include_bytes!("cs2.hlsl");
-const CS2_CL_EXPECTED: &'static str = include_str!("cs2_expected.cl");
+const CS2_CL: &'static str = include_str!("cs2.cl");
 
 #[test]
 fn cs2_full() {
@@ -11,7 +11,7 @@ fn cs2_full() {
     assert!(code_result.is_ok(), "{:?}", code_result);
     let code = code_result.unwrap();
 
-    let expected = CS2_CL_EXPECTED.to_string().replace("\r\n", "\n");
+    let expected = CS2_CL.to_string().replace("\r\n", "\n");
     // Check by line first (for better error messages)
     for (code_line, expected_line) in code.to_string().lines().zip(expected.lines()) {
         assert_eq!(&code_line[..], expected_line);
