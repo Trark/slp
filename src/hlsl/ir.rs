@@ -70,6 +70,103 @@ impl Type {
     pub fn float4x4() -> Type { Type::Structured(StructuredType::Data(DataType::Matrix(ScalarType::Float, 4, 4))) }
 }
 
+#[derive(PartialEq, Debug, Clone)]
+pub enum RowOrder {
+    Row,
+    Column
+}
+
+/// Modifier for type
+#[derive(PartialEq, Debug, Clone)]
+pub struct TypeModifier {
+    is_const: bool,
+    row_order: RowOrder,
+    precise: bool,
+    volatile: bool,
+}
+
+impl TypeModifier {
+    pub fn new() -> TypeModifier {
+        TypeModifier { is_const: false, row_order: RowOrder::Column, precise: false, volatile: false }
+    }
+}
+
+/// Interpolation modifier: exists on all variable definitions
+#[derive(PartialEq, Debug, Clone)]
+pub enum InterpolationModifier {
+    NoInterpolation,
+    Linear,
+    Centroid,
+    NoPerspective,
+    Sample,
+}
+
+/// Storage type for global variables
+#[derive(PartialEq, Debug, Clone)]
+pub enum GlobalStorage {
+    /// Statically allocated thread-local variable in global scope
+    Static,
+
+    /// Shared between every thread in the work group
+    GroupShared,
+
+    // extern not supported because constant buffers exist
+    // uniform not supported because constant buffers exist
+}
+
+/// Binding type for parameters
+#[derive(PartialEq, Debug, Clone)]
+pub enum InputModifier {
+    /// Function input
+    In,
+    /// Function output (must be written)
+    Out,
+    /// Function input and output
+    InOut,
+
+    // uniform not supported because constant buffers exist
+}
+
+// Storage type for local variables
+#[derive(PartialEq, Debug, Clone)]
+pub enum LocalStorage {
+    /// Statically allocated thread-local variable
+    Local,
+
+    /// Statically allocated thread-local variable that persists between function calls
+    /// Essentially the same as global static but name-scoped into a function
+    Static,
+}
+
+/// The full type when paired with modifiers
+#[derive(PartialEq, Debug, Clone)]
+pub struct QualifiedType(pub Type, pub TypeModifier);
+
+/// Value type for subexpressions. Doesn't appear in ir tree, but used for
+/// reasoning about intermediates
+#[derive(PartialEq, Debug, Clone)]
+pub enum ValueType {
+    Lvalue,
+    Rvalue,
+}
+
+/// Type for value intermediates. Doesn't appear in ir tree, but used for
+/// reasoning about intermediates. Doesn't include function intermediates.
+#[derive(PartialEq, Debug, Clone)]
+pub struct ExpressionType(pub Type, pub TypeModifier, pub ValueType);
+
+/// The type of any global declaration
+#[derive(PartialEq, Debug, Clone)]
+pub struct GlobalType(pub QualifiedType, pub GlobalStorage, pub InterpolationModifier);
+
+/// The type of any parameter declaration
+#[derive(PartialEq, Debug, Clone)]
+pub struct ParamType(pub QualifiedType, pub InputModifier, pub InterpolationModifier);
+
+/// The type of any local variable declaration
+#[derive(PartialEq, Debug, Clone)]
+pub struct LocalType(pub QualifiedType, pub LocalStorage, pub InterpolationModifier);
+
 pub use super::ast::BinOp as BinOp;
 pub use super::ast::UnaryOp as UnaryOp;
 
