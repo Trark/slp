@@ -251,6 +251,8 @@ named!(reserved_word_struct<()>, chain!(tag!("s") ~ tag!("t") ~ tag!("r") ~ tag!
 named!(reserved_word_samplerstate<()>, chain!(tag!("S") ~ tag!("a") ~ tag!("m") ~ tag!("p") ~ tag!("l") ~ tag!("e") ~ tag!("r") ~ tag!("S") ~ tag!("t") ~ tag!("a") ~ tag!("t") ~ tag!("e") , || { }));
 named!(reserved_word_cbuffer<()>, chain!(tag!("c") ~ tag!("b") ~ tag!("u") ~ tag!("f") ~ tag!("f") ~ tag!("e") ~ tag!("r"), || { }));
 named!(reserved_word_register<()>, chain!(tag!("r") ~ tag!("e") ~ tag!("g") ~ tag!("i") ~ tag!("s") ~ tag!("t") ~ tag!("e") ~ tag!("r"), || { }));
+named!(reserved_word_true<()>, chain!(tag!("t") ~ tag!("r") ~ tag!("u") ~ tag!("e"), || { }));
+named!(reserved_word_false<()>, chain!(tag!("f") ~ tag!("a") ~ tag!("l") ~ tag!("s") ~ tag!("e"), || { }));
 
 named!(reserved_word<()>, alt!(
     reserved_word_if |
@@ -261,7 +263,9 @@ named!(reserved_word<()>, alt!(
     reserved_word_struct |
     reserved_word_samplerstate |
     reserved_word_cbuffer |
-    reserved_word_register
+    reserved_word_register |
+    reserved_word_true |
+    reserved_word_false
 ));
 
 enum RegisterType { T, U, B }
@@ -337,6 +341,8 @@ named!(token_no_whitespace<Token>, alt!(
     identifier => { |id| Token::Id(id) } |
     literal_float => { |tok| tok } |
     literal_int => { |tok| tok } |
+    reserved_word_true => { |_| Token::True} |
+    reserved_word_false => { |_| Token::False } |
 
     tag!("{") => { |_| Token::LeftBrace } |
     tag!("}") => { |_| Token::RightBrace } |

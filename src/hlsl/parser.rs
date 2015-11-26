@@ -384,7 +384,9 @@ fn expr_paren(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason
         token!(Token::LiteralLong(i) => Expression::Literal(Literal::Long(i))) |
         token!(Token::LiteralHalf(i) => Expression::Literal(Literal::Half(i))) |
         token!(Token::LiteralFloat(i) => Expression::Literal(Literal::Float(i))) |
-        token!(Token::LiteralDouble(i) => Expression::Literal(Literal::Double(i)))
+        token!(Token::LiteralDouble(i) => Expression::Literal(Literal::Double(i))) |
+        token!(Token::True => Expression::Literal(Literal::Bool(true))) |
+        token!(Token::False => Expression::Literal(Literal::Bool(false)))
     )
 }
 

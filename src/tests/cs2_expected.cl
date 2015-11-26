@@ -34,7 +34,8 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __constant ui
 	myFunc_1_0 = g_myInBuffer[index];
 	g_myOutBuffer[index] = myFunc_1_0;
 	uint testStruct = (uint)0;
-	if (myFunc_1_0)
+	bool cond = true;
+	if (cond)
 	{
 		float4 alias_var_0 = (float4)(1.0f, 2.4f, 0.3f, 3.4f);
 		float4 receive = alias_var_0;
@@ -45,6 +46,8 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __constant ui
 	for (uint x = 4u; x < 10u; ++x)
 	{
 		myFunc_0(x);
+		bool p = false;
+		myFunc_0((uint)p);
 	}
 	int y = (int)10;
 	while (y > (int)0)

@@ -36,7 +36,8 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     myFunc_1 = g_myInBuffer.Load(index);
     g_myOutBuffer[index] = myFunc_1;
     uint testStruct = 0;
-    if (myFunc_1)
+    bool cond = true;
+    if (cond)
     {
         float4 alias_var = float4(1.0f, 2.4f, 0.3f, 3.4f);
         float4 receive = alias_var;
@@ -47,6 +48,8 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     for (uint x = 4u; x < 10u; ++x)
     {
         myFunc(x);
+        bool p = false;
+        myFunc((uint)p);
     }
     int y = 10;
     while (y > 0)

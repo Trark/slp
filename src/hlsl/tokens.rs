@@ -34,6 +34,8 @@ pub enum Token {
     LiteralHalf(f32),
     LiteralFloat(f32),
     LiteralDouble(f64),
+    True,
+    False,
 
     LeftBrace,
     RightBrace,

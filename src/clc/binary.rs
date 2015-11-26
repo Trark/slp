@@ -205,6 +205,7 @@ fn print_binaryoperation(binop: &BinOp, lhs: &Box<Expression>, rhs: &Box<Express
 
 fn print_literal(lit: &Literal, printer: &mut Printer) {
     printer.print(&(match lit {
+        &Literal::Bool(b) => if b { "true".to_string() } else { "false".to_string() },
         &Literal::Int(i) => format!("{}", i),
         &Literal::UInt(i) => format!("{}u", i),
         &Literal::Long(i) => format!("{}L", i),

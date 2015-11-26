@@ -308,6 +308,7 @@ fn transpile_binop(binop: &src::BinOp) -> Result<dst::BinOp, TranspileError> {
 
 fn transpile_literal(lit: &src::Literal) -> Result<dst::Literal, TranspileError> {
     match lit {
+        &src::Literal::Bool(b) => Ok(dst::Literal::Bool(b)),
         &src::Literal::UntypedInt(i) => Ok(dst::Literal::Int(i)),
         &src::Literal::Int(i) => Ok(dst::Literal::Int(i)),
         &src::Literal::UInt(i) => Ok(dst::Literal::UInt(i)),

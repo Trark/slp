@@ -806,6 +806,7 @@ fn write_method(unresolved: UnresolvedMethod, param_types: ParamArray, param_val
 
 fn parse_literal(ast: &ast::Literal) -> Result<TypedExpression, TyperError> {
     match ast {
+        &ast::Literal::Bool(b) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Bool(b)), ir::Type::bool())),
         &ast::Literal::UntypedInt(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::UntypedInt(i)), ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(ir::ScalarType::UntypedInt))))),
         &ast::Literal::Int(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Int(i)), ir::Type::int())),
         &ast::Literal::UInt(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::UInt(i)), ir::Type::uint())),
