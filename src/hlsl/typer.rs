@@ -329,30 +329,52 @@ impl TypeBlock {
         }
     }
 
-    fn invert_datatype(&self, ty: &ir::DataType) -> ast::DataType {
-        let &ir::DataType(ref lt, ref modifier) = ty;
-        assert!(modifier.is_empty());
-        match *lt {
-            ir::DataLayout::Scalar(ref scalar) => ast::DataType::Scalar(self.invert_scalartype(scalar)),
-            ir::DataLayout::Vector(ref scalar, ref x) => ast::DataType::Vector(self.invert_scalartype(scalar), *x),
-            ir::DataLayout::Matrix(ref scalar, ref x, ref y) => ast::DataType::Matrix(self.invert_scalartype(scalar), *x, *y),
+    fn invert_row_order(&self, row_order: &ir::RowOrder) -> ast::RowOrder {
+        match *row_order {
+            ir::RowOrder::Row => ast::RowOrder::Row,
+            ir::RowOrder::Column => ast::RowOrder::Column,
         }
     }
 
-    fn invert_structuredtype(&self, ty: &ir::StructuredType) -> ast::StructuredType {
-        let &ir::StructuredType(ref lt, ref modifier) = ty;
-        assert!(modifier.is_empty());
-        match *lt {
-            ir::StructuredLayout::Scalar(ref scalar) => ast::StructuredType::Data(ast::DataType::Scalar(self.invert_scalartype(scalar))),
-            ir::StructuredLayout::Vector(ref scalar, ref x) => ast::StructuredType::Data(ast::DataType::Vector(self.invert_scalartype(scalar), *x)),
-            ir::StructuredLayout::Matrix(ref scalar, ref x, ref y) => ast::StructuredType::Data(ast::DataType::Matrix(self.invert_scalartype(scalar), *x, *y)),
+    fn invert_modifier(&self, modifier: &ir::TypeModifier) -> ast::TypeModifier {
+        ast::TypeModifier {
+            is_const: modifier.is_const,
+            row_order: self.invert_row_order(&modifier.row_order),
+            precise: modifier.precise,
+            volatile: modifier.volatile,
+        }
+    }
+
+    fn invert_datalayout(&self, ty: &ir::DataLayout) -> ast::DataLayout {
+        match *ty {
+            ir::DataLayout::Scalar(ref scalar) => ast::DataLayout::Scalar(self.invert_scalartype(scalar)),
+            ir::DataLayout::Vector(ref scalar, ref x) => ast::DataLayout::Vector(self.invert_scalartype(scalar), *x),
+            ir::DataLayout::Matrix(ref scalar, ref x, ref y) => ast::DataLayout::Matrix(self.invert_scalartype(scalar), *x, *y),
+        }
+    }
+
+    fn invert_datatype(&self, ty: &ir::DataType) -> ast::DataType {
+        let &ir::DataType(ref tyl, ref modifier) = ty;
+        ast::DataType(self.invert_datalayout(tyl), self.invert_modifier(modifier))
+    }
+
+    fn invert_structuredlayout(&self, ty: &ir::StructuredLayout) -> ast::StructuredLayout {
+        match *ty {
+            ir::StructuredLayout::Scalar(ref scalar) => ast::StructuredLayout::Scalar(self.invert_scalartype(scalar)),
+            ir::StructuredLayout::Vector(ref scalar, ref x) => ast::StructuredLayout::Vector(self.invert_scalartype(scalar), *x),
+            ir::StructuredLayout::Matrix(ref scalar, ref x, ref y) => ast::StructuredLayout::Matrix(self.invert_scalartype(scalar), *x, *y),
             ir::StructuredLayout::Struct(ref id) => {
-                ast::StructuredType::Custom(match self.get_struct_name(&id) {
+                ast::StructuredLayout::Custom(match self.get_struct_name(&id) {
                     Some(name) => name,
                     None => "<struct>".to_string(),
                 })
             },
         }
+    }
+
+    fn invert_structuredtype(&self, ty: &ir::StructuredType) -> ast::StructuredType {
+        let &ir::StructuredType(ref tyl, ref modifier) = ty;
+        ast::StructuredType(self.invert_structuredlayout(tyl), self.invert_modifier(modifier))
     }
 
     fn invert_objecttype(&self, ty: &ir::ObjectType) -> ast::ObjectType {
@@ -384,24 +406,27 @@ impl TypeBlock {
         }
     }
 
-    fn invert_type(&self, ty: &ir::Type) -> ast::Type {
-        let &ir::Type(ref lt, ref modifier) = ty;
-        assert!(modifier.is_empty());
-        match *lt {
-            ir::TypeLayout::Void => ast::Type::Void,
-            ir::TypeLayout::Scalar(ref scalar) => ast::Type::Structured(ast::StructuredType::Data(ast::DataType::Scalar(self.invert_scalartype(scalar)))),
-            ir::TypeLayout::Vector(ref scalar, ref x) => ast::Type::Structured(ast::StructuredType::Data(ast::DataType::Vector(self.invert_scalartype(scalar), *x))),
-            ir::TypeLayout::Matrix(ref scalar, ref x, ref y) => ast::Type::Structured(ast::StructuredType::Data(ast::DataType::Matrix(self.invert_scalartype(scalar), *x, *y))),
+    fn invert_typelayout(&self, ty: &ir::TypeLayout) -> ast::TypeLayout {
+        match *ty {
+            ir::TypeLayout::Void => ast::TypeLayout::Void,
+            ir::TypeLayout::Scalar(ref scalar) => ast::TypeLayout::Scalar(self.invert_scalartype(scalar)),
+            ir::TypeLayout::Vector(ref scalar, ref x) => ast::TypeLayout::Vector(self.invert_scalartype(scalar), *x),
+            ir::TypeLayout::Matrix(ref scalar, ref x, ref y) => ast::TypeLayout::Matrix(self.invert_scalartype(scalar), *x, *y),
             ir::TypeLayout::Struct(ref id) => {
-                ast::Type::Structured(ast::StructuredType::Custom(match self.get_struct_name(&id) {
+                ast::TypeLayout::Custom(match self.get_struct_name(&id) {
                     Some(name) => name,
                     None => "<struct>".to_string(),
-                }))
+                })
             },
-            ir::TypeLayout::SamplerState => ast::Type::SamplerState,
-            ir::TypeLayout::Object(ref object_type) => ast::Type::Object(self.invert_objecttype(object_type)),
-            ir::TypeLayout::Array(ref array_type) => ast::Type::Array(Box::new(self.invert_type(array_type))),
+            ir::TypeLayout::SamplerState => ast::TypeLayout::SamplerState,
+            ir::TypeLayout::Object(ref object_type) => ast::TypeLayout::Object(self.invert_objecttype(object_type)),
+            ir::TypeLayout::Array(ref array_type) => ast::TypeLayout::Array(Box::new(self.invert_type(array_type))),
         }
+    }
+
+    fn invert_type(&self, ty: &ir::Type) -> ast::Type {
+        let &ir::Type(ref tyl, ref modifier) = ty;
+        ast::Type(self.invert_typelayout(tyl), self.invert_modifier(modifier))
     }
 
     fn destruct(self) -> (HashMap<ir::StructId, String>, HashMap<ir::ConstantBufferId, String>) {
@@ -424,7 +449,7 @@ impl StructIdFinder for TypeBlock {
     fn find_struct_id(&self, name: &String) -> Result<ir::StructId, TyperError> {
         self.struct_ids.get(name).map(|id| id.clone()).ok_or(
             TyperError::UnknownType(
-                ErrorType::Value(ast::Type::Structured(ast::StructuredType::Custom(name.clone())))
+                ErrorType::Value(ast::Type::from_layout(ast::TypeLayout::Custom(name.clone())))
             )
         )
     }
@@ -711,21 +736,47 @@ fn parse_scalartype(ty: &ast::ScalarType) -> Result<ir::ScalarType, TyperError> 
     })
 }
 
+fn parse_row_order(row_order: &ast::RowOrder) -> ir::RowOrder {
+    match *row_order {
+        ast::RowOrder::Row => ir::RowOrder::Row,
+        ast::RowOrder::Column => ir::RowOrder::Column,
+    }
+}
+
+fn parse_modifier(modifier: &ast::TypeModifier) -> ir::TypeModifier {
+    ir::TypeModifier {
+        is_const: modifier.is_const,
+        row_order: parse_row_order(&modifier.row_order),
+        precise: modifier.precise,
+        volatile: modifier.volatile,
+    }
+}
+
+fn parse_datalayout(ty: &ast::DataLayout) -> Result<ir::DataLayout, TyperError> {
+    Ok(match *ty {
+        ast::DataLayout::Scalar(ref scalar) => ir::DataLayout::Scalar(try!(parse_scalartype(scalar))),
+        ast::DataLayout::Vector(ref scalar, ref x) => ir::DataLayout::Vector(try!(parse_scalartype(scalar)), *x),
+        ast::DataLayout::Matrix(ref scalar, ref x, ref y) => ir::DataLayout::Matrix(try!(parse_scalartype(scalar)), *x, *y),
+    })
+}
+
 fn parse_datatype(ty: &ast::DataType) -> Result<ir::DataType, TyperError> {
-    Ok(ir::DataType(match *ty {
-        ast::DataType::Scalar(ref scalar) => ir::DataLayout::Scalar(try!(parse_scalartype(scalar))),
-        ast::DataType::Vector(ref scalar, ref x) => ir::DataLayout::Vector(try!(parse_scalartype(scalar)), *x),
-        ast::DataType::Matrix(ref scalar, ref x, ref y) => ir::DataLayout::Matrix(try!(parse_scalartype(scalar)), *x, *y),
-    }, ir::TypeModifier::default()))
+    let &ast::DataType(ref tyl, ref modifier) = ty;
+    Ok(ir::DataType(try!(parse_datalayout(tyl)), parse_modifier(modifier)))
+}
+
+fn parse_structuredlayout(ty: &ast::StructuredLayout, struct_finder: &StructIdFinder) -> Result<ir::StructuredLayout, TyperError> {
+    Ok(match *ty {
+        ast::StructuredLayout::Scalar(ref scalar) => ir::StructuredLayout::Scalar(try!(parse_scalartype(scalar))),
+        ast::StructuredLayout::Vector(ref scalar, ref x) => ir::StructuredLayout::Vector(try!(parse_scalartype(scalar)), *x),
+        ast::StructuredLayout::Matrix(ref scalar, ref x, ref y) => ir::StructuredLayout::Matrix(try!(parse_scalartype(scalar)), *x, *y),
+        ast::StructuredLayout::Custom(ref name) => ir::StructuredLayout::Struct(try!(struct_finder.find_struct_id(name))),
+    })
 }
 
 fn parse_structuredtype(ty: &ast::StructuredType, struct_finder: &StructIdFinder) -> Result<ir::StructuredType, TyperError> {
-    Ok(ir::StructuredType(match *ty {
-        ast::StructuredType::Data(ast::DataType::Scalar(ref scalar)) => ir::StructuredLayout::Scalar(try!(parse_scalartype(scalar))),
-        ast::StructuredType::Data(ast::DataType::Vector(ref scalar, ref x)) => ir::StructuredLayout::Vector(try!(parse_scalartype(scalar)), *x),
-        ast::StructuredType::Data(ast::DataType::Matrix(ref scalar, ref x, ref y)) => ir::StructuredLayout::Matrix(try!(parse_scalartype(scalar)), *x, *y),
-        ast::StructuredType::Custom(ref name) => ir::StructuredLayout::Struct(try!(struct_finder.find_struct_id(name))),
-    }, ir::TypeModifier::default()))
+    let &ast::StructuredType(ref tyl, ref modifier) = ty;
+    Ok(ir::StructuredType(try!(parse_structuredlayout(tyl, struct_finder)), parse_modifier(modifier)))
 }
 
 fn parse_objecttype(ty: &ast::ObjectType, struct_finder: &StructIdFinder) -> Result<ir::ObjectType, TyperError> {
@@ -757,17 +808,22 @@ fn parse_objecttype(ty: &ast::ObjectType, struct_finder: &StructIdFinder) -> Res
     })
 }
 
+fn parse_typelayout(ty: &ast::TypeLayout, struct_finder: &StructIdFinder) -> Result<ir::TypeLayout, TyperError> {
+    Ok(match *ty {
+        ast::TypeLayout::Void => ir::TypeLayout::void(),
+        ast::TypeLayout::Scalar(ref scalar) => ir::TypeLayout::Scalar(try!(parse_scalartype(scalar))),
+        ast::TypeLayout::Vector(ref scalar, ref x) => ir::TypeLayout::Vector(try!(parse_scalartype(scalar)), *x),
+        ast::TypeLayout::Matrix(ref scalar, ref x, ref y) => ir::TypeLayout::Matrix(try!(parse_scalartype(scalar)), *x, *y),
+        ast::TypeLayout::Custom(ref name) => ir::TypeLayout::Struct(try!(struct_finder.find_struct_id(name))),
+        ast::TypeLayout::SamplerState => ir::TypeLayout::SamplerState,
+        ast::TypeLayout::Object(ref object_type) => ir::TypeLayout::Object(try!(parse_objecttype(object_type, struct_finder))),
+        ast::TypeLayout::Array(ref array_type) => ir::TypeLayout::Array(Box::new(try!(parse_type(array_type, struct_finder)))),
+    })
+}
+
 fn parse_type(ty: &ast::Type, struct_finder: &StructIdFinder) -> Result<ir::Type, TyperError> {
-    Ok(ir::Type::from_layout(match *ty {
-        ast::Type::Void => ir::TypeLayout::void(),
-        ast::Type::Structured(ast::StructuredType::Data(ast::DataType::Scalar(ref scalar))) => ir::TypeLayout::Scalar(try!(parse_scalartype(scalar))),
-        ast::Type::Structured(ast::StructuredType::Data(ast::DataType::Vector(ref scalar, ref x))) => ir::TypeLayout::Vector(try!(parse_scalartype(scalar)), *x),
-        ast::Type::Structured(ast::StructuredType::Data(ast::DataType::Matrix(ref scalar, ref x, ref y))) => ir::TypeLayout::Matrix(try!(parse_scalartype(scalar)), *x, *y),
-        ast::Type::Structured(ast::StructuredType::Custom(ref name)) => ir::TypeLayout::Struct(try!(struct_finder.find_struct_id(name))),
-        ast::Type::SamplerState => ir::TypeLayout::SamplerState,
-        ast::Type::Object(ref object_type) => ir::TypeLayout::Object(try!(parse_objecttype(object_type, struct_finder))),
-        ast::Type::Array(ref array_type) => ir::TypeLayout::Array(Box::new(try!(parse_type(array_type, struct_finder)))),
-    }))
+    let &ast::Type(ref tyl, ref modifier) = ty;
+    Ok(ir::Type(try!(parse_typelayout(tyl, struct_finder)), parse_modifier(modifier)))
 }
 
 fn find_function_type(overloads: &Vec<FunctionOverload>, param_types: &ParamArray) -> Result<(FunctionOverload, Vec<ImplicitConversion>), TyperError> {
@@ -1496,26 +1552,26 @@ fn test_typeparse() {
         root_definitions: vec![
             ast::RootDefinition::GlobalVariable(ast::GlobalVariable {
                 name: "g_myInBuffer".to_string(),
-                typename: ast::Type::Object(ast::ObjectType::Buffer(ast::DataType::Scalar(ast::ScalarType::Int))),
+                typename: ast::Type::from_object(ast::ObjectType::Buffer(ast::DataType(ast::DataLayout::Scalar(ast::ScalarType::Int), ast::TypeModifier::default()))),
                 slot: Some(ast::GlobalSlot::ReadSlot(0)),
             }),
             ast::RootDefinition::Function(ast::FunctionDefinition {
                 name: "myFunc".to_string(),
-                returntype: ast::Type::Void,
+                returntype: ast::Type::void(),
                 params: vec![ast::FunctionParam { name: "x".to_string(), typename: ast::Type::uint(), semantic: None }],
                 body: vec![],
                 attributes: vec![],
             }),
             ast::RootDefinition::Function(ast::FunctionDefinition {
                 name: "myFunc".to_string(),
-                returntype: ast::Type::Void,
+                returntype: ast::Type::void(),
                 params: vec![ast::FunctionParam { name: "x".to_string(), typename: ast::Type::float(), semantic: None }],
                 body: vec![],
                 attributes: vec![],
             }),
             ast::RootDefinition::Function(ast::FunctionDefinition {
                 name: "CSMAIN".to_string(),
-                returntype: ast::Type::Void,
+                returntype: ast::Type::void(),
                 params: vec![],
                 body: vec![
                     ast::Statement::Empty,

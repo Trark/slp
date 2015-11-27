@@ -711,26 +711,28 @@ fn test_transpile() {
         root_definitions: vec![
             hlsl::ast::RootDefinition::GlobalVariable(hlsl::ast::GlobalVariable {
                 name: "g_myInBuffer".to_string(),
-                typename: hlsl::ast::Type::Object(hlsl::ast::ObjectType::Buffer(hlsl::ast::DataType::Scalar(hlsl::ast::ScalarType::Int))),
+                typename: hlsl::ast::Type::from_object(hlsl::ast::ObjectType::Buffer(
+                    hlsl::ast::DataType(hlsl::ast::DataLayout::Scalar(hlsl::ast::ScalarType::Int), hlsl::ast::TypeModifier::default())
+                )),
                 slot: Some(hlsl::ast::GlobalSlot::ReadSlot(0)),
             }),
             hlsl::ast::RootDefinition::Function(hlsl::ast::FunctionDefinition {
                 name: "myFunc".to_string(),
-                returntype: hlsl::ast::Type::Void,
+                returntype: hlsl::ast::Type::void(),
                 params: vec![hlsl::ast::FunctionParam { name: "x".to_string(), typename: hlsl::ast::Type::uint(), semantic: None }],
                 body: vec![],
                 attributes: vec![],
             }),
             hlsl::ast::RootDefinition::Function(hlsl::ast::FunctionDefinition {
                 name: "myFunc".to_string(),
-                returntype: hlsl::ast::Type::Void,
+                returntype: hlsl::ast::Type::void(),
                 params: vec![hlsl::ast::FunctionParam { name: "x".to_string(), typename: hlsl::ast::Type::float(), semantic: None }],
                 body: vec![],
                 attributes: vec![],
             }),
             hlsl::ast::RootDefinition::Function(hlsl::ast::FunctionDefinition {
                 name: "CSMAIN".to_string(),
-                returntype: hlsl::ast::Type::Void,
+                returntype: hlsl::ast::Type::void(),
                 params: vec![],
                 body: vec![
                     hlsl::ast::Statement::Empty,

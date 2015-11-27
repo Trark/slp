@@ -11,25 +11,33 @@ pub enum ScalarType {
     Double,
 }
 
+#[derive(PartialEq, Debug, Clone)]
+pub enum DataLayout {
+    Scalar(ScalarType),
+    Vector(ScalarType, u32),
+    Matrix(ScalarType, u32, u32),
+}
+
 /// A type that can be used in data buffers (Buffer / RWBuffer / etc)
 /// These can interpret data in buffers bound with a format
 /// FormatType might be a better name because they can bind resource
 /// views with a format, but HLSL just called them Buffer and other
 /// apis call them data buffers
 #[derive(PartialEq, Debug, Clone)]
-pub enum DataType {
+pub struct DataType(pub DataLayout, pub TypeModifier);
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum StructuredLayout {
     Scalar(ScalarType),
     Vector(ScalarType, u32),
     Matrix(ScalarType, u32, u32),
+    Custom(String), // Struct + User defined types
 }
 
 /// A type that can be used in structured buffers
 /// These are the both struct defined types, the format data types
 #[derive(PartialEq, Debug, Clone)]
-pub enum StructuredType {
-    Data(DataType),
-    Custom(String), // Struct + User defined types
-}
+pub struct StructuredType(pub StructuredLayout, pub TypeModifier);
 
 /// Hlsl Object Types
 #[derive(PartialEq, Debug, Clone)]
@@ -71,12 +79,129 @@ pub enum ObjectType {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum Type {
+pub enum TypeLayout {
     Void,
-    Structured(StructuredType),
+    Scalar(ScalarType),
+    Vector(ScalarType, u32),
+    Matrix(ScalarType, u32, u32),
+    Custom(String),
     SamplerState,
     Object(ObjectType),
     Array(Box<Type>),
+}
+
+impl TypeLayout {
+    pub fn from_scalar(scalar: ScalarType) -> TypeLayout { TypeLayout::Scalar(scalar) }
+    pub fn from_object(object: ObjectType) -> TypeLayout { TypeLayout::Object(object) }
+
+    pub fn uint() -> TypeLayout { TypeLayout::from_scalar(ScalarType::UInt) }
+    pub fn int() -> TypeLayout { TypeLayout::from_scalar(ScalarType::Int) }
+    pub fn long() -> TypeLayout { TypeLayout::from_scalar(ScalarType::Int) }
+    pub fn float() -> TypeLayout { TypeLayout::from_scalar(ScalarType::Float) }
+    pub fn double() -> TypeLayout { TypeLayout::from_scalar(ScalarType::Double) }
+    pub fn float4x4() -> TypeLayout { TypeLayout::Matrix(ScalarType::Float, 4, 4) }
+    pub fn custom(name: &str) -> TypeLayout { TypeLayout::Custom(name.to_string()) }
+}
+
+impl From<DataLayout> for TypeLayout {
+    fn from(data: DataLayout) -> TypeLayout {
+        match data {
+            DataLayout::Scalar(scalar) => TypeLayout::Scalar(scalar),
+            DataLayout::Vector(scalar, x) => TypeLayout::Vector(scalar, x),
+            DataLayout::Matrix(scalar, x, y) => TypeLayout::Matrix(scalar, x, y),
+        }
+    }
+}
+
+impl From<StructuredLayout> for TypeLayout {
+    fn from(structured: StructuredLayout) -> TypeLayout {
+        match structured {
+            StructuredLayout::Scalar(scalar) => TypeLayout::Scalar(scalar),
+            StructuredLayout::Vector(scalar, x) => TypeLayout::Vector(scalar, x),
+            StructuredLayout::Matrix(scalar, x, y) => TypeLayout::Matrix(scalar, x, y),
+            StructuredLayout::Custom(name) => TypeLayout::Custom(name),
+        }
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum RowOrder {
+    Row,
+    Column
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct TypeModifier {
+    pub is_const: bool,
+    pub row_order: RowOrder,
+    pub precise: bool,
+    pub volatile: bool,
+}
+
+impl Default for TypeModifier {
+    fn default() -> TypeModifier {
+        TypeModifier { is_const: false, row_order: RowOrder::Column, precise: false, volatile: false }
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum InterpolationModifier {
+    NoInterpolation,
+    Linear,
+    Centroid,
+    NoPerspective,
+    Sample,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum GlobalStorage {
+    Static,
+    GroupShared,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum InputModifier {
+    In,
+    Out,
+    InOut,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum LocalStorage {
+    Local,
+    Static,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct Type(pub TypeLayout, pub TypeModifier);
+
+impl Type {
+    pub fn void() -> Type { Type::from_layout(TypeLayout::Void) }
+    pub fn from_layout(layout: TypeLayout) -> Type { Type(layout, TypeModifier::default()) }
+    pub fn from_scalar(scalar: ScalarType) -> Type { Type::from_layout(TypeLayout::from_scalar(scalar)) }
+    pub fn from_object(object: ObjectType) -> Type { Type::from_layout(TypeLayout::from_object(object)) }
+
+    pub fn uint() -> Type { Type::from_layout(TypeLayout::uint()) }
+    pub fn int()  -> Type { Type::from_layout(TypeLayout::int()) }
+    pub fn long()  -> Type { Type::from_layout(TypeLayout::long()) }
+    pub fn float()  -> Type { Type::from_layout(TypeLayout::float()) }
+    pub fn double()  -> Type { Type::from_layout(TypeLayout::double()) }
+    pub fn float4x4() -> Type { Type::from_layout(TypeLayout::float4x4()) }
+    pub fn custom(name: &str)  -> Type { Type::from_layout(TypeLayout::custom(name)) }
+}
+
+impl From<DataType> for Type {
+    fn from(ty: DataType) -> Type {
+        let DataType(layout, modifier) = ty;
+        Type(layout.into(), modifier)
+    }
+}
+
+impl From<StructuredType> for Type {
+    fn from(ty: StructuredType) -> Type {
+        let StructuredType(layout, modifier) = ty;
+        Type(layout.into(), modifier)
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -263,17 +388,4 @@ pub enum RootDefinition {
 pub struct Module {
     pub entry_point: String,
     pub root_definitions: Vec<RootDefinition>,
-}
-
-
-impl Type {
-    pub fn from_scalar(scalar: ScalarType) -> Type { Type::Structured(StructuredType::Data(DataType::Scalar(scalar))) }
-
-    pub fn uint() -> Type { Type::from_scalar(ScalarType::UInt) }
-    pub fn int() -> Type { Type::from_scalar(ScalarType::Int) }
-    pub fn long() -> Type { Type::from_scalar(ScalarType::Int) }
-    pub fn float() -> Type { Type::from_scalar(ScalarType::Float) }
-    pub fn double() -> Type { Type::from_scalar(ScalarType::Double) }
-    pub fn float4x4() -> Type { Type::Structured(StructuredType::Data(DataType::Matrix(ScalarType::Float, 4, 4))) }
-    pub fn custom(name: &str) -> Type { Type::Structured(StructuredType::Custom(name.to_string())) }
 }

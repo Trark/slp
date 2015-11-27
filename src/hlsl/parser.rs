@@ -62,7 +62,7 @@ fn parse_variablename(input: &[Token]) -> IResult<&[Token], String, ParseErrorRe
     map!(input, token!(Token::Id(_)), |tok| { match tok { Token::Id(Identifier(name)) => name.clone(), _ => unreachable!() } })
 }
 
-fn parse_datatype(input: &[Token]) -> IResult<&[Token], DataType, ParseErrorReason> {
+fn parse_datalayout(input: &[Token]) -> IResult<&[Token], DataLayout, ParseErrorReason> {
 
     // Parse a vector dimension as a token
     fn parse_digit(input: &[Token]) -> IResult<&[Token], u32, ParseErrorReason> {
@@ -104,7 +104,7 @@ fn parse_datatype(input: &[Token]) -> IResult<&[Token], DataType, ParseErrorReas
     }
 
 
-    fn parse_datatype_str(typename: &str) -> Option<DataType> {
+    fn parse_datatype_str(typename: &str) -> Option<DataLayout> {
 
         fn digit(input: &[u8]) -> IResult<&[u8], u32> {
             alt!(input,
@@ -115,26 +115,26 @@ fn parse_datatype(input: &[Token]) -> IResult<&[Token], DataType, ParseErrorReas
             )
         }
 
-        fn parse_str(input: &[u8]) -> IResult<&[u8], DataType> {
+        fn parse_str(input: &[u8]) -> IResult<&[u8], DataLayout> {
             match parse_scalartype_str(input) {
                 IResult::Incomplete(rem) => IResult::Incomplete(rem),
                 IResult::Error(err) => IResult::Error(err),
                 IResult::Done(rest, ty) => {
                     if rest.len() == 0 {
-                        IResult::Done(&[], DataType::Scalar(ty))
+                        IResult::Done(&[], DataLayout::Scalar(ty))
                     } else {
                         match digit(rest) {
                             IResult::Incomplete(rem) => IResult::Incomplete(rem),
                             IResult::Error(err) => IResult::Error(err),
                             IResult::Done(rest, x) => {
                                 if rest.len() == 0 {
-                                    IResult::Done(&[], DataType::Vector(ty, x))
+                                    IResult::Done(&[], DataLayout::Vector(ty, x))
                                 } else {
                                     match preceded!(rest, tag!("x"), digit) {
                                         IResult::Incomplete(rem) => IResult::Incomplete(rem),
                                         IResult::Error(err) => IResult::Error(err),
                                         IResult::Done(rest, y) => if rest.len() == 0 {
-                                            IResult::Done(&[], DataType::Matrix(ty, x, y))
+                                            IResult::Done(&[], DataLayout::Matrix(ty, x, y))
                                         } else {
                                             IResult::Error(Err::Position(ErrorKind::Custom(0), input))
                                         }
@@ -166,7 +166,7 @@ fn parse_datatype(input: &[Token]) -> IResult<&[Token], DataType, ParseErrorReas
                             token!(Token::Comma) ~
                             x: parse_digit ~
                             token!(Token::RightAngleBracket(_)),
-                            || { DataType::Vector(scalar, x) }
+                            || { DataLayout::Vector(scalar, x) }
                         )
                     },
                     "matrix" => {
@@ -178,7 +178,7 @@ fn parse_datatype(input: &[Token]) -> IResult<&[Token], DataType, ParseErrorReas
                             token!(Token::Comma) ~
                             y: parse_digit ~
                             token!(Token::RightAngleBracket(_)),
-                            || { DataType::Matrix(scalar, x, y) }
+                            || { DataLayout::Matrix(scalar, x, y) }
                         )
                     },
                     _ => match parse_datatype_str(&name[..]) {
@@ -192,11 +192,34 @@ fn parse_datatype(input: &[Token]) -> IResult<&[Token], DataType, ParseErrorReas
     }
 }
 
-fn parse_structuredtype(input: &[Token]) -> IResult<&[Token], StructuredType, ParseErrorReason> {
+fn parse_datatype(input: &[Token]) -> IResult<&[Token], DataType, ParseErrorReason> {
+    // Todo: Modifiers
+    match parse_datalayout(input) {
+        IResult::Done(rest, layout) => IResult::Done(rest, DataType(layout, Default::default())),
+        IResult::Incomplete(i) => IResult::Incomplete(i),
+        IResult::Error(err) => IResult::Error(err),
+    }
+}
+
+fn parse_structuredlayout(input: &[Token]) -> IResult<&[Token], StructuredLayout, ParseErrorReason> {
     alt!(input,
-        parse_datatype => { |ty| { StructuredType::Data(ty) } } |
-        token!(Token::Id(Identifier(ref name)) => StructuredType::Custom(name.clone()))
+        parse_datalayout => { |ty| { match ty {
+                DataLayout::Scalar(scalar) => StructuredLayout::Scalar(scalar),
+                DataLayout::Vector(scalar, x) => StructuredLayout::Vector(scalar, x),
+                DataLayout::Matrix(scalar, x, y) => StructuredLayout::Matrix(scalar, x, y),
+            }
+        } } |
+        token!(Token::Id(Identifier(ref name)) => StructuredLayout::Custom(name.clone()))
     )
+}
+
+fn parse_structuredtype(input: &[Token]) -> IResult<&[Token], StructuredType, ParseErrorReason> {
+    // Todo: Modifiers
+    match parse_structuredlayout(input) {
+        IResult::Done(rest, layout) => IResult::Done(rest, StructuredType(layout, Default::default())),
+        IResult::Incomplete(i) => IResult::Incomplete(i),
+        IResult::Error(err) => IResult::Error(err),
+    }
 }
 
 fn parse_objecttype(input: &[Token]) -> IResult<&[Token], ObjectType, ParseErrorReason> {
@@ -300,7 +323,7 @@ fn parse_objecttype(input: &[Token]) -> IResult<&[Token], ObjectType, ParseError
             let (buffer_arg, rest) = match delimited!(rest, token!(Token::LeftAngleBracket(_)), parse_datatype, token!(Token::RightAngleBracket(_))) {
                 IResult::Done(rest, ty) => (ty, rest),
                 IResult::Incomplete(rem) => return IResult::Incomplete(rem),
-                IResult::Error(_) => (DataType::Vector(ScalarType::Float, 4), rest)
+                IResult::Error(_) => (DataType(DataLayout::Vector(ScalarType::Float, 4), TypeModifier::default()), rest)
             };
 
             IResult::Done(rest, match object_type {
@@ -332,7 +355,7 @@ fn parse_objecttype(input: &[Token]) -> IResult<&[Token], ObjectType, ParseError
             let (buffer_arg, rest) = match delimited!(rest, token!(Token::LeftAngleBracket(_)), parse_structuredtype, token!(Token::RightAngleBracket(_))) {
                 IResult::Done(rest, ty) => (ty, rest),
                 IResult::Incomplete(rem) => return IResult::Incomplete(rem),
-                IResult::Error(_) => (StructuredType::Data(DataType::Vector(ScalarType::Float, 4)), rest)
+                IResult::Error(_) => (StructuredType(StructuredLayout::Vector(ScalarType::Float, 4), TypeModifier::default()), rest)
             };
 
             IResult::Done(rest, match object_type {
@@ -350,13 +373,13 @@ fn parse_objecttype(input: &[Token]) -> IResult<&[Token], ObjectType, ParseError
 
 }
 
-fn parse_voidtype(input: &[Token]) -> IResult<&[Token], Type, ParseErrorReason> {
+fn parse_voidtype(input: &[Token]) -> IResult<&[Token], TypeLayout, ParseErrorReason> {
     if input.len() == 0 {
         IResult::Incomplete(Needed::Size(1))
     } else {
         match &input[0] {
             &Token::Id(Identifier(ref name)) => if name == "void" {
-                IResult::Done(&input[1..], Type::Void)
+                IResult::Done(&input[1..], TypeLayout::Void)
             } else {
                 IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType), input))
             },
@@ -365,14 +388,23 @@ fn parse_voidtype(input: &[Token]) -> IResult<&[Token], Type, ParseErrorReason> 
     }
 }
 
-fn parse_typename(input: &[Token]) -> IResult<&[Token], Type, ParseErrorReason> {
+fn parse_typelayout(input: &[Token]) -> IResult<&[Token], TypeLayout, ParseErrorReason> {
     alt!(input,
-        parse_objecttype => { |ty| { Type::Object(ty) } } |
+        parse_objecttype => { |ty| { TypeLayout::Object(ty) } } |
         parse_voidtype |
-        token!(Token::SamplerState => Type::SamplerState) |
+        token!(Token::SamplerState => TypeLayout::SamplerState) |
         // Structured types eat everything as user defined types so must come last
-        parse_structuredtype => { |ty| { Type::Structured(ty) } }
+        parse_structuredlayout => { |ty| { TypeLayout::from(ty) } }
     )
+}
+
+fn parse_typename(input: &[Token]) -> IResult<&[Token], Type, ParseErrorReason> {
+    // Todo: Modifiers
+    match parse_typelayout(input) {
+        IResult::Done(rest, layout) => IResult::Done(rest, Type(layout, Default::default())),
+        IResult::Incomplete(i) => IResult::Incomplete(i),
+        IResult::Error(err) => IResult::Error(err),
+    }
 }
 
 fn expr_paren(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
@@ -1156,7 +1188,7 @@ fn test_rootdefinition() {
     let test_func_str = "void func(float x) { }";
     let test_func_ast = FunctionDefinition { 
         name: "func".to_string(),
-        returntype: Type::Void,
+        returntype: Type::void(),
         params: vec![FunctionParam { name: "x".to_string(), typename: Type::float(), semantic: None }],
         body: vec![],
         attributes: vec![],
@@ -1165,7 +1197,7 @@ fn test_rootdefinition() {
     assert_eq!(rootdefinition_str(test_func_str), RootDefinition::Function(test_func_ast.clone()));
     assert_eq!(rootdefinition_str("[numthreads(16, 16, 1)] void func(float x) { }"), RootDefinition::Function(FunctionDefinition {
         name: "func".to_string(),
-        returntype: Type::Void,
+        returntype: Type::void(),
         params: vec![FunctionParam { name: "x".to_string(), typename: Type::float(), semantic: None }],
         body: vec![],
         attributes: vec![FunctionAttribute::NumThreads(16, 16, 1)],
@@ -1209,7 +1241,7 @@ fn test_rootdefinition() {
     let test_buffersrv_str = "Buffer g_myBuffer : register(t1);";
     let test_buffersrv_ast = GlobalVariable {
         name: "g_myBuffer".to_string(),
-        typename: Type::Object(ObjectType::Buffer(DataType::Vector(ScalarType::Float, 4))),
+        typename: Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::Float, 4), TypeModifier::default()))),
         slot: Some(GlobalSlot::ReadSlot(1)),
     };
     assert_eq!(globalvariable_str(test_buffersrv_str), test_buffersrv_ast.clone());
@@ -1218,7 +1250,7 @@ fn test_rootdefinition() {
     let test_buffersrv2_str = "Buffer<uint4> g_myBuffer : register(t1);";
     let test_buffersrv2_ast = GlobalVariable {
         name: "g_myBuffer".to_string(),
-        typename: Type::Object(ObjectType::Buffer(DataType::Vector(ScalarType::UInt, 4))),
+        typename: Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::UInt, 4), TypeModifier::default()))),
         slot: Some(GlobalSlot::ReadSlot(1)),
     };
     assert_eq!(globalvariable_str(test_buffersrv2_str), test_buffersrv2_ast.clone());
@@ -1227,7 +1259,7 @@ fn test_rootdefinition() {
     let test_buffersrv3_str = "Buffer<vector<int, 4>> g_myBuffer : register(t1);";
     let test_buffersrv3_ast = GlobalVariable {
         name: "g_myBuffer".to_string(),
-        typename: Type::Object(ObjectType::Buffer(DataType::Vector(ScalarType::Int, 4))),
+        typename: Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::Int, 4), TypeModifier::default()))),
         slot: Some(GlobalSlot::ReadSlot(1)),
     };
     assert_eq!(globalvariable_str(test_buffersrv3_str), test_buffersrv3_ast.clone());
@@ -1236,7 +1268,7 @@ fn test_rootdefinition() {
     let test_buffersrv4_str = "StructuredBuffer<CustomType> g_myBuffer : register(t1);";
     let test_buffersrv4_ast = GlobalVariable {
         name: "g_myBuffer".to_string(),
-        typename: Type::Object(ObjectType::StructuredBuffer(StructuredType::Custom("CustomType".to_string()))),
+        typename: Type::from_object(ObjectType::StructuredBuffer(StructuredType(StructuredLayout::Custom("CustomType".to_string()), TypeModifier::default()))),
         slot: Some(GlobalSlot::ReadSlot(1)),
     };
     assert_eq!(globalvariable_str(test_buffersrv4_str), test_buffersrv4_ast.clone());
