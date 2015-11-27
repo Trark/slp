@@ -748,23 +748,23 @@ fn test_transpile() {
                         hlsl::ast::Expression::Variable("b".to_string()),
                         Box::new(hlsl::ast::Statement::Empty),
                     ),
-                    //hlsl::ast::Statement::Expression(
-                    //    hlsl::ast::Expression::BinaryOperation(hlsl::ast::BinOp::Assignment,
-                    //        Box::new(hlsl::ast::Expression::ArraySubscript(
-                    //            Box::new(hlsl::ast::Expression::Variable("g_myInBuffer".to_string())),
-                    //            Box::new(hlsl::ast::Expression::Literal(hlsl::ast::Literal::Int(0)))
-                    //        )),
-                    //        Box::new(hlsl::ast::Expression::Literal(hlsl::ast::Literal::Int(4)))
-                    //    ),
-                    //),
-                    //hlsl::ast::Statement::Expression(
-                    //    hlsl::ast::Expression::Call(
-                    //        Box::new(hlsl::ast::Expression::Variable("myFunc".to_string())),
-                    //        vec![
-                    //            hlsl::ast::Expression::Variable("b".to_string())
-                    //        ]
-                    //    ),
-                    //),
+                    hlsl::ast::Statement::Expression(
+                        hlsl::ast::Expression::BinaryOperation(hlsl::ast::BinOp::Assignment,
+                            Box::new(hlsl::ast::Expression::ArraySubscript(
+                                Box::new(hlsl::ast::Expression::Variable("g_myInBuffer".to_string())),
+                                Box::new(hlsl::ast::Expression::Literal(hlsl::ast::Literal::Int(0)))
+                            )),
+                            Box::new(hlsl::ast::Expression::Literal(hlsl::ast::Literal::Int(4)))
+                        ),
+                    ),
+                    hlsl::ast::Statement::Expression(
+                        hlsl::ast::Expression::Call(
+                            Box::new(hlsl::ast::Expression::Variable("myFunc".to_string())),
+                            vec![
+                                hlsl::ast::Expression::Variable("b".to_string())
+                            ]
+                        ),
+                    ),
                 ],
                 attributes: vec![hlsl::ast::FunctionAttribute::NumThreads(8, 8, 1)],
             }),
