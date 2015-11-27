@@ -11,7 +11,6 @@ pub enum TranspileError {
 
     TypeIsNotAllowedAsGlobal(src::Type),
     CouldNotGetEquivalentType(src::Type),
-    CouldNotGetEquivalentDataType(src::DataType),
 
     GlobalFoundThatIsntInKernelParams(src::GlobalVariable),
 
@@ -30,7 +29,6 @@ impl error::Error for TranspileError {
             TranspileError::Unknown => "unknown transpiler error",
             TranspileError::TypeIsNotAllowedAsGlobal(_) => "global variable has unsupported type",
             TranspileError::CouldNotGetEquivalentType(_) => "could not find equivalent clc type",
-            TranspileError::CouldNotGetEquivalentDataType(_) => "could not find equivalent clc type",
             TranspileError::GlobalFoundThatIsntInKernelParams(_) => "non-parameter global found",
             TranspileError::UnknownFunctionId(_) => "unknown function id",
             TranspileError::UnknownStructId(_) => "unknown struct id",
@@ -250,24 +248,21 @@ fn transpile_scalartype(scalartype: &src::ScalarType) -> Result<dst::Scalar, Tra
     }
 }
 
-fn transpile_datatype(datatype: &src::DataType) -> Result<dst::Type, TranspileError> {
-    match datatype {
-        &src::DataType::Scalar(src::ScalarType::Bool) => Ok(dst::Type::Bool),
-        &src::DataType::Scalar(ref scalar) => Ok(dst::Type::Scalar(try!(transpile_scalartype(scalar)))),
-        &src::DataType::Vector(ref scalar, 1) => Ok(dst::Type::Scalar(try!(transpile_scalartype(scalar)))),
-        &src::DataType::Vector(ref scalar, 2) => Ok(dst::Type::Vector(try!(transpile_scalartype(scalar)), dst::VectorDimension::Two)),
-        &src::DataType::Vector(ref scalar, 3) => Ok(dst::Type::Vector(try!(transpile_scalartype(scalar)), dst::VectorDimension::Three)),
-        &src::DataType::Vector(ref scalar, 4) => Ok(dst::Type::Vector(try!(transpile_scalartype(scalar)), dst::VectorDimension::Four)),
-        ty => return Err(TranspileError::CouldNotGetEquivalentDataType(ty.clone())),
-    }
+fn transpile_datatype(datatype: &src::DataType, context: &Context) -> Result<dst::Type, TranspileError> {
+    transpile_type(&src::Type::from(datatype.clone()), context)
 }
 
 fn transpile_type(hlsltype: &src::Type, context: &Context) -> Result<dst::Type, TranspileError> {
     let &src::Type(ref ty, _) = hlsltype;
     match ty {
         &src::TypeLayout::Void => Ok(dst::Type::Void),
-        &src::TypeLayout::Structured(src::StructuredType::Data(ref data_type)) => transpile_datatype(data_type),
-        &src::TypeLayout::Structured(src::StructuredType::Struct(ref id)) => {
+        &src::TypeLayout::Scalar(src::ScalarType::Bool) => Ok(dst::Type::Bool),
+        &src::TypeLayout::Scalar(ref scalar) => Ok(dst::Type::Scalar(try!(transpile_scalartype(scalar)))),
+        &src::TypeLayout::Vector(ref scalar, 1) => Ok(dst::Type::Scalar(try!(transpile_scalartype(scalar)))),
+        &src::TypeLayout::Vector(ref scalar, 2) => Ok(dst::Type::Vector(try!(transpile_scalartype(scalar)), dst::VectorDimension::Two)),
+        &src::TypeLayout::Vector(ref scalar, 3) => Ok(dst::Type::Vector(try!(transpile_scalartype(scalar)), dst::VectorDimension::Three)),
+        &src::TypeLayout::Vector(ref scalar, 4) => Ok(dst::Type::Vector(try!(transpile_scalartype(scalar)), dst::VectorDimension::Four)),
+        &src::TypeLayout::Struct(ref id) => {
             let struct_name = try!(context.get_struct_name(id));
             Ok(dst::Type::Struct(struct_name))
         },
@@ -658,7 +653,7 @@ fn transpile_global(table: &src::GlobalTable, context: &Context) -> Result<Kerne
         let &src::Type(ref tyl, _) = &global_entry.typename;
         let cl_type = match tyl {
             &src::TypeLayout::Object(src::ObjectType::Buffer(ref data_type)) => {
-                dst::Type::Pointer(dst::AddressSpace::Constant, Box::new(try!(transpile_datatype(data_type))))
+                dst::Type::Pointer(dst::AddressSpace::Constant, Box::new(try!(transpile_datatype(data_type, context))))
             }
             _ => return Err(TranspileError::TypeIsNotAllowedAsGlobal(global_entry.typename.clone())),
         };
@@ -672,7 +667,7 @@ fn transpile_global(table: &src::GlobalTable, context: &Context) -> Result<Kerne
         let &src::Type(ref tyl, _) = &global_entry.typename;
         let cl_type = match tyl {
             &src::TypeLayout::Object(src::ObjectType::RWBuffer(ref data_type)) => {
-                dst::Type::Pointer(dst::AddressSpace::Global, Box::new(try!(transpile_datatype(data_type))))
+                dst::Type::Pointer(dst::AddressSpace::Global, Box::new(try!(transpile_datatype(data_type, context))))
             }
             _ => return Err(TranspileError::TypeIsNotAllowedAsGlobal(global_entry.typename.clone())),
         };

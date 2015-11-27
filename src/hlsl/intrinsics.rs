@@ -56,22 +56,22 @@ pub type IntrinsicDefinition = (Type, &'static str, &'static [Type], IntrinsicFa
 
 const T_MOD: TypeModifier = TypeModifier { is_const: false, row_order: RowOrder::Column, precise: false, volatile: false };
 const T_VOID: Type = Type(TypeLayout::Void, T_MOD);
-const T_INT: Type = Type(TypeLayout::Structured(StructuredType::Data(DataType::Scalar(ScalarType::Int))), T_MOD);
-const T_INT1: Type = Type(TypeLayout::Structured(StructuredType::Data(DataType::Vector(ScalarType::Int, 1))), T_MOD);
-const T_INT2: Type = Type(TypeLayout::Structured(StructuredType::Data(DataType::Vector(ScalarType::Int, 2))), T_MOD);
-const T_INT3: Type = Type(TypeLayout::Structured(StructuredType::Data(DataType::Vector(ScalarType::Int, 3))), T_MOD);
-const T_INT4: Type = Type(TypeLayout::Structured(StructuredType::Data(DataType::Vector(ScalarType::Int, 4))), T_MOD);
-const T_UINT: Type = Type(TypeLayout::Structured(StructuredType::Data(DataType::Scalar(ScalarType::UInt))), T_MOD);
-const T_UINT1: Type = Type(TypeLayout::Structured(StructuredType::Data(DataType::Vector(ScalarType::UInt, 1))), T_MOD);
-const T_UINT2: Type = Type(TypeLayout::Structured(StructuredType::Data(DataType::Vector(ScalarType::UInt, 2))), T_MOD);
-const T_UINT3: Type = Type(TypeLayout::Structured(StructuredType::Data(DataType::Vector(ScalarType::UInt, 3))), T_MOD);
-const T_UINT4: Type = Type(TypeLayout::Structured(StructuredType::Data(DataType::Vector(ScalarType::UInt, 4))), T_MOD);
-const T_FLOAT: Type = Type(TypeLayout::Structured(StructuredType::Data(DataType::Scalar(ScalarType::Float))), T_MOD);
-const T_FLOAT1: Type = Type(TypeLayout::Structured(StructuredType::Data(DataType::Vector(ScalarType::Float, 1))), T_MOD);
-const T_FLOAT2: Type = Type(TypeLayout::Structured(StructuredType::Data(DataType::Vector(ScalarType::Float, 2))), T_MOD);
-const T_FLOAT3: Type = Type(TypeLayout::Structured(StructuredType::Data(DataType::Vector(ScalarType::Float, 3))), T_MOD);
-const T_FLOAT4: Type = Type(TypeLayout::Structured(StructuredType::Data(DataType::Vector(ScalarType::Float, 4))), T_MOD);
-const T_DOUBLE: Type = Type(TypeLayout::Structured(StructuredType::Data(DataType::Scalar(ScalarType::Double))), T_MOD);
+const T_INT: Type = Type(TypeLayout::Scalar(ScalarType::Int), T_MOD);
+const T_INT1: Type = Type(TypeLayout::Vector(ScalarType::Int, 1), T_MOD);
+const T_INT2: Type = Type(TypeLayout::Vector(ScalarType::Int, 2), T_MOD);
+const T_INT3: Type = Type(TypeLayout::Vector(ScalarType::Int, 3), T_MOD);
+const T_INT4: Type = Type(TypeLayout::Vector(ScalarType::Int, 4), T_MOD);
+const T_UINT: Type = Type(TypeLayout::Scalar(ScalarType::UInt), T_MOD);
+const T_UINT1: Type = Type(TypeLayout::Vector(ScalarType::UInt, 1), T_MOD);
+const T_UINT2: Type = Type(TypeLayout::Vector(ScalarType::UInt, 2), T_MOD);
+const T_UINT3: Type = Type(TypeLayout::Vector(ScalarType::UInt, 3), T_MOD);
+const T_UINT4: Type = Type(TypeLayout::Vector(ScalarType::UInt, 4), T_MOD);
+const T_FLOAT: Type = Type(TypeLayout::Scalar(ScalarType::Float), T_MOD);
+const T_FLOAT1: Type = Type(TypeLayout::Vector(ScalarType::Float, 1), T_MOD);
+const T_FLOAT2: Type = Type(TypeLayout::Vector(ScalarType::Float, 2), T_MOD);
+const T_FLOAT3: Type = Type(TypeLayout::Vector(ScalarType::Float, 3), T_MOD);
+const T_FLOAT4: Type = Type(TypeLayout::Vector(ScalarType::Float, 4), T_MOD);
+const T_DOUBLE: Type = Type(TypeLayout::Scalar(ScalarType::Double), T_MOD);
 
 use self::IntrinsicFactory::Intrinsic0 as I0;
 use self::IntrinsicFactory::Intrinsic1 as I1;

@@ -317,10 +317,36 @@ impl TypeBlock {
         None
     }
 
-    fn invert_structuredtype(&self, ty: &ir::StructuredType) -> ast::StructuredType {
+    fn invert_scalartype(&self, ty: &ir::ScalarType) -> ast::ScalarType {
         match *ty {
-            ir::StructuredType::Data(ref data_type) => ast::StructuredType::Data(data_type.clone()),
-            ir::StructuredType::Struct(ref id) => {
+            ir::ScalarType::Bool => ast::ScalarType::Bool,
+            ir::ScalarType::UntypedInt => ast::ScalarType::UntypedInt,
+            ir::ScalarType::Int => ast::ScalarType::Int,
+            ir::ScalarType::UInt => ast::ScalarType::UInt,
+            ir::ScalarType::Half => ast::ScalarType::Half,
+            ir::ScalarType::Float => ast::ScalarType::Float,
+            ir::ScalarType::Double => ast::ScalarType::Double,
+        }
+    }
+
+    fn invert_datatype(&self, ty: &ir::DataType) -> ast::DataType {
+        let &ir::DataType(ref lt, ref modifier) = ty;
+        assert!(modifier.is_empty());
+        match *lt {
+            ir::DataLayout::Scalar(ref scalar) => ast::DataType::Scalar(self.invert_scalartype(scalar)),
+            ir::DataLayout::Vector(ref scalar, ref x) => ast::DataType::Vector(self.invert_scalartype(scalar), *x),
+            ir::DataLayout::Matrix(ref scalar, ref x, ref y) => ast::DataType::Matrix(self.invert_scalartype(scalar), *x, *y),
+        }
+    }
+
+    fn invert_structuredtype(&self, ty: &ir::StructuredType) -> ast::StructuredType {
+        let &ir::StructuredType(ref lt, ref modifier) = ty;
+        assert!(modifier.is_empty());
+        match *lt {
+            ir::StructuredLayout::Scalar(ref scalar) => ast::StructuredType::Data(ast::DataType::Scalar(self.invert_scalartype(scalar))),
+            ir::StructuredLayout::Vector(ref scalar, ref x) => ast::StructuredType::Data(ast::DataType::Vector(self.invert_scalartype(scalar), *x)),
+            ir::StructuredLayout::Matrix(ref scalar, ref x, ref y) => ast::StructuredType::Data(ast::DataType::Matrix(self.invert_scalartype(scalar), *x, *y)),
+            ir::StructuredLayout::Struct(ref id) => {
                 ast::StructuredType::Custom(match self.get_struct_name(&id) {
                     Some(name) => name,
                     None => "<struct>".to_string(),
@@ -331,28 +357,28 @@ impl TypeBlock {
 
     fn invert_objecttype(&self, ty: &ir::ObjectType) -> ast::ObjectType {
         match *ty {
-            ir::ObjectType::Buffer(ref data_type) => ast::ObjectType::Buffer(data_type.clone()),
-            ir::ObjectType::RWBuffer(ref data_type) => ast::ObjectType::RWBuffer(data_type.clone()),
+            ir::ObjectType::Buffer(ref data_type) => ast::ObjectType::Buffer(self.invert_datatype(data_type)),
+            ir::ObjectType::RWBuffer(ref data_type) => ast::ObjectType::RWBuffer(self.invert_datatype(data_type)),
             ir::ObjectType::ByteAddressBuffer => ast::ObjectType::ByteAddressBuffer,
             ir::ObjectType::RWByteAddressBuffer => ast::ObjectType::RWByteAddressBuffer,
             ir::ObjectType::StructuredBuffer(ref structured_type) => ast::ObjectType::StructuredBuffer(self.invert_structuredtype(structured_type)),
             ir::ObjectType::RWStructuredBuffer(ref structured_type) => ast::ObjectType::RWStructuredBuffer(self.invert_structuredtype(structured_type)),
             ir::ObjectType::AppendStructuredBuffer(ref structured_type) => ast::ObjectType::AppendStructuredBuffer(self.invert_structuredtype(structured_type)),
             ir::ObjectType::ConsumeStructuredBuffer(ref structured_type) => ast::ObjectType::ConsumeStructuredBuffer(self.invert_structuredtype(structured_type)),
-            ir::ObjectType::Texture1D(ref data_type) => ast::ObjectType::Texture1D(data_type.clone()),
-            ir::ObjectType::Texture1DArray(ref data_type) => ast::ObjectType::Texture1DArray(data_type.clone()),
-            ir::ObjectType::Texture2D(ref data_type) => ast::ObjectType::Texture2D(data_type.clone()),
-            ir::ObjectType::Texture2DArray(ref data_type) => ast::ObjectType::Texture2DArray(data_type.clone()),
-            ir::ObjectType::Texture2DMS(ref data_type) => ast::ObjectType::Texture2DMS(data_type.clone()),
-            ir::ObjectType::Texture2DMSArray(ref data_type) => ast::ObjectType::Texture2DMSArray(data_type.clone()),
-            ir::ObjectType::Texture3D(ref data_type) => ast::ObjectType::Texture3D(data_type.clone()),
-            ir::ObjectType::TextureCube(ref data_type) => ast::ObjectType::TextureCube(data_type.clone()),
-            ir::ObjectType::TextureCubeArray(ref data_type) => ast::ObjectType::TextureCubeArray(data_type.clone()),
-            ir::ObjectType::RWTexture1D(ref data_type) => ast::ObjectType::RWTexture1D(data_type.clone()),
-            ir::ObjectType::RWTexture1DArray(ref data_type) => ast::ObjectType::RWTexture1DArray(data_type.clone()),
-            ir::ObjectType::RWTexture2D(ref data_type) => ast::ObjectType::RWTexture2D(data_type.clone()),
-            ir::ObjectType::RWTexture2DArray(ref data_type) => ast::ObjectType::RWTexture2DArray(data_type.clone()),
-            ir::ObjectType::RWTexture3D(ref data_type) => ast::ObjectType::RWTexture3D(data_type.clone()),
+            ir::ObjectType::Texture1D(ref data_type) => ast::ObjectType::Texture1D(self.invert_datatype(data_type)),
+            ir::ObjectType::Texture1DArray(ref data_type) => ast::ObjectType::Texture1DArray(self.invert_datatype(data_type)),
+            ir::ObjectType::Texture2D(ref data_type) => ast::ObjectType::Texture2D(self.invert_datatype(data_type)),
+            ir::ObjectType::Texture2DArray(ref data_type) => ast::ObjectType::Texture2DArray(self.invert_datatype(data_type)),
+            ir::ObjectType::Texture2DMS(ref data_type) => ast::ObjectType::Texture2DMS(self.invert_datatype(data_type)),
+            ir::ObjectType::Texture2DMSArray(ref data_type) => ast::ObjectType::Texture2DMSArray(self.invert_datatype(data_type)),
+            ir::ObjectType::Texture3D(ref data_type) => ast::ObjectType::Texture3D(self.invert_datatype(data_type)),
+            ir::ObjectType::TextureCube(ref data_type) => ast::ObjectType::TextureCube(self.invert_datatype(data_type)),
+            ir::ObjectType::TextureCubeArray(ref data_type) => ast::ObjectType::TextureCubeArray(self.invert_datatype(data_type)),
+            ir::ObjectType::RWTexture1D(ref data_type) => ast::ObjectType::RWTexture1D(self.invert_datatype(data_type)),
+            ir::ObjectType::RWTexture1DArray(ref data_type) => ast::ObjectType::RWTexture1DArray(self.invert_datatype(data_type)),
+            ir::ObjectType::RWTexture2D(ref data_type) => ast::ObjectType::RWTexture2D(self.invert_datatype(data_type)),
+            ir::ObjectType::RWTexture2DArray(ref data_type) => ast::ObjectType::RWTexture2DArray(self.invert_datatype(data_type)),
+            ir::ObjectType::RWTexture3D(ref data_type) => ast::ObjectType::RWTexture3D(self.invert_datatype(data_type)),
             ir::ObjectType::InputPatch => ast::ObjectType::InputPatch,
             ir::ObjectType::OutputPatch => ast::ObjectType::OutputPatch,
         }
@@ -363,7 +389,15 @@ impl TypeBlock {
         assert!(modifier.is_empty());
         match *lt {
             ir::TypeLayout::Void => ast::Type::Void,
-            ir::TypeLayout::Structured(ref structured_type) => ast::Type::Structured(self.invert_structuredtype(structured_type)),
+            ir::TypeLayout::Scalar(ref scalar) => ast::Type::Structured(ast::StructuredType::Data(ast::DataType::Scalar(self.invert_scalartype(scalar)))),
+            ir::TypeLayout::Vector(ref scalar, ref x) => ast::Type::Structured(ast::StructuredType::Data(ast::DataType::Vector(self.invert_scalartype(scalar), *x))),
+            ir::TypeLayout::Matrix(ref scalar, ref x, ref y) => ast::Type::Structured(ast::StructuredType::Data(ast::DataType::Matrix(self.invert_scalartype(scalar), *x, *y))),
+            ir::TypeLayout::Struct(ref id) => {
+                ast::Type::Structured(ast::StructuredType::Custom(match self.get_struct_name(&id) {
+                    Some(name) => name,
+                    None => "<struct>".to_string(),
+                }))
+            },
             ir::TypeLayout::SamplerState => ast::Type::SamplerState,
             ir::TypeLayout::Object(ref object_type) => ast::Type::Object(self.invert_objecttype(object_type)),
             ir::TypeLayout::Array(ref array_type) => ast::Type::Array(Box::new(self.invert_type(array_type))),
@@ -665,37 +699,59 @@ fn get_intrinsics() -> HashMap<String, UnresolvedFunction> {
     strmap
 }
 
-fn parse_structuredtype(ty: &ast::StructuredType, struct_finder: &StructIdFinder) -> Result<ir::StructuredType, TyperError> {
+fn parse_scalartype(ty: &ast::ScalarType) -> Result<ir::ScalarType, TyperError> {
     Ok(match *ty {
-        ast::StructuredType::Data(ref data_type) => ir::StructuredType::Data(data_type.clone()),
-        ast::StructuredType::Custom(ref name) => ir::StructuredType::Struct(try!(struct_finder.find_struct_id(name))),
+        ast::ScalarType::Bool => ir::ScalarType::Bool,
+        ast::ScalarType::UntypedInt => ir::ScalarType::UntypedInt,
+        ast::ScalarType::Int => ir::ScalarType::Int,
+        ast::ScalarType::UInt => ir::ScalarType::UInt,
+        ast::ScalarType::Half => ir::ScalarType::Half,
+        ast::ScalarType::Float => ir::ScalarType::Float,
+        ast::ScalarType::Double => ir::ScalarType::Double,
     })
+}
+
+fn parse_datatype(ty: &ast::DataType) -> Result<ir::DataType, TyperError> {
+    Ok(ir::DataType(match *ty {
+        ast::DataType::Scalar(ref scalar) => ir::DataLayout::Scalar(try!(parse_scalartype(scalar))),
+        ast::DataType::Vector(ref scalar, ref x) => ir::DataLayout::Vector(try!(parse_scalartype(scalar)), *x),
+        ast::DataType::Matrix(ref scalar, ref x, ref y) => ir::DataLayout::Matrix(try!(parse_scalartype(scalar)), *x, *y),
+    }, ir::TypeModifier::default()))
+}
+
+fn parse_structuredtype(ty: &ast::StructuredType, struct_finder: &StructIdFinder) -> Result<ir::StructuredType, TyperError> {
+    Ok(ir::StructuredType(match *ty {
+        ast::StructuredType::Data(ast::DataType::Scalar(ref scalar)) => ir::StructuredLayout::Scalar(try!(parse_scalartype(scalar))),
+        ast::StructuredType::Data(ast::DataType::Vector(ref scalar, ref x)) => ir::StructuredLayout::Vector(try!(parse_scalartype(scalar)), *x),
+        ast::StructuredType::Data(ast::DataType::Matrix(ref scalar, ref x, ref y)) => ir::StructuredLayout::Matrix(try!(parse_scalartype(scalar)), *x, *y),
+        ast::StructuredType::Custom(ref name) => ir::StructuredLayout::Struct(try!(struct_finder.find_struct_id(name))),
+    }, ir::TypeModifier::default()))
 }
 
 fn parse_objecttype(ty: &ast::ObjectType, struct_finder: &StructIdFinder) -> Result<ir::ObjectType, TyperError> {
     Ok(match *ty {
-        ast::ObjectType::Buffer(ref data_type) => ir::ObjectType::Buffer(data_type.clone()),
-        ast::ObjectType::RWBuffer(ref data_type) => ir::ObjectType::RWBuffer(data_type.clone()),
+        ast::ObjectType::Buffer(ref data_type) => ir::ObjectType::Buffer(try!(parse_datatype(data_type))),
+        ast::ObjectType::RWBuffer(ref data_type) => ir::ObjectType::RWBuffer(try!(parse_datatype(data_type))),
         ast::ObjectType::ByteAddressBuffer => ir::ObjectType::ByteAddressBuffer,
         ast::ObjectType::RWByteAddressBuffer => ir::ObjectType::RWByteAddressBuffer,
         ast::ObjectType::StructuredBuffer(ref structured_type) => ir::ObjectType::StructuredBuffer(try!(parse_structuredtype(structured_type, struct_finder))),
         ast::ObjectType::RWStructuredBuffer(ref structured_type) => ir::ObjectType::RWStructuredBuffer(try!(parse_structuredtype(structured_type, struct_finder))),
         ast::ObjectType::AppendStructuredBuffer(ref structured_type) => ir::ObjectType::AppendStructuredBuffer(try!(parse_structuredtype(structured_type, struct_finder))),
         ast::ObjectType::ConsumeStructuredBuffer(ref structured_type) => ir::ObjectType::ConsumeStructuredBuffer(try!(parse_structuredtype(structured_type, struct_finder))),
-        ast::ObjectType::Texture1D(ref data_type) => ir::ObjectType::Texture1D(data_type.clone()),
-        ast::ObjectType::Texture1DArray(ref data_type) => ir::ObjectType::Texture1DArray(data_type.clone()),
-        ast::ObjectType::Texture2D(ref data_type) => ir::ObjectType::Texture2D(data_type.clone()),
-        ast::ObjectType::Texture2DArray(ref data_type) => ir::ObjectType::Texture2DArray(data_type.clone()),
-        ast::ObjectType::Texture2DMS(ref data_type) => ir::ObjectType::Texture2DMS(data_type.clone()),
-        ast::ObjectType::Texture2DMSArray(ref data_type) => ir::ObjectType::Texture2DMSArray(data_type.clone()),
-        ast::ObjectType::Texture3D(ref data_type) => ir::ObjectType::Texture3D(data_type.clone()),
-        ast::ObjectType::TextureCube(ref data_type) => ir::ObjectType::TextureCube(data_type.clone()),
-        ast::ObjectType::TextureCubeArray(ref data_type) => ir::ObjectType::TextureCubeArray(data_type.clone()),
-        ast::ObjectType::RWTexture1D(ref data_type) => ir::ObjectType::RWTexture1D(data_type.clone()),
-        ast::ObjectType::RWTexture1DArray(ref data_type) => ir::ObjectType::RWTexture1DArray(data_type.clone()),
-        ast::ObjectType::RWTexture2D(ref data_type) => ir::ObjectType::RWTexture2D(data_type.clone()),
-        ast::ObjectType::RWTexture2DArray(ref data_type) => ir::ObjectType::RWTexture2DArray(data_type.clone()),
-        ast::ObjectType::RWTexture3D(ref data_type) => ir::ObjectType::RWTexture3D(data_type.clone()),
+        ast::ObjectType::Texture1D(ref data_type) => ir::ObjectType::Texture1D(try!(parse_datatype(data_type))),
+        ast::ObjectType::Texture1DArray(ref data_type) => ir::ObjectType::Texture1DArray(try!(parse_datatype(data_type))),
+        ast::ObjectType::Texture2D(ref data_type) => ir::ObjectType::Texture2D(try!(parse_datatype(data_type))),
+        ast::ObjectType::Texture2DArray(ref data_type) => ir::ObjectType::Texture2DArray(try!(parse_datatype(data_type))),
+        ast::ObjectType::Texture2DMS(ref data_type) => ir::ObjectType::Texture2DMS(try!(parse_datatype(data_type))),
+        ast::ObjectType::Texture2DMSArray(ref data_type) => ir::ObjectType::Texture2DMSArray(try!(parse_datatype(data_type))),
+        ast::ObjectType::Texture3D(ref data_type) => ir::ObjectType::Texture3D(try!(parse_datatype(data_type))),
+        ast::ObjectType::TextureCube(ref data_type) => ir::ObjectType::TextureCube(try!(parse_datatype(data_type))),
+        ast::ObjectType::TextureCubeArray(ref data_type) => ir::ObjectType::TextureCubeArray(try!(parse_datatype(data_type))),
+        ast::ObjectType::RWTexture1D(ref data_type) => ir::ObjectType::RWTexture1D(try!(parse_datatype(data_type))),
+        ast::ObjectType::RWTexture1DArray(ref data_type) => ir::ObjectType::RWTexture1DArray(try!(parse_datatype(data_type))),
+        ast::ObjectType::RWTexture2D(ref data_type) => ir::ObjectType::RWTexture2D(try!(parse_datatype(data_type))),
+        ast::ObjectType::RWTexture2DArray(ref data_type) => ir::ObjectType::RWTexture2DArray(try!(parse_datatype(data_type))),
+        ast::ObjectType::RWTexture3D(ref data_type) => ir::ObjectType::RWTexture3D(try!(parse_datatype(data_type))),
         ast::ObjectType::InputPatch => ir::ObjectType::InputPatch,
         ast::ObjectType::OutputPatch => ir::ObjectType::OutputPatch,
     })
@@ -704,7 +760,10 @@ fn parse_objecttype(ty: &ast::ObjectType, struct_finder: &StructIdFinder) -> Res
 fn parse_type(ty: &ast::Type, struct_finder: &StructIdFinder) -> Result<ir::Type, TyperError> {
     Ok(ir::Type::from_layout(match *ty {
         ast::Type::Void => ir::TypeLayout::void(),
-        ast::Type::Structured(ref structured_type) => ir::TypeLayout::Structured(try!(parse_structuredtype(structured_type, struct_finder))),
+        ast::Type::Structured(ast::StructuredType::Data(ast::DataType::Scalar(ref scalar))) => ir::TypeLayout::Scalar(try!(parse_scalartype(scalar))),
+        ast::Type::Structured(ast::StructuredType::Data(ast::DataType::Vector(ref scalar, ref x))) => ir::TypeLayout::Vector(try!(parse_scalartype(scalar)), *x),
+        ast::Type::Structured(ast::StructuredType::Data(ast::DataType::Matrix(ref scalar, ref x, ref y))) => ir::TypeLayout::Matrix(try!(parse_scalartype(scalar)), *x, *y),
+        ast::Type::Structured(ast::StructuredType::Custom(ref name)) => ir::TypeLayout::Struct(try!(struct_finder.find_struct_id(name))),
         ast::Type::SamplerState => ir::TypeLayout::SamplerState,
         ast::Type::Object(ref object_type) => ir::TypeLayout::Object(try!(parse_objecttype(object_type, struct_finder))),
         ast::Type::Array(ref array_type) => ir::TypeLayout::Array(Box::new(try!(parse_type(array_type, struct_finder)))),
@@ -821,8 +880,6 @@ fn parse_literal(ast: &ast::Literal) -> Result<TypedExpression, TyperError> {
 
 fn resolve_arithmetic_types(binop: &ir::BinOp, left: &ir::Type, right: &ir::Type, context: &ScopeContext) -> Result<(ImplicitConversion, ImplicitConversion), TyperError> {
     use hlsl::ir::Type;
-    use hlsl::ir::StructuredType;
-    use hlsl::ir::DataType;
     use hlsl::ir::ScalarType;
 
     fn common_real_type(left: &ScalarType, right: &ScalarType) -> Result<ir::ScalarType, ()> {
@@ -854,20 +911,17 @@ fn resolve_arithmetic_types(binop: &ir::BinOp, left: &ir::Type, right: &ir::Type
         let &ir::Type(ref right_l, ref modr) = right;
         assert!(modr.is_empty());
         let (left, right, common) = match (left_l, right_l) {
-            (&ir::TypeLayout::Structured(StructuredType::Data(DataType::Scalar(ref ls))),
-                &ir::TypeLayout::Structured(ir::StructuredType::Data(DataType::Scalar(ref rs)))) => {
+            (&ir::TypeLayout::Scalar(ref ls), &ir::TypeLayout::Scalar(ref rs)) => {
                 let common_scalar = try!(common_real_type(ls, rs));
                 let common = ir::Type::from_scalar(common_scalar);
                 (left, right, common)
             },
-            (&ir::TypeLayout::Structured(StructuredType::Data(DataType::Vector(ref ls, ref x1))),
-                &ir::TypeLayout::Structured(StructuredType::Data(DataType::Vector(ref rs, ref x2)))) if x1 == x2 => {
+            (&ir::TypeLayout::Vector(ref ls, ref x1), &ir::TypeLayout::Vector(ref rs, ref x2)) if x1 == x2 => {
                 let common_scalar = try!(common_real_type(ls, rs));
                 let common = ir::Type::from_vector(common_scalar, *x2);
                 (left, right, common)
             },
-            (&ir::TypeLayout::Structured(StructuredType::Data(DataType::Matrix(ref ls, ref x1, ref y1))),
-                &ir::TypeLayout::Structured(StructuredType::Data(DataType::Matrix(ref rs, ref x2, ref y2)))) if x1 == x2 && y1 == y2 => {
+            (&ir::TypeLayout::Matrix(ref ls, ref x1, ref y1), &ir::TypeLayout::Matrix(ref rs, ref x2, ref y2)) if x1 == x2 && y1 == y2 => {
                 let common_scalar = try!(common_real_type(ls, rs));
                 let common = ir::Type::from_matrix(common_scalar, *x2, *y2);
                 (left, right, common)
@@ -990,13 +1044,13 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
             };
             let ir::Type(composite_tyl, _) = composite_ty;
             let ety = match &composite_tyl {
-                &ir::TypeLayout::Structured(ir::StructuredType::Struct(ref id)) => {
+                &ir::TypeLayout::Struct(ref id) => {
                     match context.find_struct_member(id, member) {
                         Ok(ty) => ty,
                         Err(err) => return Err(err),
                     }
                 }
-                &ir::TypeLayout::Structured(ir::StructuredType::Data(ir::DataType::Vector(ref scalar, ref x))) => {
+                &ir::TypeLayout::Vector(ref scalar, ref x) => {
                     // Todo: Swizzling
                     let exists = match &member[..] {
                         "x" | "r" if *x >= 1 => true,

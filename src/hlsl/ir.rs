@@ -1,14 +1,47 @@
 
 use std::collections::HashMap;
 
-pub use super::ast::ScalarType as ScalarType;
-pub use super::ast::DataType as DataType;
-
+/// Basic scalar types
 #[derive(PartialEq, Debug, Clone)]
-pub enum StructuredType {
-    Data(DataType),
+pub enum ScalarType {
+    Bool,
+    UntypedInt,
+    Int,
+    UInt,
+    Half,
+    Float,
+    Double,
+}
+
+/// Layout for DataType
+#[derive(PartialEq, Debug, Clone)]
+pub enum DataLayout {
+    Scalar(ScalarType),
+    Vector(ScalarType, u32),
+    Matrix(ScalarType, u32, u32),
+}
+
+/// A type that can be used in data buffers (Buffer / RWBuffer / etc)
+/// These can interpret data in buffers bound with a format
+/// FormatType might be a better name because they can bind resource
+/// views with a format, but HLSL just called them Buffer and other
+/// apis call them data buffers
+#[derive(PartialEq, Debug, Clone)]
+pub struct DataType(pub DataLayout, pub TypeModifier);
+
+/// Layout for StructuredType
+#[derive(PartialEq, Debug, Clone)]
+pub enum StructuredLayout {
+    Scalar(ScalarType),
+    Vector(ScalarType, u32),
+    Matrix(ScalarType, u32, u32),
     Struct(StructId),
 }
+
+/// A type that can be used in structured buffers
+/// These are the both all the data types and user defined structs
+#[derive(PartialEq, Debug, Clone)]
+pub struct StructuredType(pub StructuredLayout, pub TypeModifier);
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum ObjectType {
@@ -45,7 +78,10 @@ pub enum ObjectType {
 #[derive(PartialEq, Debug, Clone)]
 pub enum TypeLayout {
     Void,
-    Structured(StructuredType),
+    Scalar(ScalarType),
+    Vector(ScalarType, u32),
+    Matrix(ScalarType, u32, u32),
+    Struct(StructId),
     SamplerState,
     Object(ObjectType),
     Array(Box<Type>),
@@ -53,13 +89,34 @@ pub enum TypeLayout {
 
 impl TypeLayout {
     pub fn void() -> TypeLayout { TypeLayout::Void }
-    pub fn from_scalar(scalar: ScalarType) -> TypeLayout { TypeLayout::Structured(StructuredType::Data(DataType::Scalar(scalar))) }
-    pub fn from_vector(scalar: ScalarType, x: u32) -> TypeLayout { TypeLayout::Structured(StructuredType::Data(DataType::Vector(scalar, x))) }
-    pub fn from_matrix(scalar: ScalarType, x: u32, y: u32) -> TypeLayout { TypeLayout::Structured(StructuredType::Data(DataType::Matrix(scalar, x, y))) }
-    pub fn from_data(ty: DataType) -> TypeLayout { TypeLayout::Structured(StructuredType::Data(ty)) }
-    pub fn from_struct(id: StructId) -> TypeLayout { TypeLayout::Structured(StructuredType::Struct(id)) }
-    pub fn from_structured(ty: StructuredType) -> TypeLayout { TypeLayout::Structured(ty) }
+    pub fn from_scalar(scalar: ScalarType) -> TypeLayout { TypeLayout::Scalar(scalar) }
+    pub fn from_vector(scalar: ScalarType, x: u32) -> TypeLayout { TypeLayout::Vector(scalar, x) }
+    pub fn from_matrix(scalar: ScalarType, x: u32, y: u32) -> TypeLayout { TypeLayout::Matrix(scalar, x, y) }
+    pub fn from_data(ty: DataLayout) -> TypeLayout { TypeLayout::from(ty) }
+    pub fn from_struct(id: StructId) -> TypeLayout { TypeLayout::Struct(id) }
+    pub fn from_structured(ty: StructuredLayout) -> TypeLayout { TypeLayout::from(ty) }
     pub fn from_object(ty: ObjectType) -> TypeLayout { TypeLayout::Object(ty) }
+}
+
+impl From<DataLayout> for TypeLayout {
+    fn from(data: DataLayout) -> TypeLayout {
+        match data {
+            DataLayout::Scalar(scalar) => TypeLayout::Scalar(scalar),
+            DataLayout::Vector(scalar, x) => TypeLayout::Vector(scalar, x),
+            DataLayout::Matrix(scalar, x, y) => TypeLayout::Matrix(scalar, x, y),
+        }
+    }
+}
+
+impl From<StructuredLayout> for TypeLayout {
+    fn from(structured: StructuredLayout) -> TypeLayout {
+        match structured {
+            StructuredLayout::Scalar(scalar) => TypeLayout::Scalar(scalar),
+            StructuredLayout::Vector(scalar, x) => TypeLayout::Vector(scalar, x),
+            StructuredLayout::Matrix(scalar, x, y) => TypeLayout::Matrix(scalar, x, y),
+            StructuredLayout::Struct(id) => TypeLayout::Struct(id),
+        }
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -78,12 +135,16 @@ pub struct TypeModifier {
 }
 
 impl TypeModifier {
-    pub fn new() -> TypeModifier {
-        TypeModifier { is_const: false, row_order: RowOrder::Column, precise: false, volatile: false }
-    }
+    pub fn new() -> TypeModifier { Default::default() }
 
     pub fn is_empty(&self) -> bool {
         self.is_const == false && self.row_order == RowOrder::Column && self.precise == false && self.volatile == false
+    }
+}
+
+impl Default for TypeModifier {
+    fn default() -> TypeModifier {
+        TypeModifier { is_const: false, row_order: RowOrder::Column, precise: false, volatile: false }
     }
 }
 
@@ -144,9 +205,9 @@ impl Type {
     pub fn from_scalar(scalar: ScalarType) -> Type { Type(TypeLayout::from_scalar(scalar), TypeModifier::new()) }
     pub fn from_vector(scalar: ScalarType, x: u32) -> Type { Type(TypeLayout::from_vector(scalar, x), TypeModifier::new()) }
     pub fn from_matrix(scalar: ScalarType, x: u32, y: u32) -> Type { Type(TypeLayout::from_matrix(scalar, x, y), TypeModifier::new()) }
-    pub fn from_data(ty: DataType) -> Type { Type(TypeLayout::from_data(ty), TypeModifier::new()) }
+    pub fn from_data(DataType(tyl, tym): DataType) -> Type { Type(TypeLayout::from_data(tyl), tym) }
     pub fn from_struct(id: StructId) -> Type { Type(TypeLayout::from_struct(id), TypeModifier::new()) }
-    pub fn from_structured(ty: StructuredType) -> Type { Type(TypeLayout::from_structured(ty), TypeModifier::new()) }
+    pub fn from_structured(StructuredType(tyl, tym): StructuredType) -> Type { Type(TypeLayout::from_structured(tyl), tym) }
     pub fn from_object(ty: ObjectType) -> Type { Type(TypeLayout::from_object(ty), TypeModifier::new()) }
 
     pub fn bool() -> Type { Type::from_scalar(ScalarType::Bool) }
@@ -162,6 +223,20 @@ impl Type {
 
     pub fn long() -> Type { Type::from_scalar(ScalarType::Int) }
     pub fn float4x4() -> Type { Type::from_matrix(ScalarType::Float, 4, 4) }
+}
+
+impl From<DataType> for Type {
+    fn from(ty: DataType) -> Type {
+        let DataType(layout, modifier) = ty;
+        Type(layout.into(), modifier)
+    }
+}
+
+impl From<StructuredType> for Type {
+    fn from(ty: StructuredType) -> Type {
+        let StructuredType(layout, modifier) = ty;
+        Type(layout.into(), modifier)
+    }
 }
 
 /// Value type for subexpressions. Doesn't appear in ir tree, but used for
