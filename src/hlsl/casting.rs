@@ -166,7 +166,7 @@ impl NumericCast {
     }
 
     fn get_target_type(&self) -> Type {
-        Type::Structured(StructuredType::Data(match self.2 {
+        Type::from_structured(StructuredType::Data(match self.2 {
             NumericDimension::Scalar => DataType::Scalar(self.1.clone()),
             NumericDimension::Vector(ref x) => DataType::Vector(self.1.clone(), *x),
             NumericDimension::Matrix(ref x, ref y) => DataType::Matrix(self.1.clone(), *x, *y),
@@ -180,23 +180,27 @@ impl NumericCast {
             NumericDimension::Vector(ref x) => DataType::Vector(dest.clone(), *x),
             NumericDimension::Matrix(ref x, ref y) => DataType::Matrix(dest.clone(), *x, *y),
         };
-        Expression::Cast(Type::Structured(StructuredType::Data(to_type_data)), Box::new(expr))
+        Expression::Cast(Type::from_data(to_type_data), Box::new(expr))
     }
 }
 
 impl ImplicitConversion {
 
     pub fn find(source: &Type, dest: &Type) -> Result<ImplicitConversion, ()> {
-        match (source, dest) {
+        let &Type(ref source_l, ref mods) = source;
+        assert!(mods.is_empty());
+        let &Type(ref dest_l, ref modd) = dest;
+        assert!(modd.is_empty());
+        match (source_l, dest_l) {
             (ref ty1, ref ty2) if ty1 == ty2 => Ok(ImplicitConversion(source.clone(), None)),
-            (&Type::Structured(StructuredType::Data(ref d1)), &Type::Structured(StructuredType::Data(ref d2))) => ImplicitConversion::find_data(d1, d2),
+            (&TypeLayout::Structured(StructuredType::Data(ref d1)), &TypeLayout::Structured(StructuredType::Data(ref d2))) => ImplicitConversion::find_data(d1, d2),
             // Struct casts only supported for same type structs
             _ => Err(()),
         }
     }
 
     fn find_data(source: &DataType, dest: &DataType) -> Result<ImplicitConversion, ()> {
-        let full_type = Type::Structured(StructuredType::Data(source.clone()));
+        let full_type = Type::from_data(source.clone());
         match (source, dest) {
             (ref ty1, ref ty2) if ty1 == ty2 => Ok(ImplicitConversion(full_type, None)),
             (&DataType::Scalar(ref s1), &DataType::Scalar(ref s2)) => {
@@ -218,18 +222,20 @@ impl ImplicitConversion {
 
     pub fn find_all(source: &Type) -> Vec<ImplicitConversion> {
         let mut vec = vec![ImplicitConversion(source.clone(), None)];
-        match *source {
-            Type::Structured(StructuredType::Data(DataType::Scalar(ref scalar))) => {
+        let &Type(ref source_l, ref modifier) = source;
+        assert!(modifier.is_empty());
+        match *source_l {
+            TypeLayout::Structured(StructuredType::Data(DataType::Scalar(ref scalar))) => {
                 for nc in NumericCast::find_all(scalar, NumericDimension::Scalar) {
                     vec.push(ImplicitConversion(source.clone(), Some(nc)));
                 };
             },
-            Type::Structured(StructuredType::Data(DataType::Vector(ref scalar, ref x))) => {
+            TypeLayout::Structured(StructuredType::Data(DataType::Vector(ref scalar, ref x))) => {
                 for nc in NumericCast::find_all(scalar, NumericDimension::Vector(*x)) {
                     vec.push(ImplicitConversion(source.clone(), Some(nc)));
                 };
             },
-            Type::Structured(StructuredType::Data(DataType::Matrix(ref scalar, ref x, ref y))) => {
+            TypeLayout::Structured(StructuredType::Data(DataType::Matrix(ref scalar, ref x, ref y))) => {
                 for nc in NumericCast::find_all(scalar, NumericDimension::Matrix(*x, *y)) {
                     vec.push(ImplicitConversion(source.clone(), Some(nc)));
                 };

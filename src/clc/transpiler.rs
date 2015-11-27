@@ -263,14 +263,15 @@ fn transpile_datatype(datatype: &src::DataType) -> Result<dst::Type, TranspileEr
 }
 
 fn transpile_type(hlsltype: &src::Type, context: &Context) -> Result<dst::Type, TranspileError> {
-    match hlsltype {
-        &src::Type::Void => Ok(dst::Type::Void),
-        &src::Type::Structured(src::StructuredType::Data(ref data_type)) => transpile_datatype(data_type),
-        &src::Type::Structured(src::StructuredType::Struct(ref id)) => {
+    let &src::Type(ref ty, _) = hlsltype;
+    match ty {
+        &src::TypeLayout::Void => Ok(dst::Type::Void),
+        &src::TypeLayout::Structured(src::StructuredType::Data(ref data_type)) => transpile_datatype(data_type),
+        &src::TypeLayout::Structured(src::StructuredType::Struct(ref id)) => {
             let struct_name = try!(context.get_struct_name(id));
             Ok(dst::Type::Struct(struct_name))
         },
-        ty => return Err(TranspileError::CouldNotGetEquivalentType(ty.clone())),
+        _ => return Err(TranspileError::CouldNotGetEquivalentType(hlsltype.clone())),
     }
 }
 
@@ -654,11 +655,12 @@ fn transpile_global(table: &src::GlobalTable, context: &Context) -> Result<Kerne
         global_params.push(param);
     }
     for (_, global_entry) in &table.r_resources {
-        let cl_type = match &global_entry.typename {
-            &src::Type::Object(src::ObjectType::Buffer(ref data_type)) => {
+        let &src::Type(ref tyl, _) = &global_entry.typename;
+        let cl_type = match tyl {
+            &src::TypeLayout::Object(src::ObjectType::Buffer(ref data_type)) => {
                 dst::Type::Pointer(dst::AddressSpace::Constant, Box::new(try!(transpile_datatype(data_type))))
             }
-            ty => return Err(TranspileError::TypeIsNotAllowedAsGlobal(ty.clone())),
+            _ => return Err(TranspileError::TypeIsNotAllowedAsGlobal(global_entry.typename.clone())),
         };
         let param = dst::KernelParam {
             name: try!(context.get_variable_id(&global_entry.id)),
@@ -667,11 +669,12 @@ fn transpile_global(table: &src::GlobalTable, context: &Context) -> Result<Kerne
         global_params.push(param);
     }
     for (_, global_entry) in &table.rw_resources {
-        let cl_type = match &global_entry.typename {
-            &src::Type::Object(src::ObjectType::RWBuffer(ref data_type)) => {
+        let &src::Type(ref tyl, _) = &global_entry.typename;
+        let cl_type = match tyl {
+            &src::TypeLayout::Object(src::ObjectType::RWBuffer(ref data_type)) => {
                 dst::Type::Pointer(dst::AddressSpace::Global, Box::new(try!(transpile_datatype(data_type))))
             }
-            ty => return Err(TranspileError::TypeIsNotAllowedAsGlobal(ty.clone())),
+            _ => return Err(TranspileError::TypeIsNotAllowedAsGlobal(global_entry.typename.clone())),
         };
         let param = dst::KernelParam {
             name: try!(context.get_variable_id(&global_entry.id)),

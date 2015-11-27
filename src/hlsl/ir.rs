@@ -43,7 +43,7 @@ pub enum ObjectType {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum Type {
+pub enum TypeLayout {
     Void,
     Structured(StructuredType),
     SamplerState,
@@ -51,23 +51,15 @@ pub enum Type {
     Array(Box<Type>),
 }
 
-impl Type {
-    pub fn from_scalar(scalar: ScalarType) -> Type { Type::Structured(StructuredType::Data(DataType::Scalar(scalar))) }
-    pub fn from_vector(scalar: ScalarType, dimension: u32) -> Type { Type::Structured(StructuredType::Data(DataType::Vector(scalar, dimension))) }
-
-    pub fn bool() -> Type { Type::from_scalar(ScalarType::Bool) }
-    pub fn booln(dim: u32) -> Type { Type::from_vector(ScalarType::Bool, dim) }
-    pub fn uint() -> Type { Type::from_scalar(ScalarType::UInt) }
-    pub fn uintn(dim: u32) -> Type { Type::from_vector(ScalarType::UInt, dim) }
-    pub fn int() -> Type { Type::from_scalar(ScalarType::Int) }
-    pub fn intn(dim: u32) -> Type { Type::from_vector(ScalarType::Int, dim) }
-    pub fn float() -> Type { Type::from_scalar(ScalarType::Float) }
-    pub fn floatn(dim: u32) -> Type { Type::from_vector(ScalarType::Float, dim) }
-    pub fn double() -> Type { Type::from_scalar(ScalarType::Double) }
-    pub fn doublen(dim: u32) -> Type { Type::from_vector(ScalarType::Double, dim) }
-
-    pub fn long() -> Type { Type::from_scalar(ScalarType::Int) }
-    pub fn float4x4() -> Type { Type::Structured(StructuredType::Data(DataType::Matrix(ScalarType::Float, 4, 4))) }
+impl TypeLayout {
+    pub fn void() -> TypeLayout { TypeLayout::Void }
+    pub fn from_scalar(scalar: ScalarType) -> TypeLayout { TypeLayout::Structured(StructuredType::Data(DataType::Scalar(scalar))) }
+    pub fn from_vector(scalar: ScalarType, x: u32) -> TypeLayout { TypeLayout::Structured(StructuredType::Data(DataType::Vector(scalar, x))) }
+    pub fn from_matrix(scalar: ScalarType, x: u32, y: u32) -> TypeLayout { TypeLayout::Structured(StructuredType::Data(DataType::Matrix(scalar, x, y))) }
+    pub fn from_data(ty: DataType) -> TypeLayout { TypeLayout::Structured(StructuredType::Data(ty)) }
+    pub fn from_struct(id: StructId) -> TypeLayout { TypeLayout::Structured(StructuredType::Struct(id)) }
+    pub fn from_structured(ty: StructuredType) -> TypeLayout { TypeLayout::Structured(ty) }
+    pub fn from_object(ty: ObjectType) -> TypeLayout { TypeLayout::Object(ty) }
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -79,15 +71,19 @@ pub enum RowOrder {
 /// Modifier for type
 #[derive(PartialEq, Debug, Clone)]
 pub struct TypeModifier {
-    is_const: bool,
-    row_order: RowOrder,
-    precise: bool,
-    volatile: bool,
+    pub is_const: bool,
+    pub row_order: RowOrder,
+    pub precise: bool,
+    pub volatile: bool,
 }
 
 impl TypeModifier {
     pub fn new() -> TypeModifier {
         TypeModifier { is_const: false, row_order: RowOrder::Column, precise: false, volatile: false }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.is_const == false && self.row_order == RowOrder::Column && self.precise == false && self.volatile == false
     }
 }
 
@@ -140,7 +136,33 @@ pub enum LocalStorage {
 
 /// The full type when paired with modifiers
 #[derive(PartialEq, Debug, Clone)]
-pub struct QualifiedType(pub Type, pub TypeModifier);
+pub struct Type(pub TypeLayout, pub TypeModifier);
+
+impl Type {
+    pub fn void() -> Type { Type(TypeLayout::void(), TypeModifier::new()) }
+    pub fn from_layout(layout_type: TypeLayout) -> Type { Type(layout_type, TypeModifier::new()) }
+    pub fn from_scalar(scalar: ScalarType) -> Type { Type(TypeLayout::from_scalar(scalar), TypeModifier::new()) }
+    pub fn from_vector(scalar: ScalarType, x: u32) -> Type { Type(TypeLayout::from_vector(scalar, x), TypeModifier::new()) }
+    pub fn from_matrix(scalar: ScalarType, x: u32, y: u32) -> Type { Type(TypeLayout::from_matrix(scalar, x, y), TypeModifier::new()) }
+    pub fn from_data(ty: DataType) -> Type { Type(TypeLayout::from_data(ty), TypeModifier::new()) }
+    pub fn from_struct(id: StructId) -> Type { Type(TypeLayout::from_struct(id), TypeModifier::new()) }
+    pub fn from_structured(ty: StructuredType) -> Type { Type(TypeLayout::from_structured(ty), TypeModifier::new()) }
+    pub fn from_object(ty: ObjectType) -> Type { Type(TypeLayout::from_object(ty), TypeModifier::new()) }
+
+    pub fn bool() -> Type { Type::from_scalar(ScalarType::Bool) }
+    pub fn booln(dim: u32) -> Type { Type::from_vector(ScalarType::Bool, dim) }
+    pub fn uint() -> Type { Type::from_scalar(ScalarType::UInt) }
+    pub fn uintn(dim: u32) -> Type { Type::from_vector(ScalarType::UInt, dim) }
+    pub fn int() -> Type { Type::from_scalar(ScalarType::Int) }
+    pub fn intn(dim: u32) -> Type { Type::from_vector(ScalarType::Int, dim) }
+    pub fn float() -> Type { Type::from_scalar(ScalarType::Float) }
+    pub fn floatn(dim: u32) -> Type { Type::from_vector(ScalarType::Float, dim) }
+    pub fn double() -> Type { Type::from_scalar(ScalarType::Double) }
+    pub fn doublen(dim: u32) -> Type { Type::from_vector(ScalarType::Double, dim) }
+
+    pub fn long() -> Type { Type::from_scalar(ScalarType::Int) }
+    pub fn float4x4() -> Type { Type::from_matrix(ScalarType::Float, 4, 4) }
+}
 
 /// Value type for subexpressions. Doesn't appear in ir tree, but used for
 /// reasoning about intermediates
@@ -153,19 +175,19 @@ pub enum ValueType {
 /// Type for value intermediates. Doesn't appear in ir tree, but used for
 /// reasoning about intermediates. Doesn't include function intermediates.
 #[derive(PartialEq, Debug, Clone)]
-pub struct ExpressionType(pub Type, pub TypeModifier, pub ValueType);
+pub struct ExpressionType(pub Type, pub ValueType);
 
 /// The type of any global declaration
 #[derive(PartialEq, Debug, Clone)]
-pub struct GlobalType(pub QualifiedType, pub GlobalStorage, pub InterpolationModifier);
+pub struct GlobalType(pub Type, pub GlobalStorage, pub InterpolationModifier);
 
 /// The type of any parameter declaration
 #[derive(PartialEq, Debug, Clone)]
-pub struct ParamType(pub QualifiedType, pub InputModifier, pub InterpolationModifier);
+pub struct ParamType(pub Type, pub InputModifier, pub InterpolationModifier);
 
 /// The type of any local variable declaration
 #[derive(PartialEq, Debug, Clone)]
-pub struct LocalType(pub QualifiedType, pub LocalStorage, pub InterpolationModifier);
+pub struct LocalType(pub Type, pub LocalStorage, pub InterpolationModifier);
 
 pub use super::ast::BinOp as BinOp;
 pub use super::ast::UnaryOp as UnaryOp;
@@ -420,11 +442,11 @@ pub struct Module {
 
 impl KernelSemantic {
     pub fn get_type(&self) -> Type {
-        match self {
-            &KernelSemantic::DispatchThreadId => Type::Structured(StructuredType::Data(DataType::Vector(ScalarType::UInt, 3))),
-            &KernelSemantic::GroupId => Type::Structured(StructuredType::Data(DataType::Vector(ScalarType::UInt, 3))),
-            &KernelSemantic::GroupIndex => Type::Structured(StructuredType::Data(DataType::Scalar(ScalarType::UInt))),
-            &KernelSemantic::GroupThreadId => Type::Structured(StructuredType::Data(DataType::Vector(ScalarType::UInt, 3))),
+        match *self {
+            KernelSemantic::DispatchThreadId => Type::from_vector(ScalarType::UInt, 3),
+            KernelSemantic::GroupId => Type::from_vector(ScalarType::UInt, 3),
+            KernelSemantic::GroupIndex => Type::from_scalar(ScalarType::UInt),
+            KernelSemantic::GroupThreadId => Type::from_vector(ScalarType::UInt, 3),
         }
     }
 }

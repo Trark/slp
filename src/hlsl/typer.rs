@@ -271,12 +271,12 @@ impl TypeBlock {
         match self.struct_definitions.get(id) {
             Some(def) => def.get(member_name).map(|ty| ty.clone()).ok_or(
                 TyperError::UnknownTypeMember(
-                    self.ir_type_to_error_type(&ir::Type::Structured(ir::StructuredType::Struct(id.clone()))),
+                    self.ir_type_to_error_type(&ir::Type::from_struct(id.clone())),
                     member_name.clone()
                 )
             ),
             None => Err(TyperError::UnknownType(
-                self.ir_type_to_error_type(&ir::Type::Structured(ir::StructuredType::Struct(id.clone())))
+                self.ir_type_to_error_type(&ir::Type::from_struct(id.clone()))
             )),
         }
     }
@@ -359,12 +359,14 @@ impl TypeBlock {
     }
 
     fn invert_type(&self, ty: &ir::Type) -> ast::Type {
-        match *ty {
-            ir::Type::Void => ast::Type::Void,
-            ir::Type::Structured(ref structured_type) => ast::Type::Structured(self.invert_structuredtype(structured_type)),
-            ir::Type::SamplerState => ast::Type::SamplerState,
-            ir::Type::Object(ref object_type) => ast::Type::Object(self.invert_objecttype(object_type)),
-            ir::Type::Array(ref array_type) => ast::Type::Array(Box::new(self.invert_type(array_type))),
+        let &ir::Type(ref lt, ref modifier) = ty;
+        assert!(modifier.is_empty());
+        match *lt {
+            ir::TypeLayout::Void => ast::Type::Void,
+            ir::TypeLayout::Structured(ref structured_type) => ast::Type::Structured(self.invert_structuredtype(structured_type)),
+            ir::TypeLayout::SamplerState => ast::Type::SamplerState,
+            ir::TypeLayout::Object(ref object_type) => ast::Type::Object(self.invert_objecttype(object_type)),
+            ir::TypeLayout::Array(ref array_type) => ast::Type::Array(Box::new(self.invert_type(array_type))),
         }
     }
 
@@ -700,13 +702,13 @@ fn parse_objecttype(ty: &ast::ObjectType, struct_finder: &StructIdFinder) -> Res
 }
 
 fn parse_type(ty: &ast::Type, struct_finder: &StructIdFinder) -> Result<ir::Type, TyperError> {
-    Ok(match *ty {
-        ast::Type::Void => ir::Type::Void,
-        ast::Type::Structured(ref structured_type) => ir::Type::Structured(try!(parse_structuredtype(structured_type, struct_finder))),
-        ast::Type::SamplerState => ir::Type::SamplerState,
-        ast::Type::Object(ref object_type) => ir::Type::Object(try!(parse_objecttype(object_type, struct_finder))),
-        ast::Type::Array(ref array_type) => ir::Type::Array(Box::new(try!(parse_type(array_type, struct_finder)))),
-    })
+    Ok(ir::Type::from_layout(match *ty {
+        ast::Type::Void => ir::TypeLayout::void(),
+        ast::Type::Structured(ref structured_type) => ir::TypeLayout::Structured(try!(parse_structuredtype(structured_type, struct_finder))),
+        ast::Type::SamplerState => ir::TypeLayout::SamplerState,
+        ast::Type::Object(ref object_type) => ir::TypeLayout::Object(try!(parse_objecttype(object_type, struct_finder))),
+        ast::Type::Array(ref array_type) => ir::TypeLayout::Array(Box::new(try!(parse_type(array_type, struct_finder)))),
+    }))
 }
 
 fn find_function_type(overloads: &Vec<FunctionOverload>, param_types: &ParamArray) -> Result<(FunctionOverload, Vec<ImplicitConversion>), TyperError> {
@@ -807,10 +809,10 @@ fn write_method(unresolved: UnresolvedMethod, param_types: ParamArray, param_val
 fn parse_literal(ast: &ast::Literal) -> Result<TypedExpression, TyperError> {
     match ast {
         &ast::Literal::Bool(b) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Bool(b)), ir::Type::bool())),
-        &ast::Literal::UntypedInt(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::UntypedInt(i)), ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(ir::ScalarType::UntypedInt))))),
+        &ast::Literal::UntypedInt(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::UntypedInt(i)), ir::Type::from_scalar(ir::ScalarType::UntypedInt))),
         &ast::Literal::Int(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Int(i)), ir::Type::int())),
         &ast::Literal::UInt(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::UInt(i)), ir::Type::uint())),
-        &ast::Literal::Long(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Long(i)), ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(ir::ScalarType::UntypedInt))))),
+        &ast::Literal::Long(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Long(i)), ir::Type::from_scalar(ir::ScalarType::UntypedInt))),
         &ast::Literal::Half(f) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Half(f)), ir::Type::float())),
         &ast::Literal::Float(f) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Float(f)), ir::Type::float())),
         &ast::Literal::Double(f) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Double(f)), ir::Type::double())),
@@ -847,23 +849,27 @@ fn resolve_arithmetic_types(binop: &ir::BinOp, left: &ir::Type, right: &ir::Type
     }
 
     fn do_noerror(_: &ir::BinOp, left: &ir::Type, right: &ir::Type) -> Result<(ImplicitConversion, ImplicitConversion), ()> {
-        let (left, right, common) = match (left, right) {
-            (&Type::Structured(StructuredType::Data(DataType::Scalar(ref ls))),
-                &ir::Type::Structured(ir::StructuredType::Data(DataType::Scalar(ref rs)))) => {
+        let &ir::Type(ref left_l, ref modl) = left;
+        assert!(modl.is_empty());
+        let &ir::Type(ref right_l, ref modr) = right;
+        assert!(modr.is_empty());
+        let (left, right, common) = match (left_l, right_l) {
+            (&ir::TypeLayout::Structured(StructuredType::Data(DataType::Scalar(ref ls))),
+                &ir::TypeLayout::Structured(ir::StructuredType::Data(DataType::Scalar(ref rs)))) => {
                 let common_scalar = try!(common_real_type(ls, rs));
-                let common = ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(common_scalar)));
+                let common = ir::Type::from_scalar(common_scalar);
                 (left, right, common)
             },
-            (&Type::Structured(StructuredType::Data(DataType::Vector(ref ls, ref x1))),
-                &Type::Structured(StructuredType::Data(DataType::Vector(ref rs, ref x2)))) if x1 == x2 => {
+            (&ir::TypeLayout::Structured(StructuredType::Data(DataType::Vector(ref ls, ref x1))),
+                &ir::TypeLayout::Structured(StructuredType::Data(DataType::Vector(ref rs, ref x2)))) if x1 == x2 => {
                 let common_scalar = try!(common_real_type(ls, rs));
-                let common = ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Vector(common_scalar, *x2)));
+                let common = ir::Type::from_vector(common_scalar, *x2);
                 (left, right, common)
             },
-            (&Type::Structured(StructuredType::Data(DataType::Matrix(ref ls, ref x1, ref y1))),
-                &Type::Structured(StructuredType::Data(DataType::Matrix(ref rs, ref x2, ref y2)))) if x1 == x2 && y1 == y2 => {
+            (&ir::TypeLayout::Structured(StructuredType::Data(DataType::Matrix(ref ls, ref x1, ref y1))),
+                &ir::TypeLayout::Structured(StructuredType::Data(DataType::Matrix(ref rs, ref x2, ref y2)))) if x1 == x2 && y1 == y2 => {
                 let common_scalar = try!(common_real_type(ls, rs));
-                let common = ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Matrix(common_scalar, *x2, *y2)));
+                let common = ir::Type::from_matrix(common_scalar, *x2, *y2);
                 (left, right, common)
             },
             _ => return Err(()),
@@ -956,14 +962,15 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
                 TypedExpression::Value(subscript_ir, subscript_ty) => (subscript_ir, subscript_ty),
                 _ => return Err(TyperError::ArrayIndexingNonArrayType),
             };
-            let indexed_type = match array_ty {
-                ir::Type::Object(ir::ObjectType::Buffer(data_type)) |
-                ir::Type::Object(ir::ObjectType::RWBuffer(data_type)) => {
-                    ir::Type::Structured(ir::StructuredType::Data(data_type))
+            let ir::Type(array_tyl, _) = array_ty;
+            let indexed_type = match array_tyl {
+                ir::TypeLayout::Object(ir::ObjectType::Buffer(data_type)) |
+                ir::TypeLayout::Object(ir::ObjectType::RWBuffer(data_type)) => {
+                    ir::Type::from_data(data_type)
                 },
-                ir::Type::Object(ir::ObjectType::StructuredBuffer(structured_type)) |
-                ir::Type::Object(ir::ObjectType::RWStructuredBuffer(structured_type)) => {
-                    ir::Type::Structured(structured_type)
+                ir::TypeLayout::Object(ir::ObjectType::StructuredBuffer(structured_type)) |
+                ir::TypeLayout::Object(ir::ObjectType::RWStructuredBuffer(structured_type)) => {
+                    ir::Type::from_structured(structured_type)
                 },
                 _ => return Err(TyperError::ArrayIndexingNonArrayType),
             };
@@ -981,14 +988,15 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
                 TypedExpression::Value(composite_ir, composite_type) => (composite_ir, composite_type),
                 _ => return Err(TyperError::TypeDoesNotHaveMembers(composite_pt)),
             };
-            let ety = match &composite_ty {
-                &ir::Type::Structured(ir::StructuredType::Struct(ref id)) => {
+            let ir::Type(composite_tyl, _) = composite_ty;
+            let ety = match &composite_tyl {
+                &ir::TypeLayout::Structured(ir::StructuredType::Struct(ref id)) => {
                     match context.find_struct_member(id, member) {
                         Ok(ty) => ty,
                         Err(err) => return Err(err),
                     }
                 }
-                &ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Vector(ref scalar, ref x))) => {
+                &ir::TypeLayout::Structured(ir::StructuredType::Data(ir::DataType::Vector(ref scalar, ref x))) => {
                     // Todo: Swizzling
                     let exists = match &member[..] {
                         "x" | "r" if *x >= 1 => true,
@@ -998,20 +1006,20 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
                         _ => false,
                     };
                     if exists {
-                        ir::Type::Structured(ir::StructuredType::Data(ir::DataType::Scalar(scalar.clone())))
+                        ir::Type::from_scalar(scalar.clone())
                     } else {
                         return Err(TyperError::UnknownTypeMember(composite_pt, member.clone()));
                     }
                 }
-                &ir::Type::Object(ir::ObjectType::Buffer(ref data_type)) => {
+                &ir::TypeLayout::Object(ir::ObjectType::Buffer(ref data_type)) => {
                     match &member[..] {
                         "Load" => {
                             return Ok(TypedExpression::Method(UnresolvedMethod(
                                 "Buffer::Load".to_string(),
-                                ir::Type::Object(ir::ObjectType::Buffer(data_type.clone())),
+                                ir::Type::from_object(ir::ObjectType::Buffer(data_type.clone())),
                                 vec![FunctionOverload(
                                     FunctionName::Intrinsic(IntrinsicFactory::Intrinsic2(ir::Intrinsic::BufferLoad)),
-                                    ir::Type::Structured(ir::StructuredType::Data(data_type.clone())),
+                                    ir::Type::from_data(data_type.clone()),
                                     vec![ir::Type::int()]
                                 )],
                                 composite_ir
@@ -1020,15 +1028,15 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
                         _ => return Err(TyperError::UnknownTypeMember(composite_pt, member.clone())),
                     }
                 }
-                &ir::Type::Object(ir::ObjectType::StructuredBuffer(ref structured_type)) => {
+                &ir::TypeLayout::Object(ir::ObjectType::StructuredBuffer(ref structured_type)) => {
                     match &member[..] {
                         "Load" => {
                             return Ok(TypedExpression::Method(UnresolvedMethod(
                                 "StructuredBuffer::Load".to_string(),
-                                ir::Type::Object(ir::ObjectType::StructuredBuffer(structured_type.clone())),
+                                ir::Type::from_object(ir::ObjectType::StructuredBuffer(structured_type.clone())),
                                 vec![FunctionOverload(
                                     FunctionName::Intrinsic(IntrinsicFactory::Intrinsic2(ir::Intrinsic::StructuredBufferLoad)),
-                                    ir::Type::Structured(structured_type.clone()),
+                                    ir::Type::from_structured(structured_type.clone()),
                                     vec![ir::Type::int()]
                                 )],
                                 composite_ir
