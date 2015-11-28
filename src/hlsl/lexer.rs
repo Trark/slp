@@ -253,6 +253,9 @@ named!(reserved_word_register, complete!(tag!("register")));
 named!(reserved_word_true, complete!(tag!("true")));
 named!(reserved_word_false, complete!(tag!("false")));
 named!(reserved_word_packoffset, complete!(tag!("packoffset")));
+named!(reserved_word_in, complete!(tag!("in")));
+named!(reserved_word_out, complete!(tag!("out")));
+named!(reserved_word_inout, complete!(tag!("inout")));
 
 // Unused reserved words
 named!(reserved_word_auto, complete!(tag!("auto")));
@@ -302,7 +305,10 @@ named!(reserved_word_s0, alt!(
     reserved_word_register |
     reserved_word_true |
     reserved_word_false |
-    reserved_word_packoffset
+    reserved_word_packoffset |
+    reserved_word_inout |
+    reserved_word_out |
+    reserved_word_in
 ));
 
 named!(reserved_word_s1, alt!(
@@ -424,6 +430,44 @@ named!(symbol_exclamation<Token>, chain!(
     }
 ));
 
+named!(token_no_whitespace_symbols<Token>, alt!(
+    tag!(";") => { |_| Token::Semicolon } |
+    tag!(",") => { |_| Token::Comma } |
+
+    tag!("+") => { |_| Token::Plus } |
+    tag!("-") => { |_| Token::Minus } |
+    tag!("/") => { |_| Token::ForwardSlash } |
+    tag!("%") => { |_| Token::Percent } |
+    tag!("*") => { |_| Token::Asterix } |
+    tag!("|") => { |_| Token::VerticalBar } |
+    tag!("&") => { |_| Token::Ampersand } |
+    tag!("^") => { |_| Token::Hat } |
+    symbol_equals |
+    tag!("#") => { |_| Token::Hash } |
+    tag!("@") => { |_| Token::At } |
+    symbol_exclamation |
+    tag!("~") => { |_| Token::Tilde } |
+    tag!(".") => { |_| Token::Period } |
+    tag!(":") => { |_| { Token::Colon } }
+));
+
+named!(token_no_whitespace_words<Token>, alt!(
+    reserved_word_if => { |_| { Token::If } } |
+    reserved_word_for => { |_| { Token::For } } |
+    reserved_word_while => { |_| { Token::While } } |
+    reserved_word_switch => { |_| { Token::Switch } } |
+    reserved_word_return => { |_| { Token::Return } } |
+
+    reserved_word_struct => { |_| { Token::Struct } } |
+    reserved_word_samplerstate => { |_| { Token::SamplerState } } |
+    reserved_word_cbuffer => { |_| { Token::ConstantBuffer } } |
+    register |
+
+    reserved_word_inout => { |_| Token::InOut } |
+    reserved_word_in => { |_| Token::In } |
+    reserved_word_out => { |_| Token::Out }
+));
+
 named!(token_no_whitespace<Token>, alt!(
 
     identifier => { |id| Token::Id(id) } |
@@ -442,35 +486,8 @@ named!(token_no_whitespace<Token>, alt!(
     leftanglebracket |
     rightanglebracket |
 
-    tag!(";") => { |_| Token::Semicolon } |
-    tag!(",") => { |_| Token::Comma } |
-
-    tag!("+") => { |_| Token::Plus } |
-    tag!("-") => { |_| Token::Minus } |
-    tag!("/") => { |_| Token::ForwardSlash } |
-    tag!("%") => { |_| Token::Percent } |
-    tag!("*") => { |_| Token::Asterix } |
-    tag!("|") => { |_| Token::VerticalBar } |
-    tag!("&") => { |_| Token::Ampersand } |
-    tag!("^") => { |_| Token::Hat } |
-    symbol_equals |
-    tag!("#") => { |_| Token::Hash } |
-    tag!("@") => { |_| Token::At } |
-    symbol_exclamation |
-    tag!("~") => { |_| Token::Tilde } |
-    tag!(".") => { |_| Token::Period } |
-
-    reserved_word_if => { |_| { Token::If } } |
-    reserved_word_for => { |_| { Token::For } } |
-    reserved_word_while => { |_| { Token::While } } |
-    reserved_word_switch => { |_| { Token::Switch } } |
-    reserved_word_return => { |_| { Token::Return } } |
-
-    reserved_word_struct => { |_| { Token::Struct } } |
-    reserved_word_samplerstate => { |_| { Token::SamplerState } } |
-    reserved_word_cbuffer => { |_| { Token::ConstantBuffer } } |
-    register |
-    tag!(":") => { |_| { Token::Colon } }
+    token_no_whitespace_symbols |
+    token_no_whitespace_words
 ));
 
 named!(token<Token>, delimited!(opt!(whitespace), alt!(token_no_whitespace), opt!(whitespace)));
@@ -552,6 +569,10 @@ fn test_token() {
     assert_eq!(token(&b"cbuffer"[..]), IResult::Done(&b""[..], Token::ConstantBuffer));
     assert_eq!(token(&b"register(t4)"[..]), IResult::Done(&b""[..], Token::Register(RegisterSlot::T(4))));
     assert_eq!(token(&b":"[..]), IResult::Done(&b""[..], Token::Colon));
+
+    assert_eq!(token(&b"in"[..]), IResult::Done(&b""[..], Token::In));
+    assert_eq!(token(&b"out"[..]), IResult::Done(&b""[..], Token::Out));
+    assert_eq!(token(&b"inout"[..]), IResult::Done(&b""[..], Token::InOut));
 
     assert_eq!(token(&b"structName"[..]), IResult::Done(&b""[..], Token::Id(Identifier("structName".to_string()))));
 }

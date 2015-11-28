@@ -78,6 +78,10 @@ pub enum Token {
     PackOffset(OffsetSlot),
     Colon,
 
+    In,
+    Out,
+    InOut,
+
     Auto,
     Case,
     Catch,
