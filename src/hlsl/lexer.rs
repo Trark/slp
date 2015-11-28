@@ -252,8 +252,45 @@ named!(reserved_word_cbuffer, complete!(tag!("cbuffer")));
 named!(reserved_word_register, complete!(tag!("register")));
 named!(reserved_word_true, complete!(tag!("true")));
 named!(reserved_word_false, complete!(tag!("false")));
+named!(reserved_word_packoffset, complete!(tag!("packoffset")));
 
-named!(reserved_word, alt!(
+// Unused reserved words
+named!(reserved_word_auto, complete!(tag!("auto")));
+named!(reserved_word_case, complete!(tag!("case")));
+named!(reserved_word_catch, complete!(tag!("catch")));
+named!(reserved_word_char, complete!(tag!("char")));
+named!(reserved_word_class, complete!(tag!("class")));
+named!(reserved_word_const_cast, complete!(tag!("const_cast")));
+named!(reserved_word_default, complete!(tag!("default")));
+named!(reserved_word_delete, complete!(tag!("delete")));
+named!(reserved_word_dynamic_cast, complete!(tag!("dynamic_cast")));
+named!(reserved_word_enum, complete!(tag!("enum")));
+named!(reserved_word_explicit, complete!(tag!("explicit")));
+named!(reserved_word_friend, complete!(tag!("friend")));
+named!(reserved_word_goto, complete!(tag!("goto")));
+named!(reserved_word_long, complete!(tag!("long")));
+named!(reserved_word_mutable, complete!(tag!("mutable")));
+named!(reserved_word_new, complete!(tag!("new")));
+named!(reserved_word_operator, complete!(tag!("operator")));
+named!(reserved_word_private, complete!(tag!("private")));
+named!(reserved_word_protected, complete!(tag!("protected")));
+named!(reserved_word_public, complete!(tag!("public")));
+named!(reserved_word_reinterpret_cast, complete!(tag!("reinterpret_cast")));
+named!(reserved_word_short, complete!(tag!("short")));
+named!(reserved_word_signed, complete!(tag!("signed")));
+named!(reserved_word_sizeof, complete!(tag!("sizeof")));
+named!(reserved_word_static_cast, complete!(tag!("static_cast")));
+named!(reserved_word_template, complete!(tag!("template")));
+named!(reserved_word_this, complete!(tag!("this")));
+named!(reserved_word_throw, complete!(tag!("throw")));
+named!(reserved_word_try, complete!(tag!("try")));
+named!(reserved_word_typename, complete!(tag!("typename")));
+named!(reserved_word_union, complete!(tag!("union")));
+named!(reserved_word_unsigned, complete!(tag!("unsigned")));
+named!(reserved_word_using, complete!(tag!("using")));
+named!(reserved_word_virtual, complete!(tag!("virtual")));
+
+named!(reserved_word_s0, alt!(
     reserved_word_if |
     reserved_word_for |
     reserved_word_while |
@@ -264,7 +301,59 @@ named!(reserved_word, alt!(
     reserved_word_cbuffer |
     reserved_word_register |
     reserved_word_true |
-    reserved_word_false
+    reserved_word_false |
+    reserved_word_packoffset
+));
+
+named!(reserved_word_s1, alt!(
+    reserved_word_auto |
+    reserved_word_case |
+    reserved_word_catch |
+    reserved_word_char |
+    reserved_word_class |
+    reserved_word_const_cast |
+    reserved_word_default |
+    reserved_word_delete |
+    reserved_word_dynamic_cast |
+    reserved_word_enum
+));
+
+named!(reserved_word_s2, alt!(
+    reserved_word_explicit |
+    reserved_word_friend |
+    reserved_word_goto |
+    reserved_word_long |
+    reserved_word_mutable |
+    reserved_word_new |
+    reserved_word_operator |
+    reserved_word_private |
+    reserved_word_protected |
+    reserved_word_public |
+    reserved_word_reinterpret_cast |
+    reserved_word_short
+));
+
+named!(reserved_word_s3, alt!(
+    reserved_word_signed |
+    reserved_word_sizeof |
+    reserved_word_static_cast |
+    reserved_word_template |
+    reserved_word_this |
+    reserved_word_throw |
+    reserved_word_try |
+    reserved_word_typename |
+    reserved_word_union |
+    reserved_word_unsigned |
+    reserved_word_using |
+    reserved_word_virtual
+));
+
+// Distribute these among subfunctions to avoid recursion limits in macros
+named!(reserved_word, alt!(
+    reserved_word_s0 |
+    reserved_word_s1 |
+    reserved_word_s2 |
+    reserved_word_s3
 ));
 
 enum RegisterType { T, U, B }
