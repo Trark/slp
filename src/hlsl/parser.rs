@@ -416,10 +416,23 @@ fn parse_globaltype(input: &[Token]) -> IResult<&[Token], GlobalType, ParseError
     }
 }
 
+fn parse_inputmodifier(input: &[Token]) -> IResult<&[Token], InputModifier, ParseErrorReason> {
+    alt!(input,
+        token!(Token::In) => { |_| InputModifier::In } |
+        token!(Token::Out) => { |_| InputModifier::Out } |
+        token!(Token::InOut) => { |_| InputModifier::InOut }
+    )
+}
+
 fn parse_paramtype(input: &[Token]) -> IResult<&[Token], ParamType, ParseErrorReason> {
-    // Todo: input modifiers
+    let (input, it) = match parse_inputmodifier(input) {
+        IResult::Done(rest, it) => (rest, it),
+        IResult::Incomplete(i) => return IResult::Incomplete(i),
+        IResult::Error(_) => (input, InputModifier::default()),
+    };
+    // Todo: interpolation modifiers
     match parse_typename(input) {
-        IResult::Done(rest, ty) => IResult::Done(rest, ParamType(ty, InputModifier::default(), None)),
+        IResult::Done(rest, ty) => IResult::Done(rest, ParamType(ty, it, None)),
         IResult::Incomplete(i) => IResult::Incomplete(i),
         IResult::Error(err) => IResult::Error(err),
     }
