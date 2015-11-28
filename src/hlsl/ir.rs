@@ -252,6 +252,21 @@ pub enum ValueType {
 #[derive(PartialEq, Debug, Clone)]
 pub struct ExpressionType(pub Type, pub ValueType);
 
+pub trait ToExpressionType {
+    fn to_lvalue(self) -> ExpressionType;
+    fn to_rvalue(self) -> ExpressionType;
+}
+
+impl ToExpressionType for Type {
+    fn to_lvalue(self) -> ExpressionType { ExpressionType(self, ValueType::Lvalue) }
+    fn to_rvalue(self) -> ExpressionType { ExpressionType(self, ValueType::Rvalue) }
+}
+
+impl<'a> ToExpressionType for &'a Type {
+    fn to_lvalue(self) -> ExpressionType { ExpressionType(self.clone(), ValueType::Lvalue) }
+    fn to_rvalue(self) -> ExpressionType { ExpressionType(self.clone(), ValueType::Rvalue) }
+}
+
 /// The type of any global declaration
 #[derive(PartialEq, Debug, Clone)]
 pub struct GlobalType(pub Type, pub GlobalStorage, pub InterpolationModifier);

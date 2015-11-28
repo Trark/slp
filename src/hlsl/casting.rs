@@ -53,7 +53,10 @@ enum NumericDimension {
 struct NumericCast(ScalarType, ScalarType, NumericDimension);
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct ImplicitConversion(Type, Option<NumericCast>);
+struct ValueTypeCast(Type, ValueType, ValueType);
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct ImplicitConversion(ExpressionType, Option<ValueTypeCast>, Option<NumericCast>);
 
 impl ConversionRank {
     pub fn compare(&self, other: &ConversionRank) -> ConversionPriority {
@@ -89,16 +92,6 @@ impl NumericCast {
             },
             ScalarType::UntypedInt => Err(()),
         }
-    }
-
-    fn find_all(source: &ScalarType, dim: NumericDimension) -> Vec<NumericCast> {
-        let mut vec = vec![];
-        for dest in &[ScalarType::Bool, ScalarType::Int, ScalarType::UInt, ScalarType::Half, ScalarType::Float, ScalarType::Double] {
-            if let Ok(cast) = NumericCast::new(source, dest, dim.clone()) {
-                vec.push(cast);
-            }
-        };
-        vec
     }
 
     fn get_rank(&self) -> ConversionRank {
@@ -165,12 +158,12 @@ impl NumericCast {
         }
     }
 
-    fn get_target_type(&self) -> Type {
+    fn get_target_type(&self) -> ExpressionType {
         Type::from_layout(match self.2 {
             NumericDimension::Scalar => TypeLayout::Scalar(self.1.clone()),
             NumericDimension::Vector(ref x) => TypeLayout::Vector(self.1.clone(), *x),
             NumericDimension::Matrix(ref x, ref y) => TypeLayout::Matrix(self.1.clone(), *x, *y),
-        })
+        }).to_rvalue()
     }
 
     fn apply(&self, expr: Expression) -> Expression {
@@ -184,76 +177,69 @@ impl NumericCast {
     }
 }
 
+impl ValueTypeCast {
+    fn get_target_type(&self) -> ExpressionType {
+        ExpressionType(self.0.clone(), self.2.clone())
+    }
+}
+
 impl ImplicitConversion {
 
-    pub fn find(source: &Type, dest: &Type) -> Result<ImplicitConversion, ()> {
-        let &Type(ref source_l, ref mods) = source;
+    pub fn find(source: &ExpressionType, dest: &ExpressionType) -> Result<ImplicitConversion, ()> {
+
+        let source_copy = source.clone();
+        let (source_type, dest_type, value_type_cast) = match (&source.1, &dest.1) {
+            (&ValueType::Rvalue, &ValueType::Lvalue) => return Err(()),
+            (&ValueType::Rvalue, &ValueType::Rvalue) | (&ValueType::Lvalue, &ValueType::Lvalue) => (&source.0, &dest.0, None),
+            (&ValueType::Lvalue, &ValueType::Rvalue) => (&source.0, &dest.0, Some(ValueTypeCast(source.0.clone(), ValueType::Lvalue, ValueType::Rvalue))),
+        };
+
+        let &Type(ref source_l, ref mods) = source_type;
         assert!(mods.is_empty());
-        let &Type(ref dest_l, ref modd) = dest;
+        let &Type(ref dest_l, ref modd) = dest_type;
         assert!(modd.is_empty());
-        match (source_l, dest_l) {
-            (ref ty1, ref ty2) if ty1 == ty2 => Ok(ImplicitConversion(source.clone(), None)),
+        let numeric_cast = match (source_l, dest_l) {
+            (ref ty1, ref ty2) if ty1 == ty2 => None,
             (&TypeLayout::Scalar(ref s1), &TypeLayout::Scalar(ref s2)) => {
                 let cast = try!(NumericCast::new(s1, s2, NumericDimension::Scalar));
-                Ok(ImplicitConversion(source.clone(), Some(cast)))
+                Some(cast)
             },
             (&TypeLayout::Vector(ref s1, ref x1), &TypeLayout::Vector(ref s2, ref x2)) if x1 == x2 => {
                 let cast = try!(NumericCast::new(s1, s2, NumericDimension::Vector(*x2)));
-                Ok(ImplicitConversion(source.clone(), Some(cast)))
+                Some(cast)
             },
             (&TypeLayout::Matrix(ref s1, ref x1, ref y1), &TypeLayout::Matrix(ref s2, ref x2, ref y2)) if x1 == x2 && y1 == y2 => {
                 let cast = try!(NumericCast::new(s1, s2, NumericDimension::Matrix(*x2, *y2)));
-                Ok(ImplicitConversion(source.clone(), Some(cast)))
+                Some(cast)
             },
             // Vector <-> Matrix casts not implemented
             // Struct casts only supported for same type structs
-            _ => Err(()),
-        }
-    }
-
-    pub fn find_all(source: &Type) -> Vec<ImplicitConversion> {
-        let mut vec = vec![ImplicitConversion(source.clone(), None)];
-        let &Type(ref source_l, ref modifier) = source;
-        assert!(modifier.is_empty());
-        match *source_l {
-            TypeLayout::Scalar(ref scalar) => {
-                for nc in NumericCast::find_all(scalar, NumericDimension::Scalar) {
-                    vec.push(ImplicitConversion(source.clone(), Some(nc)));
-                };
-            },
-            TypeLayout::Vector(ref scalar, ref x) => {
-                for nc in NumericCast::find_all(scalar, NumericDimension::Vector(*x)) {
-                    vec.push(ImplicitConversion(source.clone(), Some(nc)));
-                };
-            },
-            TypeLayout::Matrix(ref scalar, ref x, ref y) => {
-                for nc in NumericCast::find_all(scalar, NumericDimension::Matrix(*x, *y)) {
-                    vec.push(ImplicitConversion(source.clone(), Some(nc)));
-                };
-            },
-            _ => { },
+            _ => return Err(()),
         };
-        vec
+        Ok(ImplicitConversion(source_copy, value_type_cast, numeric_cast))
     }
 
     pub fn get_rank(&self) -> ConversionRank {
         match *self {
-            ImplicitConversion(_, None) => ConversionRank::Exact,
-            ImplicitConversion(_, Some(ref numeric)) => numeric.get_rank(),
+            ImplicitConversion(_, _, None) => ConversionRank::Exact,
+            ImplicitConversion(_, _, Some(ref numeric)) => numeric.get_rank(),
         }
     }
 
-     pub fn get_target_type(&self) -> Type {
+     pub fn get_target_type(&self) -> ExpressionType {
         match *self {
-            ImplicitConversion(ref source_type, None) => source_type.clone(),
-            ImplicitConversion(_, Some(ref numeric)) => numeric.get_target_type(),
+            ImplicitConversion(ref source_type, None, None) => match source_type.clone() {
+                ExpressionType(ty, _) => ExpressionType(ty, ValueType::Rvalue)
+            },
+            ImplicitConversion(_, Some(ref vtc), None) => vtc.get_target_type(),
+            ImplicitConversion(_, _, Some(ref numeric)) => numeric.get_target_type(),
         }
     }
 
     pub fn apply(&self, expr: Expression) -> Expression {
         match *self {
-            ImplicitConversion(_, None) => expr,
-            ImplicitConversion(_, Some(ref cast)) => cast.apply(expr),
+            ImplicitConversion(_, _, None) => expr,
+            ImplicitConversion(_, _, Some(ref cast)) => cast.apply(expr),
         }
     }
 }

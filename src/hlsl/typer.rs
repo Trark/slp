@@ -4,6 +4,8 @@ use std::fmt;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use super::ir;
+use super::ir::ExpressionType;
+use super::ir::ToExpressionType;
 use super::ast;
 use super::intrinsics;
 use super::intrinsics::IntrinsicFactory;
@@ -34,7 +36,7 @@ pub enum TyperError {
     CallOnNonFunction,
 
     FunctionPassedToAnotherFunction(ErrorType, ErrorType),
-    FunctionArgumentTypeMismatch(Vec<FunctionOverload>, ParamArray),
+    FunctionArgumentTypeMismatch(Vec<FunctionOverload>, Vec<ExpressionType>),
 
     UnaryOperationWrongTypes(ir::UnaryOp, ErrorType),
     BinaryOperationWrongTypes(ir::BinOp, ErrorType, ErrorType),
@@ -49,6 +51,8 @@ pub enum TyperError {
     KernelHasNoDispatchDimensions,
     KernelHasParamWithBadSemantic(ast::FunctionParam),
     KernelHasParamWithoutSemantic(ast::FunctionParam),
+
+    LvalueRequired,
 }
 
 pub type ReturnType = ir::Type;
@@ -125,6 +129,8 @@ impl error::Error for TyperError {
             TyperError::KernelHasNoDispatchDimensions => "compute kernels require a dispatch dimension",
             TyperError::KernelHasParamWithBadSemantic(_) => "kernel parameter did not have a valid kernel semantic",
             TyperError::KernelHasParamWithoutSemantic(_) => "kernel parameter did not have a kernel semantic",
+
+            TyperError::LvalueRequired => "lvalue is required in this context",
         }
     }
 }
@@ -138,7 +144,7 @@ impl fmt::Display for TyperError {
 #[derive(PartialEq, Debug, Clone)]
 enum TypedExpression {
     // Expression + Type
-    Value(ir::Expression, ir::Type),
+    Value(ir::Expression, ExpressionType),
     // Name of function + overloads
     Function(UnresolvedFunction),
     // Name of function + overloads + object
@@ -191,6 +197,10 @@ trait StructIdFinder {
 trait ErrorTypeContext {
     fn ir_type_to_error_type(&self, ty: &ir::Type) -> ErrorType;
 
+    fn exp_type_to_error_type(&self, ty: &ExpressionType) -> ErrorType {
+        self.ir_type_to_error_type(&ty.0)
+    }
+
     fn typed_expression_to_error_type(&self, texp: &TypedExpression) -> ErrorType;
 }
 
@@ -227,7 +237,7 @@ impl VariableBlock {
 
     fn find_variable(&self, name: &String, scopes_up: u32) -> Option<TypedExpression> {
         match self.variables.get(name) {
-            Some(&(ref ty, ref id)) => return Some(TypedExpression::Value(ir::Expression::Variable(ir::VariableRef(id.clone(), scopes_up)), ty.clone())),
+            Some(&(ref ty, ref id)) => return Some(TypedExpression::Value(ir::Expression::Variable(ir::VariableRef(id.clone(), scopes_up)), ty.to_lvalue())),
             None => None,
         }
     }
@@ -300,7 +310,7 @@ impl TypeBlock {
                 if member_name == name {
                     return Some(TypedExpression::Value(
                         ir::Expression::ConstantVariable(id.clone(), name.clone()),
-                        ty.clone()
+                        ty.to_lvalue()
                     ));
                 }
             }
@@ -462,7 +472,7 @@ impl ErrorTypeContext for TypeBlock {
 
     fn typed_expression_to_error_type(&self, texp: &TypedExpression) -> ErrorType {
         match *texp {
-            TypedExpression::Value(_, ref ty) => ErrorType::Value(TypeBlock::invert_type(self, ty)),
+            TypedExpression::Value(_, ExpressionType(ref ty, _)) => ErrorType::Value(TypeBlock::invert_type(self, ty)),
             TypedExpression::Function(ref unresolved) => ErrorType::Function(unresolved.clone()),
             TypedExpression::Method(ref unresolved) => ErrorType::Method(unresolved.clone()),
         }
@@ -826,12 +836,12 @@ fn parse_type(ty: &ast::Type, struct_finder: &StructIdFinder) -> Result<ir::Type
     Ok(ir::Type(try!(parse_typelayout(tyl, struct_finder)), parse_modifier(modifier)))
 }
 
-fn find_function_type(overloads: &Vec<FunctionOverload>, param_types: &ParamArray) -> Result<(FunctionOverload, Vec<ImplicitConversion>), TyperError> {
+fn find_function_type(overloads: &Vec<FunctionOverload>, param_types: &[ExpressionType]) -> Result<(FunctionOverload, Vec<ImplicitConversion>), TyperError> {
 
-    fn find_overload_casts(overload: &FunctionOverload, param_types: &ParamArray) -> Result<Vec<ImplicitConversion>, ()> {
+    fn find_overload_casts(overload: &FunctionOverload, param_types: &[ExpressionType]) -> Result<Vec<ImplicitConversion>, ()> {
         let mut overload_casts = Vec::with_capacity(param_types.len());
         for (required_type, source_type) in overload.2.iter().zip(param_types.iter()) {
-            if let Ok(cast) = ImplicitConversion::find(source_type, required_type) {
+            if let Ok(cast) = ImplicitConversion::find(source_type, &required_type.to_rvalue()) {
                 overload_casts.push(cast)
             } else {
                 return Err(())
@@ -875,7 +885,7 @@ fn find_function_type(overloads: &Vec<FunctionOverload>, param_types: &ParamArra
             return Ok((candidate.clone(), candidate_casts.clone()));
         }
     }
-    Err(TyperError::FunctionArgumentTypeMismatch(overloads.clone(), param_types.clone()))
+    Err(TyperError::FunctionArgumentTypeMismatch(overloads.clone(), param_types.to_vec()))
 }
 
 fn apply_casts(casts: Vec<ImplicitConversion>, values: Vec<ir::Expression>) -> Vec<ir::Expression> {
@@ -883,11 +893,12 @@ fn apply_casts(casts: Vec<ImplicitConversion>, values: Vec<ir::Expression>) -> V
     values.iter().enumerate().map(|(index, value)| casts[index].apply(value.clone())).collect::<Vec<_>>()
 }
 
-fn write_function(unresolved: UnresolvedFunction, param_types: ParamArray, param_values: Vec<ir::Expression>) -> Result<TypedExpression, TyperError> {
+fn write_function(unresolved: UnresolvedFunction, param_types: &[ExpressionType], param_values: Vec<ir::Expression>) -> Result<TypedExpression, TyperError> {
     // Find the matching function overload
-    let (FunctionOverload(name, return_type, _), casts) = try!(find_function_type(&unresolved.1, &param_types));
+    let (FunctionOverload(name, return_type_ty, _), casts) = try!(find_function_type(&unresolved.1, param_types));
     // Apply implicit casts
     let param_values = apply_casts(casts, param_values);
+    let return_type = return_type_ty.to_rvalue();
 
     match name {
         FunctionName::Intrinsic(factory) => {
@@ -902,13 +913,14 @@ fn write_function(unresolved: UnresolvedFunction, param_types: ParamArray, param
     }
 }
 
-fn write_method(unresolved: UnresolvedMethod, param_types: ParamArray, param_values: Vec<ir::Expression>) -> Result<TypedExpression, TyperError> {
+fn write_method(unresolved: UnresolvedMethod, param_types: &[ExpressionType], param_values: Vec<ir::Expression>) -> Result<TypedExpression, TyperError> {
     // Find the matching method overload
-    let (FunctionOverload(name, return_type, _), casts) = try!(find_function_type(&unresolved.2, &param_types));
+    let (FunctionOverload(name, return_type_ty, _), casts) = try!(find_function_type(&unresolved.2, param_types));
     // Apply implicit casts
     let mut param_values = apply_casts(casts, param_values);
     // Add struct as implied first argument
     param_values.insert(0, unresolved.3);
+    let return_type = return_type_ty.to_rvalue();
 
     match name {
         FunctionName::Intrinsic(factory) => {
@@ -923,18 +935,18 @@ fn write_method(unresolved: UnresolvedMethod, param_types: ParamArray, param_val
 
 fn parse_literal(ast: &ast::Literal) -> Result<TypedExpression, TyperError> {
     match ast {
-        &ast::Literal::Bool(b) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Bool(b)), ir::Type::bool())),
-        &ast::Literal::UntypedInt(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::UntypedInt(i)), ir::Type::from_scalar(ir::ScalarType::UntypedInt))),
-        &ast::Literal::Int(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Int(i)), ir::Type::int())),
-        &ast::Literal::UInt(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::UInt(i)), ir::Type::uint())),
-        &ast::Literal::Long(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Long(i)), ir::Type::from_scalar(ir::ScalarType::UntypedInt))),
-        &ast::Literal::Half(f) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Half(f)), ir::Type::float())),
-        &ast::Literal::Float(f) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Float(f)), ir::Type::float())),
-        &ast::Literal::Double(f) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Double(f)), ir::Type::double())),
+        &ast::Literal::Bool(b) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Bool(b)), ir::Type::bool().to_rvalue())),
+        &ast::Literal::UntypedInt(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::UntypedInt(i)), ir::Type::from_scalar(ir::ScalarType::UntypedInt).to_rvalue())),
+        &ast::Literal::Int(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Int(i)), ir::Type::int().to_rvalue())),
+        &ast::Literal::UInt(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::UInt(i)), ir::Type::uint().to_rvalue())),
+        &ast::Literal::Long(i) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Long(i)), ir::Type::from_scalar(ir::ScalarType::UntypedInt).to_rvalue())),
+        &ast::Literal::Half(f) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Half(f)), ir::Type::float().to_rvalue())),
+        &ast::Literal::Float(f) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Float(f)), ir::Type::float().to_rvalue())),
+        &ast::Literal::Double(f) => Ok(TypedExpression::Value(ir::Expression::Literal(ir::Literal::Double(f)), ir::Type::double().to_rvalue())),
     }
 }
 
-fn resolve_arithmetic_types(binop: &ir::BinOp, left: &ir::Type, right: &ir::Type, context: &ScopeContext) -> Result<(ImplicitConversion, ImplicitConversion), TyperError> {
+fn resolve_arithmetic_types(binop: &ir::BinOp, left: &ExpressionType, right: &ExpressionType, context: &ScopeContext) -> Result<(ImplicitConversion, ImplicitConversion), TyperError> {
     use hlsl::ir::Type;
     use hlsl::ir::ScalarType;
 
@@ -961,12 +973,16 @@ fn resolve_arithmetic_types(binop: &ir::BinOp, left: &ir::Type, right: &ir::Type
         if left_order > right_order { Ok(left) } else { Ok(right) }
     }
 
-    fn do_noerror(_: &ir::BinOp, left: &ir::Type, right: &ir::Type) -> Result<(ImplicitConversion, ImplicitConversion), ()> {
-        let &ir::Type(ref left_l, ref modl) = left;
+    fn do_noerror(_: &ir::BinOp, left: &ExpressionType, right: &ExpressionType) -> Result<(ImplicitConversion, ImplicitConversion), ()> {
+        let &ExpressionType(ir::Type(ref left_l, ref modl), ref left_value) = left;
         assert!(modl.is_empty());
-        let &ir::Type(ref right_l, ref modr) = right;
+        let &ExpressionType(ir::Type(ref right_l, ref modr), ref right_value) = right;
         assert!(modr.is_empty());
-        let (left, right, common) = match (left_l, right_l) {
+        let matched_value_type = match (left_value, right_value) {
+            (&ir::ValueType::Rvalue, _) | (_, &ir::ValueType::Rvalue) => ir::ValueType::Rvalue,
+            (&ir::ValueType::Lvalue, &ir::ValueType::Lvalue) => ir::ValueType::Lvalue,
+        };
+        let (left, right, common_type) = match (left_l, right_l) {
             (&ir::TypeLayout::Scalar(ref ls), &ir::TypeLayout::Scalar(ref rs)) => {
                 let common_scalar = try!(common_real_type(ls, rs));
                 let common = ir::Type::from_scalar(common_scalar);
@@ -984,6 +1000,7 @@ fn resolve_arithmetic_types(binop: &ir::BinOp, left: &ir::Type, right: &ir::Type
             },
             _ => return Err(()),
         };
+        let common = ExpressionType(common_type, matched_value_type);
         let lc = try!(ImplicitConversion::find(left, &common));
         let rc = try!(ImplicitConversion::find(right, &common));
         Ok((lc, rc))
@@ -991,7 +1008,7 @@ fn resolve_arithmetic_types(binop: &ir::BinOp, left: &ir::Type, right: &ir::Type
 
     match do_noerror(binop, left, right) {
         Ok(res) => Ok(res),
-        Err(_) => Err(TyperError::BinaryOperationWrongTypes(binop.clone(), context.ir_type_to_error_type(left), context.ir_type_to_error_type(right))),
+        Err(_) => Err(TyperError::BinaryOperationWrongTypes(binop.clone(), context.exp_type_to_error_type(left), context.exp_type_to_error_type(right))),
     }
 }
 
@@ -1034,10 +1051,14 @@ fn parse_expr_binop(op: &ast::BinOp, lhs: &ast::Expression, rhs: &ast::Expressio
             assert_eq!(lhs_cast.get_target_type(), rhs_cast.get_target_type());
             let lhs_final = lhs_cast.apply(lhs_ir);
             let rhs_final = rhs_cast.apply(rhs_ir);
-            Ok(TypedExpression::Value(ir::Expression::BinaryOperation(op.clone(), Box::new(lhs_final), Box::new(rhs_final)), ir::Type::bool()))
+            Ok(TypedExpression::Value(ir::Expression::BinaryOperation(op.clone(), Box::new(lhs_final), Box::new(rhs_final)), ir::Type::bool().to_rvalue()))
         },
         ast::BinOp::Assignment => {
-            match ImplicitConversion::find(&rhs_type, &lhs_type) {
+            let required_rtype = match lhs_type.1 {
+                ir::ValueType::Lvalue => ExpressionType(lhs_type.0.clone(), ir::ValueType::Rvalue),
+                _ => return Err(TyperError::LvalueRequired),
+            };
+            match ImplicitConversion::find(&rhs_type, &required_rtype) {
                 Ok(rhs_cast) => {
                     let rhs_final = rhs_cast.apply(rhs_ir);
                     Ok(TypedExpression::Value(ir::Expression::BinaryOperation(op.clone(), Box::new(lhs_ir), Box::new(rhs_final)), lhs_type))
@@ -1072,19 +1093,25 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
                 TypedExpression::Value(subscript_ir, subscript_ty) => (subscript_ir, subscript_ty),
                 _ => return Err(TyperError::ArrayIndexingNonArrayType),
             };
-            let ir::Type(array_tyl, _) = array_ty;
+            let ExpressionType(ir::Type(array_tyl, _), _) = array_ty;
             let indexed_type = match array_tyl {
-                ir::TypeLayout::Object(ir::ObjectType::Buffer(data_type)) |
-                ir::TypeLayout::Object(ir::ObjectType::RWBuffer(data_type)) => {
-                    ir::Type::from_data(data_type)
+                ir::TypeLayout::Object(ir::ObjectType::Buffer(data_type)) => {
+                    // Todo: const
+                    ir::Type::from_data(data_type).to_lvalue()
                 },
-                ir::TypeLayout::Object(ir::ObjectType::StructuredBuffer(structured_type)) |
+                ir::TypeLayout::Object(ir::ObjectType::RWBuffer(data_type)) => {
+                    ir::Type::from_data(data_type).to_lvalue()
+                },
+                ir::TypeLayout::Object(ir::ObjectType::StructuredBuffer(structured_type)) => {
+                    // Todo: const
+                    ir::Type::from_structured(structured_type).to_lvalue()
+                },
                 ir::TypeLayout::Object(ir::ObjectType::RWStructuredBuffer(structured_type)) => {
-                    ir::Type::from_structured(structured_type)
+                    ir::Type::from_structured(structured_type).to_lvalue()
                 },
                 _ => return Err(TyperError::ArrayIndexingNonArrayType),
             };
-            let cast_to_int_result = ImplicitConversion::find(&subscript_ty, &ir::Type::int());
+            let cast_to_int_result = ImplicitConversion::find(&subscript_ty, &ir::Type::int().to_rvalue());
             let subscript_final = match cast_to_int_result {
                 Err(_) => return Err(TyperError::ArraySubscriptIndexNotInteger),
                 Ok(cast) => cast.apply(subscript_ir),
@@ -1098,11 +1125,11 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
                 TypedExpression::Value(composite_ir, composite_type) => (composite_ir, composite_type),
                 _ => return Err(TyperError::TypeDoesNotHaveMembers(composite_pt)),
             };
-            let ir::Type(composite_tyl, _) = composite_ty;
+            let ExpressionType(ir::Type(composite_tyl, _), _) = composite_ty;
             let ety = match &composite_tyl {
                 &ir::TypeLayout::Struct(ref id) => {
                     match context.find_struct_member(id, member) {
-                        Ok(ty) => ty,
+                        Ok(ty) => ty.to_lvalue(),
                         Err(err) => return Err(err),
                     }
                 }
@@ -1116,7 +1143,7 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
                         _ => false,
                     };
                     if exists {
-                        ir::Type::from_scalar(scalar.clone())
+                        ir::Type::from_scalar(scalar.clone()).to_lvalue()
                     } else {
                         return Err(TyperError::UnknownTypeMember(composite_pt, member.clone()));
                     }
@@ -1163,7 +1190,7 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
         &ast::Expression::Call(ref func, ref params) => {
             let func_texp = try!(parse_expr(func, context));
             let mut params_ir: Vec<ir::Expression> = vec![];
-            let mut params_types: Vec<ir::Type> = vec![];
+            let mut params_types: Vec<ExpressionType> = vec![];
             for param in params {
                 let expr_texp = try!(parse_expr(param, context));
                 let (expr_ir, expr_ty) = match expr_texp {
@@ -1177,8 +1204,8 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
                 params_types.push(expr_ty);
             };
             match func_texp {
-                TypedExpression::Function(unresolved) => write_function(unresolved, params_types, params_ir),
-                TypedExpression::Method(unresolved) => write_method(unresolved, params_types, params_ir),
+                TypedExpression::Function(unresolved) => write_function(unresolved, &params_types, params_ir),
+                TypedExpression::Method(unresolved) => write_method(unresolved, &params_types, params_ir),
                 _ => return Err(TyperError::CallOnNonFunction),
             }
         },
@@ -1188,7 +1215,7 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
             match expr_texp {
                 TypedExpression::Value(expr_ir, _) => {
                     let ir_type = try!(parse_type(ty, context));
-                    Ok(TypedExpression::Value(ir::Expression::Cast(ir_type.clone(), Box::new(expr_ir)), ir_type))
+                    Ok(TypedExpression::Value(ir::Expression::Cast(ir_type.clone(), Box::new(expr_ir)), ir_type.to_rvalue()))
                 },
                 _ => Err(TyperError::InvalidCast(expr_pt, ErrorType::Value(ty.clone()))),
             }
@@ -1211,7 +1238,7 @@ fn parse_vardef(ast: &ast::VarDef, context: ScopeContext) -> Result<(ir::VarDef,
         Some(ref expr) => {
             match try!(parse_expr(expr, &context)) {
                 TypedExpression::Value(expr_ir, expt_ty) => {
-                    match ImplicitConversion::find(&expt_ty, &var_type) {
+                    match ImplicitConversion::find(&expt_ty, &var_type.to_rvalue()) {
                         Ok(rhs_cast) => Some(rhs_cast.apply(expr_ir)),
                         Err(()) => return Err(TyperError::WrongTypeInInitExpression),
                     }
