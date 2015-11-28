@@ -898,7 +898,18 @@ fn find_function_type(overloads: &Vec<FunctionOverload>, param_types: &[Expressi
     fn find_overload_casts(overload: &FunctionOverload, param_types: &[ExpressionType]) -> Result<Vec<ImplicitConversion>, ()> {
         let mut overload_casts = Vec::with_capacity(param_types.len());
         for (required_type, source_type) in overload.2.iter().zip(param_types.iter()) {
-            if let Ok(cast) = ImplicitConversion::find(source_type, &(&required_type.0).to_rvalue()) {
+            let &ir::ParamType(ref ty, ref it, ref interp) = required_type;
+
+            let ety = match *it {
+                ir::InputModifier::In => ty.to_rvalue(),
+                ir::InputModifier::Out | ir::InputModifier::InOut => ty.to_lvalue(),
+            };
+            match *interp {
+                Some(_) => return Err(()),
+                None => { },
+            };
+
+            if let Ok(cast) = ImplicitConversion::find(source_type, &ety) {
                 overload_casts.push(cast)
             } else {
                 return Err(())
@@ -1654,6 +1665,21 @@ fn test_typeparse() {
                 attributes: vec![],
             }),
             ast::RootDefinition::Function(ast::FunctionDefinition {
+                name: "outFunc".to_string(),
+                returntype: ast::Type::void(),
+                params: vec![ast::FunctionParam { name: "x".to_string(), param_type: ast::ParamType(ast::Type::float(), ast::InputModifier::Out, None), semantic: None }],
+                body: vec![
+                    ast::Statement::Var(ast::VarDef { name: "local_static".to_string(), local_type: ast::LocalType(ast::Type::uint(), ast::LocalStorage::Static, None), assignment: None }),
+                    ast::Statement::Expression(
+                        ast::Expression::BinaryOperation(ast::BinOp::Assignment,
+                            Box::new(ast::Expression::Variable("x".to_string())),
+                            Box::new(ast::Expression::Literal(ast::Literal::Float(1.5f32)))
+                        )
+                    ),
+                ],
+                attributes: vec![],
+            }),
+            ast::RootDefinition::Function(ast::FunctionDefinition {
                 name: "CSMAIN".to_string(),
                 returntype: ast::Type::void(),
                 params: vec![],
@@ -1686,6 +1712,13 @@ fn test_typeparse() {
                             vec![
                                 ast::Expression::Variable("b".to_string())
                             ]
+                        ),
+                    ),
+                    ast::Statement::Var(ast::VarDef { name: "testOut".to_string(), local_type: ast::Type::float().into(), assignment: None }),
+                    ast::Statement::Expression(
+                        ast::Expression::Call(
+                            Box::new(ast::Expression::Variable("outFunc".to_string())),
+                            vec![ast::Expression::Variable("testOut".to_string())]
                         ),
                     ),
                 ],
