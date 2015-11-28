@@ -241,20 +241,19 @@ named!(whitespace<()>, map_res!(
 ));
 
 // Reserved words
-// Find a better way to do this that backs out as early as possible
-named!(reserved_word_if<()>, chain!(tag!("i") ~ tag!("f"), || { }));
-named!(reserved_word_for<()>, chain!(tag!("f") ~ tag!("o") ~ tag!("r"), || { }));
-named!(reserved_word_while<()>, chain!(tag!("w") ~ tag!("h") ~ tag!("i") ~ tag!("l") ~ tag!("e"), || { }));
-named!(reserved_word_switch<()>, chain!(tag!("s") ~ tag!("w") ~ tag!("i") ~ tag!("t") ~ tag!("c") ~ tag!("h"), || { }));
-named!(reserved_word_return<()>, chain!(tag!("r") ~ tag!("e") ~ tag!("t") ~ tag!("u") ~ tag!("r") ~ tag!("n"), || { }));
-named!(reserved_word_struct<()>, chain!(tag!("s") ~ tag!("t") ~ tag!("r") ~ tag!("u") ~ tag!("c") ~ tag!("t"), || { }));
-named!(reserved_word_samplerstate<()>, chain!(tag!("S") ~ tag!("a") ~ tag!("m") ~ tag!("p") ~ tag!("l") ~ tag!("e") ~ tag!("r") ~ tag!("S") ~ tag!("t") ~ tag!("a") ~ tag!("t") ~ tag!("e") , || { }));
-named!(reserved_word_cbuffer<()>, chain!(tag!("c") ~ tag!("b") ~ tag!("u") ~ tag!("f") ~ tag!("f") ~ tag!("e") ~ tag!("r"), || { }));
-named!(reserved_word_register<()>, chain!(tag!("r") ~ tag!("e") ~ tag!("g") ~ tag!("i") ~ tag!("s") ~ tag!("t") ~ tag!("e") ~ tag!("r"), || { }));
-named!(reserved_word_true<()>, chain!(tag!("t") ~ tag!("r") ~ tag!("u") ~ tag!("e"), || { }));
-named!(reserved_word_false<()>, chain!(tag!("f") ~ tag!("a") ~ tag!("l") ~ tag!("s") ~ tag!("e"), || { }));
+named!(reserved_word_if, complete!(tag!("if")));
+named!(reserved_word_for, complete!(tag!("for")));
+named!(reserved_word_while, complete!(tag!("while")));
+named!(reserved_word_switch, complete!(tag!("switch")));
+named!(reserved_word_return, complete!(tag!("return")));
+named!(reserved_word_struct, complete!(tag!("struct")));
+named!(reserved_word_samplerstate, complete!(tag!("SamplerState")));
+named!(reserved_word_cbuffer, complete!(tag!("cbuffer")));
+named!(reserved_word_register, complete!(tag!("register")));
+named!(reserved_word_true, complete!(tag!("true")));
+named!(reserved_word_false, complete!(tag!("false")));
 
-named!(reserved_word<()>, alt!(
+named!(reserved_word, alt!(
     reserved_word_if |
     reserved_word_for |
     reserved_word_while |
