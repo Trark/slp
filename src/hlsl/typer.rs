@@ -56,8 +56,6 @@ pub enum TyperError {
 }
 
 pub type ReturnType = ir::Type;
-pub type ParamType = ir::Type;
-pub type ParamArray = Vec<ParamType>;
 pub type ClassType = ir::Type;
 
 #[derive(PartialEq, Debug, Clone)]
@@ -67,7 +65,7 @@ pub enum FunctionName {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct FunctionOverload(pub FunctionName, pub ReturnType, pub ParamArray);
+pub struct FunctionOverload(pub FunctionName, pub ReturnType, pub Vec<ir::ParamType>);
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct ResolvedFunction(pub FunctionOverload);
@@ -836,12 +834,39 @@ fn parse_type(ty: &ast::Type, struct_finder: &StructIdFinder) -> Result<ir::Type
     Ok(ir::Type(try!(parse_typelayout(tyl, struct_finder)), parse_modifier(modifier)))
 }
 
+fn parse_inputmodifier(it: &ast::InputModifier) -> Result<ir::InputModifier, TyperError> {
+    Ok(match *it {
+        ast::InputModifier::In => ir::InputModifier::In,
+        ast::InputModifier::Out => ir::InputModifier::Out ,
+        ast::InputModifier::InOut => ir::InputModifier::InOut,
+    })
+}
+
+fn parse_interpolationmodifier(im: &ast::InterpolationModifier) -> Result<ir::InterpolationModifier, TyperError> {
+    Ok(match *im {
+        ast::InterpolationModifier::NoInterpolation => ir::InterpolationModifier::NoInterpolation,
+        ast::InterpolationModifier::Linear => ir::InterpolationModifier::Linear,
+        ast::InterpolationModifier::Centroid => ir::InterpolationModifier::Centroid,
+        ast::InterpolationModifier::NoPerspective => ir::InterpolationModifier::NoPerspective,
+        ast::InterpolationModifier::Sample => ir::InterpolationModifier::Sample,
+    })
+}
+
+fn parse_paramtype(param_type: &ast::ParamType, struct_finder: &StructIdFinder) -> Result<ir::ParamType, TyperError> {
+    let ty = try!(parse_type(&param_type.0, struct_finder));
+    let interp = match param_type.2 {
+        Some(ref im) => Some(try!(parse_interpolationmodifier(im))),
+        None => None,
+    };
+    Ok(ir::ParamType(ty, try!(parse_inputmodifier(&param_type.1)), interp))
+}
+
 fn find_function_type(overloads: &Vec<FunctionOverload>, param_types: &[ExpressionType]) -> Result<(FunctionOverload, Vec<ImplicitConversion>), TyperError> {
 
     fn find_overload_casts(overload: &FunctionOverload, param_types: &[ExpressionType]) -> Result<Vec<ImplicitConversion>, ()> {
         let mut overload_casts = Vec::with_capacity(param_types.len());
         for (required_type, source_type) in overload.2.iter().zip(param_types.iter()) {
-            if let Ok(cast) = ImplicitConversion::find(source_type, &required_type.to_rvalue()) {
+            if let Ok(cast) = ImplicitConversion::find(source_type, &(&required_type.0).to_rvalue()) {
                 overload_casts.push(cast)
             } else {
                 return Err(())
@@ -1157,7 +1182,7 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
                                 vec![FunctionOverload(
                                     FunctionName::Intrinsic(IntrinsicFactory::Intrinsic2(ir::Intrinsic::BufferLoad)),
                                     ir::Type::from_data(data_type.clone()),
-                                    vec![ir::Type::int()]
+                                    vec![ir::Type::int().into()]
                                 )],
                                 composite_ir
                             )))
@@ -1174,7 +1199,7 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
                                 vec![FunctionOverload(
                                     FunctionName::Intrinsic(IntrinsicFactory::Intrinsic2(ir::Intrinsic::StructuredBufferLoad)),
                                     ir::Type::from_structured(structured_type.clone()),
-                                    vec![ir::Type::int()]
+                                    vec![ir::Type::int().into()]
                                 )],
                                 composite_ir
                             )))
@@ -1452,11 +1477,11 @@ fn parse_rootdefinition_function(fd: &ast::FunctionDefinition, mut context: Glob
     let func_params = {
         let mut vec = vec![];
         for param in &fd.params {
-            let var_type = try!(parse_type(&param.typename, &context));
-            let var_id = try!(scoped_context.insert_variable(param.name.clone(), var_type.clone()));
+            let var_type = try!(parse_paramtype(&param.param_type, &context));
+            let var_id = try!(scoped_context.insert_variable(param.name.clone(), var_type.0.clone()));
             vec.push(ir::FunctionParam {
                 id: var_id,
-                typename: var_type,
+                param_type: var_type,
             });
         }
         vec
@@ -1475,7 +1500,7 @@ fn parse_rootdefinition_function(fd: &ast::FunctionDefinition, mut context: Glob
     let func_type = FunctionOverload(
         FunctionName::User(fd_ir.id),
         fd_ir.returntype.clone(),
-        fd_ir.params.iter().map(|p| { p.typename.clone() }).collect()
+        fd_ir.params.iter().map(|p| { p.param_type.clone() }).collect()
     );
     try!(context.insert_function(fd.name.clone(), func_type));
     Ok((ir::RootDefinition::Function(fd_ir), context))
@@ -1487,8 +1512,8 @@ fn parse_rootdefinition_kernel(fd: &ast::FunctionDefinition, context: GlobalCont
     let kernel_params = {
         let mut vec = vec![];
         for param in &fd.params {
-            let var_type = try!(parse_type(&param.typename, &context));
-            let var_id = try!(scoped_context.insert_variable(param.name.clone(), var_type.clone()));
+            let var_type = try!(parse_paramtype(&param.param_type, &context));
+            let var_id = try!(scoped_context.insert_variable(param.name.clone(), var_type.0.clone()));
             vec.push(ir::KernelParam(var_id,
                 match &param.semantic {
                     &Some(ast::Semantic::DispatchThreadId) => ir::KernelSemantic::DispatchThreadId,
@@ -1585,14 +1610,14 @@ fn test_typeparse() {
             ast::RootDefinition::Function(ast::FunctionDefinition {
                 name: "myFunc".to_string(),
                 returntype: ast::Type::void(),
-                params: vec![ast::FunctionParam { name: "x".to_string(), typename: ast::Type::uint(), semantic: None }],
+                params: vec![ast::FunctionParam { name: "x".to_string(), param_type: ast::Type::uint().into(), semantic: None }],
                 body: vec![],
                 attributes: vec![],
             }),
             ast::RootDefinition::Function(ast::FunctionDefinition {
                 name: "myFunc".to_string(),
                 returntype: ast::Type::void(),
-                params: vec![ast::FunctionParam { name: "x".to_string(), typename: ast::Type::float(), semantic: None }],
+                params: vec![ast::FunctionParam { name: "x".to_string(), param_type: ast::Type::float().into(), semantic: None }],
                 body: vec![],
                 attributes: vec![],
             }),

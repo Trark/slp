@@ -166,6 +166,10 @@ pub enum InputModifier {
     InOut,
 }
 
+impl Default for InputModifier {
+    fn default() -> InputModifier { InputModifier::In }
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum LocalStorage {
     Local,
@@ -203,6 +207,24 @@ impl From<StructuredType> for Type {
         Type(layout.into(), modifier)
     }
 }
+
+/// The type of any global declaration
+#[derive(PartialEq, Debug, Clone)]
+pub struct GlobalType(pub Type, pub GlobalStorage, pub Option<InterpolationModifier>);
+
+/// The type of any parameter declaration
+#[derive(PartialEq, Debug, Clone)]
+pub struct ParamType(pub Type, pub InputModifier, pub Option<InterpolationModifier>);
+
+impl From<Type> for ParamType {
+    fn from(ty: Type) -> ParamType {
+        ParamType(ty, InputModifier::default(), None)
+    }
+}
+
+/// The type of any local variable declaration
+#[derive(PartialEq, Debug, Clone)]
+pub struct LocalType(pub Type, pub LocalStorage, pub Option<InterpolationModifier>);
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum BinOp {
@@ -362,7 +384,7 @@ pub enum FunctionAttribute {
 #[derive(PartialEq, Debug, Clone)]
 pub struct FunctionParam {
     pub name: String,
-    pub typename: Type,
+    pub param_type: ParamType,
     pub semantic: Option<Semantic>,
 }
 

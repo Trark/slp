@@ -184,6 +184,10 @@ pub enum InputModifier {
     // uniform not supported because constant buffers exist
 }
 
+impl Default for InputModifier {
+    fn default() -> InputModifier { InputModifier::In }
+}
+
 // Storage type for local variables
 #[derive(PartialEq, Debug, Clone)]
 pub enum LocalStorage {
@@ -269,15 +273,21 @@ impl<'a> ToExpressionType for &'a Type {
 
 /// The type of any global declaration
 #[derive(PartialEq, Debug, Clone)]
-pub struct GlobalType(pub Type, pub GlobalStorage, pub InterpolationModifier);
+pub struct GlobalType(pub Type, pub GlobalStorage, pub Option<InterpolationModifier>);
 
 /// The type of any parameter declaration
 #[derive(PartialEq, Debug, Clone)]
-pub struct ParamType(pub Type, pub InputModifier, pub InterpolationModifier);
+pub struct ParamType(pub Type, pub InputModifier, pub Option<InterpolationModifier>);
+
+impl From<Type> for ParamType {
+    fn from(ty: Type) -> ParamType {
+        ParamType(ty, InputModifier::default(), None)
+    }
+}
 
 /// The type of any local variable declaration
 #[derive(PartialEq, Debug, Clone)]
-pub struct LocalType(pub Type, pub LocalStorage, pub InterpolationModifier);
+pub struct LocalType(pub Type, pub LocalStorage, pub Option<InterpolationModifier>);
 
 pub use super::ast::BinOp as BinOp;
 pub use super::ast::UnaryOp as UnaryOp;
@@ -463,7 +473,7 @@ pub use super::ast::FunctionAttribute as FunctionAttribute;
 #[derive(PartialEq, Debug, Clone)]
 pub struct FunctionParam {
     pub id: VariableId,
-    pub typename: Type,
+    pub param_type: ParamType,
 }
 
 #[derive(PartialEq, Debug, Clone)]

@@ -515,9 +515,14 @@ fn transpile_statements(statements: &[src::Statement], context: &mut Context) ->
 }
 
 fn transpile_param(param: &src::FunctionParam, context: &Context) -> Result<dst::FunctionParam, TranspileError> {
+    let &src::ParamType(ref ty_ast, ref it, _) = &param.param_type;
+    let ty = match *it {
+        src::InputModifier::In => try!(transpile_type(ty_ast, context)),
+        _ => return Err(TranspileError::Unknown),
+    };
     Ok(dst::FunctionParam {
         name: try!(context.get_variable_id(&param.id)),
-        typename: try!(transpile_type(&param.typename, context)),
+        typename: ty,
     })
 }
 
@@ -719,14 +724,14 @@ fn test_transpile() {
             hlsl::ast::RootDefinition::Function(hlsl::ast::FunctionDefinition {
                 name: "myFunc".to_string(),
                 returntype: hlsl::ast::Type::void(),
-                params: vec![hlsl::ast::FunctionParam { name: "x".to_string(), typename: hlsl::ast::Type::uint(), semantic: None }],
+                params: vec![hlsl::ast::FunctionParam { name: "x".to_string(), param_type: hlsl::ast::Type::uint().into(), semantic: None }],
                 body: vec![],
                 attributes: vec![],
             }),
             hlsl::ast::RootDefinition::Function(hlsl::ast::FunctionDefinition {
                 name: "myFunc".to_string(),
                 returntype: hlsl::ast::Type::void(),
-                params: vec![hlsl::ast::FunctionParam { name: "x".to_string(), typename: hlsl::ast::Type::float(), semantic: None }],
+                params: vec![hlsl::ast::FunctionParam { name: "x".to_string(), param_type: hlsl::ast::Type::float().into(), semantic: None }],
                 body: vec![],
                 attributes: vec![],
             }),

@@ -407,6 +407,15 @@ fn parse_typename(input: &[Token]) -> IResult<&[Token], Type, ParseErrorReason> 
     }
 }
 
+fn parse_paramtype(input: &[Token]) -> IResult<&[Token], ParamType, ParseErrorReason> {
+    // Todo: input modifiers
+    match parse_typename(input) {
+        IResult::Done(rest, ty) => IResult::Done(rest, ParamType(ty, InputModifier::default(), None)),
+        IResult::Incomplete(i) => IResult::Incomplete(i),
+        IResult::Error(err) => IResult::Error(err),
+    }
+}
+
 fn expr_paren(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
     alt!(input,
         delimited!(token!(Token::LeftParen), expr, token!(Token::RightParen)) |
@@ -800,7 +809,7 @@ fn functionattribute(input: &[Token]) -> IResult<&[Token], FunctionAttribute, Pa
 
 fn functionparam(input: &[Token]) -> IResult<&[Token], FunctionParam, ParseErrorReason> {
     chain!(input,
-        typename: parse_typename ~
+        ty: parse_paramtype ~
         param: parse_variablename ~
         semantic: opt!(chain!(
             token!(Token::Colon) ~
@@ -816,7 +825,7 @@ fn functionparam(input: &[Token]) -> IResult<&[Token], FunctionParam, ParseError
             }),
             || { tok }
         )),
-        || { FunctionParam { name: param, typename: typename, semantic: semantic } }
+        || { FunctionParam { name: param, param_type: ty, semantic: semantic } }
     )
 }
 
@@ -1189,7 +1198,7 @@ fn test_rootdefinition() {
     let test_func_ast = FunctionDefinition { 
         name: "func".to_string(),
         returntype: Type::void(),
-        params: vec![FunctionParam { name: "x".to_string(), typename: Type::float(), semantic: None }],
+        params: vec![FunctionParam { name: "x".to_string(), param_type: Type::float().into(), semantic: None }],
         body: vec![],
         attributes: vec![],
     };
@@ -1198,7 +1207,7 @@ fn test_rootdefinition() {
     assert_eq!(rootdefinition_str("[numthreads(16, 16, 1)] void func(float x) { }"), RootDefinition::Function(FunctionDefinition {
         name: "func".to_string(),
         returntype: Type::void(),
-        params: vec![FunctionParam { name: "x".to_string(), typename: Type::float(), semantic: None }],
+        params: vec![FunctionParam { name: "x".to_string(), param_type: Type::float().into(), semantic: None }],
         body: vec![],
         attributes: vec![FunctionAttribute::NumThreads(16, 16, 1)],
     }));
