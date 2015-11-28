@@ -834,14 +834,6 @@ fn parse_type(ty: &ast::Type, struct_finder: &StructIdFinder) -> Result<ir::Type
     Ok(ir::Type(try!(parse_typelayout(tyl, struct_finder)), parse_modifier(modifier)))
 }
 
-fn parse_inputmodifier(it: &ast::InputModifier) -> Result<ir::InputModifier, TyperError> {
-    Ok(match *it {
-        ast::InputModifier::In => ir::InputModifier::In,
-        ast::InputModifier::Out => ir::InputModifier::Out ,
-        ast::InputModifier::InOut => ir::InputModifier::InOut,
-    })
-}
-
 fn parse_interpolationmodifier(im: &ast::InterpolationModifier) -> Result<ir::InterpolationModifier, TyperError> {
     Ok(match *im {
         ast::InterpolationModifier::NoInterpolation => ir::InterpolationModifier::NoInterpolation,
@@ -849,6 +841,30 @@ fn parse_interpolationmodifier(im: &ast::InterpolationModifier) -> Result<ir::In
         ast::InterpolationModifier::Centroid => ir::InterpolationModifier::Centroid,
         ast::InterpolationModifier::NoPerspective => ir::InterpolationModifier::NoPerspective,
         ast::InterpolationModifier::Sample => ir::InterpolationModifier::Sample,
+    })
+}
+
+fn parse_globalstorage(local_storage: &ast::GlobalStorage) -> Result<ir::GlobalStorage, TyperError> {
+    Ok(match *local_storage {
+        ast::GlobalStorage::Static => ir::GlobalStorage::Static,
+        ast::GlobalStorage::GroupShared => ir::GlobalStorage::GroupShared,
+    })
+}
+
+fn parse_globaltype(global_type: &ast::GlobalType, struct_finder: &StructIdFinder) -> Result<ir::GlobalType, TyperError> {
+    let ty = try!(parse_type(&global_type.0, struct_finder));
+    let interp = match global_type.2 {
+        Some(ref im) => Some(try!(parse_interpolationmodifier(im))),
+        None => None,
+    };
+    Ok(ir::GlobalType(ty, try!(parse_globalstorage(&global_type.1)), interp))
+}
+
+fn parse_inputmodifier(it: &ast::InputModifier) -> Result<ir::InputModifier, TyperError> {
+    Ok(match *it {
+        ast::InputModifier::In => ir::InputModifier::In,
+        ast::InputModifier::Out => ir::InputModifier::Out ,
+        ast::InputModifier::InOut => ir::InputModifier::InOut,
     })
 }
 
@@ -1465,10 +1481,10 @@ fn parse_rootdefinition_constantbuffer(cb: &ast::ConstantBuffer, mut context: Gl
 
 fn parse_rootdefinition_globalvariable(gv: &ast::GlobalVariable, mut context: GlobalContext, globals: &mut ir::GlobalTable) -> Result<(ir::RootDefinition, GlobalContext), TyperError> {
     let var_name = gv.name.clone();
-    let var_type = try!(parse_type(&gv.typename, &context));
-    let var_id = try!(context.insert_variable(var_name.clone(), var_type.clone()));
-    let gv_ir = ir::GlobalVariable { id: var_id, typename: var_type };
-    let entry = ir::GlobalEntry { id: var_id, typename: gv_ir.typename.clone() };
+    let var_type = try!(parse_globaltype(&gv.global_type, &context));
+    let var_id = try!(context.insert_variable(var_name.clone(), var_type.0.clone()));
+    let gv_ir = ir::GlobalVariable { id: var_id, global_type: var_type };
+    let entry = ir::GlobalEntry { id: var_id, ty: gv_ir.global_type.clone() };
     match gv.slot {
         Some(ast::GlobalSlot::ReadSlot(slot)) => {
             match globals.r_resources.insert(slot, entry) {
@@ -1620,7 +1636,7 @@ fn test_typeparse() {
         root_definitions: vec![
             ast::RootDefinition::GlobalVariable(ast::GlobalVariable {
                 name: "g_myInBuffer".to_string(),
-                typename: ast::Type::from_object(ast::ObjectType::Buffer(ast::DataType(ast::DataLayout::Scalar(ast::ScalarType::Int), ast::TypeModifier::default()))),
+                global_type: ast::Type::from_object(ast::ObjectType::Buffer(ast::DataType(ast::DataLayout::Scalar(ast::ScalarType::Int), ast::TypeModifier::default()))).into(),
                 slot: Some(ast::GlobalSlot::ReadSlot(0)),
             }),
             ast::RootDefinition::Function(ast::FunctionDefinition {

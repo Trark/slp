@@ -159,6 +159,10 @@ pub enum GlobalStorage {
     GroupShared,
 }
 
+impl Default for GlobalStorage {
+    fn default() -> GlobalStorage { GlobalStorage::Static }
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum InputModifier {
     In,
@@ -215,6 +219,12 @@ impl From<StructuredType> for Type {
 /// The type of any global declaration
 #[derive(PartialEq, Debug, Clone)]
 pub struct GlobalType(pub Type, pub GlobalStorage, pub Option<InterpolationModifier>);
+
+impl From<Type> for GlobalType {
+    fn from(ty: Type) -> GlobalType {
+        GlobalType(ty, GlobalStorage::default(), None)
+    }
+}
 
 /// The type of any parameter declaration
 #[derive(PartialEq, Debug, Clone)]
@@ -374,7 +384,7 @@ pub enum GlobalSlot {
 #[derive(PartialEq, Debug, Clone)]
 pub struct GlobalVariable {
     pub name: String,
-    pub typename: Type,
+    pub global_type: GlobalType,
     pub slot: Option<GlobalSlot>,
 }
 

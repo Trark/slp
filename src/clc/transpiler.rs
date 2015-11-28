@@ -9,7 +9,7 @@ use super::super::hlsl::ir as src;
 pub enum TranspileError {
     Unknown,
 
-    TypeIsNotAllowedAsGlobal(src::Type),
+    TypeIsNotAllowedAsGlobal(src::GlobalType),
     CouldNotGetEquivalentType(src::Type),
 
     GlobalFoundThatIsntInKernelParams(src::GlobalVariable),
@@ -671,12 +671,12 @@ fn transpile_global(table: &src::GlobalTable, context: &Context) -> Result<Kerne
         global_params.push(param);
     }
     for (_, global_entry) in &table.r_resources {
-        let &src::Type(ref tyl, _) = &global_entry.typename;
+        let &src::Type(ref tyl, _) = &global_entry.ty.0;
         let cl_type = match tyl {
             &src::TypeLayout::Object(src::ObjectType::Buffer(ref data_type)) => {
                 dst::Type::Pointer(dst::AddressSpace::Constant, Box::new(try!(transpile_datatype(data_type, context))))
             }
-            _ => return Err(TranspileError::TypeIsNotAllowedAsGlobal(global_entry.typename.clone())),
+            _ => return Err(TranspileError::TypeIsNotAllowedAsGlobal(global_entry.ty.clone())),
         };
         let param = dst::KernelParam {
             name: try!(context.get_variable_id(&global_entry.id)),
@@ -685,12 +685,12 @@ fn transpile_global(table: &src::GlobalTable, context: &Context) -> Result<Kerne
         global_params.push(param);
     }
     for (_, global_entry) in &table.rw_resources {
-        let &src::Type(ref tyl, _) = &global_entry.typename;
+        let &src::Type(ref tyl, _) = &global_entry.ty.0;
         let cl_type = match tyl {
             &src::TypeLayout::Object(src::ObjectType::RWBuffer(ref data_type)) => {
                 dst::Type::Pointer(dst::AddressSpace::Global, Box::new(try!(transpile_datatype(data_type, context))))
             }
-            _ => return Err(TranspileError::TypeIsNotAllowedAsGlobal(global_entry.typename.clone())),
+            _ => return Err(TranspileError::TypeIsNotAllowedAsGlobal(global_entry.ty.clone())),
         };
         let param = dst::KernelParam {
             name: try!(context.get_variable_id(&global_entry.id)),
@@ -732,9 +732,9 @@ fn test_transpile() {
         root_definitions: vec![
             hlsl::ast::RootDefinition::GlobalVariable(hlsl::ast::GlobalVariable {
                 name: "g_myInBuffer".to_string(),
-                typename: hlsl::ast::Type::from_object(hlsl::ast::ObjectType::Buffer(
+                global_type: hlsl::ast::Type::from_object(hlsl::ast::ObjectType::Buffer(
                     hlsl::ast::DataType(hlsl::ast::DataLayout::Scalar(hlsl::ast::ScalarType::Int), hlsl::ast::TypeModifier::default())
-                )),
+                )).into(),
                 slot: Some(hlsl::ast::GlobalSlot::ReadSlot(0)),
             }),
             hlsl::ast::RootDefinition::Function(hlsl::ast::FunctionDefinition {

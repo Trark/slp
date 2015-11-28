@@ -171,6 +171,10 @@ pub enum GlobalStorage {
     // uniform not supported because constant buffers exist
 }
 
+impl Default for GlobalStorage {
+    fn default() -> GlobalStorage { GlobalStorage::Static }
+}
+
 /// Binding type for parameters
 #[derive(PartialEq, Debug, Clone)]
 pub enum InputModifier {
@@ -278,6 +282,12 @@ impl<'a> ToExpressionType for &'a Type {
 /// The type of any global declaration
 #[derive(PartialEq, Debug, Clone)]
 pub struct GlobalType(pub Type, pub GlobalStorage, pub Option<InterpolationModifier>);
+
+impl From<Type> for GlobalType {
+    fn from(ty: Type) -> GlobalType {
+        GlobalType(ty, GlobalStorage::default(), None)
+    }
+}
 
 /// The type of any parameter declaration
 #[derive(PartialEq, Debug, Clone)]
@@ -475,7 +485,7 @@ pub struct ConstantBuffer {
 #[derive(PartialEq, Debug, Clone)]
 pub struct GlobalVariable {
     pub id: VariableId,
-    pub typename: Type,
+    pub global_type: GlobalType,
 }
 
 pub use super::ast::FunctionAttribute as FunctionAttribute;
@@ -531,7 +541,7 @@ pub enum RootDefinition {
 #[derive(PartialEq, Debug, Clone)]
 pub struct GlobalEntry {
     pub id: VariableId,
-    pub typename: Type,
+    pub ty: GlobalType,
 }
 
 #[derive(PartialEq, Debug, Clone)]

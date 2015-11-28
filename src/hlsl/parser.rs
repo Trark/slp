@@ -407,6 +407,15 @@ fn parse_typename(input: &[Token]) -> IResult<&[Token], Type, ParseErrorReason> 
     }
 }
 
+fn parse_globaltype(input: &[Token]) -> IResult<&[Token], GlobalType, ParseErrorReason> {
+    // Todo: input modifiers
+    match parse_typename(input) {
+        IResult::Done(rest, ty) => IResult::Done(rest, GlobalType(ty, GlobalStorage::default(), None)),
+        IResult::Incomplete(i) => IResult::Incomplete(i),
+        IResult::Error(err) => IResult::Error(err),
+    }
+}
+
 fn parse_paramtype(input: &[Token]) -> IResult<&[Token], ParamType, ParseErrorReason> {
     // Todo: input modifiers
     match parse_typename(input) {
@@ -787,11 +796,11 @@ fn globalvariable_register(input: &[Token]) -> IResult<&[Token], GlobalSlot, Par
 
 fn globalvariable(input: &[Token]) -> IResult<&[Token], GlobalVariable, ParseErrorReason> {
     chain!(input,
-        typename: parse_typename ~
+        typename: parse_globaltype ~
         name: parse_variablename ~
         slot: opt!(globalvariable_register) ~
         token!(Token::Semicolon),
-        || { GlobalVariable { name: name, typename: typename, slot: slot } }
+        || { GlobalVariable { name: name, global_type: typename, slot: slot } }
     )
 }
 
@@ -1259,7 +1268,7 @@ fn test_rootdefinition() {
     let test_buffersrv_str = "Buffer g_myBuffer : register(t1);";
     let test_buffersrv_ast = GlobalVariable {
         name: "g_myBuffer".to_string(),
-        typename: Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::Float, 4), TypeModifier::default()))),
+        global_type: Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::Float, 4), TypeModifier::default()))).into(),
         slot: Some(GlobalSlot::ReadSlot(1)),
     };
     assert_eq!(globalvariable_str(test_buffersrv_str), test_buffersrv_ast.clone());
@@ -1268,7 +1277,7 @@ fn test_rootdefinition() {
     let test_buffersrv2_str = "Buffer<uint4> g_myBuffer : register(t1);";
     let test_buffersrv2_ast = GlobalVariable {
         name: "g_myBuffer".to_string(),
-        typename: Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::UInt, 4), TypeModifier::default()))),
+        global_type: Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::UInt, 4), TypeModifier::default()))).into(),
         slot: Some(GlobalSlot::ReadSlot(1)),
     };
     assert_eq!(globalvariable_str(test_buffersrv2_str), test_buffersrv2_ast.clone());
@@ -1277,7 +1286,7 @@ fn test_rootdefinition() {
     let test_buffersrv3_str = "Buffer<vector<int, 4>> g_myBuffer : register(t1);";
     let test_buffersrv3_ast = GlobalVariable {
         name: "g_myBuffer".to_string(),
-        typename: Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::Int, 4), TypeModifier::default()))),
+        global_type: Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::Int, 4), TypeModifier::default()))).into(),
         slot: Some(GlobalSlot::ReadSlot(1)),
     };
     assert_eq!(globalvariable_str(test_buffersrv3_str), test_buffersrv3_ast.clone());
@@ -1286,7 +1295,7 @@ fn test_rootdefinition() {
     let test_buffersrv4_str = "StructuredBuffer<CustomType> g_myBuffer : register(t1);";
     let test_buffersrv4_ast = GlobalVariable {
         name: "g_myBuffer".to_string(),
-        typename: Type::from_object(ObjectType::StructuredBuffer(StructuredType(StructuredLayout::Custom("CustomType".to_string()), TypeModifier::default()))),
+        global_type: Type::from_object(ObjectType::StructuredBuffer(StructuredType(StructuredLayout::Custom("CustomType".to_string()), TypeModifier::default()))).into(),
         slot: Some(GlobalSlot::ReadSlot(1)),
     };
     assert_eq!(globalvariable_str(test_buffersrv4_str), test_buffersrv4_ast.clone());
