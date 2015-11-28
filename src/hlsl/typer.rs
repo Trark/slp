@@ -861,6 +861,22 @@ fn parse_paramtype(param_type: &ast::ParamType, struct_finder: &StructIdFinder) 
     Ok(ir::ParamType(ty, try!(parse_inputmodifier(&param_type.1)), interp))
 }
 
+fn parse_localstorage(local_storage: &ast::LocalStorage) -> Result<ir::LocalStorage, TyperError> {
+    Ok(match *local_storage {
+        ast::LocalStorage::Local => ir::LocalStorage::Local,
+        ast::LocalStorage::Static => ir::LocalStorage::Static,
+    })
+}
+
+fn parse_localtype(local_type: &ast::LocalType, struct_finder: &StructIdFinder) -> Result<ir::LocalType, TyperError> {
+    let ty = try!(parse_type(&local_type.0, struct_finder));
+    let interp = match local_type.2 {
+        Some(ref im) => Some(try!(parse_interpolationmodifier(im))),
+        None => None,
+    };
+    Ok(ir::LocalType(ty, try!(parse_localstorage(&local_type.1)), interp))
+}
+
 fn find_function_type(overloads: &Vec<FunctionOverload>, param_types: &[ExpressionType]) -> Result<(FunctionOverload, Vec<ImplicitConversion>), TyperError> {
 
     fn find_overload_casts(overload: &FunctionOverload, param_types: &[ExpressionType]) -> Result<Vec<ImplicitConversion>, ()> {
@@ -1258,12 +1274,12 @@ fn parse_expr_value_only(expr: &ast::Expression, context: &ScopeContext) -> Resu
 }
 
 fn parse_vardef(ast: &ast::VarDef, context: ScopeContext) -> Result<(ir::VarDef, ScopeContext), TyperError> {
-    let var_type = try!(parse_type(&ast.typename, &context));
+    let var_type = try!(parse_localtype(&ast.local_type, &context));
     let assign_ir = match ast.assignment {
         Some(ref expr) => {
             match try!(parse_expr(expr, &context)) {
                 TypedExpression::Value(expr_ir, expt_ty) => {
-                    match ImplicitConversion::find(&expt_ty, &var_type.to_rvalue()) {
+                    match ImplicitConversion::find(&expt_ty, &var_type.0.to_rvalue()) {
                         Ok(rhs_cast) => Some(rhs_cast.apply(expr_ir)),
                         Err(()) => return Err(TyperError::WrongTypeInInitExpression),
                     }
@@ -1274,10 +1290,10 @@ fn parse_vardef(ast: &ast::VarDef, context: ScopeContext) -> Result<(ir::VarDef,
         None => None,
     };
     let var_name = ast.name.clone();
-    let var_type = try!(parse_type(&ast.typename, &context));
+    let var_type = try!(parse_localtype(&ast.local_type, &context));
     let mut context = context;
-    let var_id = try!(context.insert_variable(var_name.clone(), var_type.clone()));
-    let vd_ir = ir::VarDef { id: var_id, typename: var_type, assignment: assign_ir };
+    let var_id = try!(context.insert_variable(var_name.clone(), var_type.0.clone()));
+    let vd_ir = ir::VarDef { id: var_id, local_type: var_type, assignment: assign_ir };
     Ok((vd_ir, context))
 }
 
@@ -1627,8 +1643,8 @@ fn test_typeparse() {
                 params: vec![],
                 body: vec![
                     ast::Statement::Empty,
-                    ast::Statement::Var(ast::VarDef { name: "a".to_string(), typename: ast::Type::uint(), assignment: None }),
-                    ast::Statement::Var(ast::VarDef { name: "b".to_string(), typename: ast::Type::uint(), assignment: None }),
+                    ast::Statement::Var(ast::VarDef { name: "a".to_string(), local_type: ast::Type::uint().into(), assignment: None }),
+                    ast::Statement::Var(ast::VarDef { name: "b".to_string(), local_type: ast::Type::uint().into(), assignment: None }),
                     ast::Statement::Expression(
                         ast::Expression::BinaryOperation(ast::BinOp::Assignment,
                             Box::new(ast::Expression::Variable("a".to_string())),

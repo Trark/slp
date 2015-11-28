@@ -416,6 +416,15 @@ fn parse_paramtype(input: &[Token]) -> IResult<&[Token], ParamType, ParseErrorRe
     }
 }
 
+fn parse_localtype(input: &[Token]) -> IResult<&[Token], LocalType, ParseErrorReason> {
+    // Todo: input modifiers
+    match parse_typename(input) {
+        IResult::Done(rest, ty) => IResult::Done(rest, LocalType(ty, LocalStorage::default(), None)),
+        IResult::Incomplete(i) => IResult::Incomplete(i),
+        IResult::Error(err) => IResult::Error(err),
+    }
+}
+
 fn expr_paren(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
     alt!(input,
         delimited!(token!(Token::LeftParen), expr, token!(Token::RightParen)) |
@@ -663,7 +672,7 @@ fn expr(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
 
 fn vardef(input: &[Token]) -> IResult<&[Token], VarDef, ParseErrorReason> {
     chain!(input,
-        typename: parse_typename ~
+        typename: parse_localtype ~
         varname: parse_variablename ~
         assign: opt!(
             chain!(
@@ -1115,18 +1124,18 @@ fn test_statement() {
         Condition::Expr(exp_var("x"))
     );
     assert_eq!(vardef_str("uint x"),
-        VarDef::new("x".to_string(), Type::uint(), None)
+        VarDef::new("x".to_string(), Type::uint().into(), None)
     );
     assert_eq!(condition_str("uint x"),
-        Condition::Assignment(VarDef::new("x".to_string(), Type::uint(), None))
+        Condition::Assignment(VarDef::new("x".to_string(), Type::uint().into(), None))
     );
     assert_eq!(condition_str("uint x = y"),
-        Condition::Assignment(VarDef::new("x".to_string(), Type::uint(), Some(exp_var("y"))))
+        Condition::Assignment(VarDef::new("x".to_string(), Type::uint().into(), Some(exp_var("y"))))
     );
 
     // Variable declarations
     assert_eq!(statement_str("uint x = y;"),
-        Statement::Var(VarDef::new("x".to_string(), Type::uint(), Some(exp_var("y"))))
+        Statement::Var(VarDef::new("x".to_string(), Type::uint().into(), Some(exp_var("y"))))
     );
 
     // Blocks
@@ -1166,7 +1175,7 @@ fn test_statement() {
     );
     assert_eq!(statement_str("for (uint i = 0; i; i++) { func(); }"),
         Statement::For(
-            Condition::Assignment(VarDef::new("i".to_string(), Type::uint(), Some(Expression::Literal(Literal::UntypedInt(0))))),
+            Condition::Assignment(VarDef::new("i".to_string(), Type::uint().into(), Some(Expression::Literal(Literal::UntypedInt(0))))),
             exp_var("i"),
             Expression::UnaryOperation(UnaryOp::PostfixIncrement, bexp_var("i")),
             Box::new(Statement::Block(vec![Statement::Expression(Expression::Call(bexp_var("func"), vec![]))]))

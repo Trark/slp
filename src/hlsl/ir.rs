@@ -199,6 +199,10 @@ pub enum LocalStorage {
     Static,
 }
 
+impl Default for LocalStorage {
+    fn default() -> LocalStorage { LocalStorage::Local }
+}
+
 /// The full type when paired with modifiers
 #[derive(PartialEq, Debug, Clone)]
 pub struct Type(pub TypeLayout, pub TypeModifier);
@@ -288,6 +292,12 @@ impl From<Type> for ParamType {
 /// The type of any local variable declaration
 #[derive(PartialEq, Debug, Clone)]
 pub struct LocalType(pub Type, pub LocalStorage, pub Option<InterpolationModifier>);
+
+impl From<Type> for LocalType {
+    fn from(ty: Type) -> LocalType {
+        LocalType(ty, LocalStorage::default(), None)
+    }
+}
 
 pub use super::ast::BinOp as BinOp;
 pub use super::ast::UnaryOp as UnaryOp;
@@ -410,7 +420,7 @@ pub enum Expression {
 #[derive(PartialEq, Debug, Clone)]
 pub struct VarDef {
     pub id: VariableId,
-    pub typename: Type,
+    pub local_type: LocalType,
     pub assignment: Option<Expression>,
 }
 

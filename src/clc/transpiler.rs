@@ -270,6 +270,18 @@ fn transpile_type(hlsltype: &src::Type, context: &Context) -> Result<dst::Type, 
     }
 }
 
+fn transpile_localtype(local_type: &src::LocalType, context: &Context) -> Result<dst::Type, TranspileError> {
+    let &src::LocalType(ref ty, ref ls, ref modifiers) = local_type;
+    match *modifiers {
+        Some(_) => return Err(TranspileError::Unknown),
+        None => { },
+    };
+    match *ls {
+        src::LocalStorage::Local => transpile_type(ty, context),
+        src::LocalStorage::Static => Err(TranspileError::Unknown),
+    }
+}
+
 fn transpile_unaryop(unaryop: &src::UnaryOp) -> Result<dst::UnaryOp, TranspileError> {
     match *unaryop {
         src::UnaryOp::PrefixIncrement => Ok(dst::UnaryOp::PrefixIncrement),
@@ -450,7 +462,7 @@ fn transpile_expression(expression: &src::Expression, context: &Context) -> Resu
 fn transpile_vardef(vardef: &src::VarDef, context: &Context) -> Result<dst::VarDef, TranspileError> {
     Ok(dst::VarDef {
         name: try!(context.get_variable_id(&vardef.id)),
-        typename: try!(transpile_type(&vardef.typename, context)),
+        typename: try!(transpile_localtype(&vardef.local_type, context)),
         assignment: match &vardef.assignment { &None => None, &Some(ref expr) => Some(try!(transpile_expression(expr, context))) },
     })
 }
@@ -515,10 +527,14 @@ fn transpile_statements(statements: &[src::Statement], context: &mut Context) ->
 }
 
 fn transpile_param(param: &src::FunctionParam, context: &Context) -> Result<dst::FunctionParam, TranspileError> {
-    let &src::ParamType(ref ty_ast, ref it, _) = &param.param_type;
+    let &src::ParamType(ref ty_ast, ref it, ref interp) = &param.param_type;
     let ty = match *it {
         src::InputModifier::In => try!(transpile_type(ty_ast, context)),
         _ => return Err(TranspileError::Unknown),
+    };
+    match *interp {
+        Some(_) => return Err(TranspileError::Unknown),
+        None => { },
     };
     Ok(dst::FunctionParam {
         name: try!(context.get_variable_id(&param.id)),
@@ -741,8 +757,8 @@ fn test_transpile() {
                 params: vec![],
                 body: vec![
                     hlsl::ast::Statement::Empty,
-                    hlsl::ast::Statement::Var(hlsl::ast::VarDef { name: "a".to_string(), typename: hlsl::ast::Type::uint(), assignment: None }),
-                    hlsl::ast::Statement::Var(hlsl::ast::VarDef { name: "b".to_string(), typename: hlsl::ast::Type::uint(), assignment: None }),
+                    hlsl::ast::Statement::Var(hlsl::ast::VarDef { name: "a".to_string(), local_type: hlsl::ast::Type::uint().into(), assignment: None }),
+                    hlsl::ast::Statement::Var(hlsl::ast::VarDef { name: "b".to_string(), local_type: hlsl::ast::Type::uint().into(), assignment: None }),
                     hlsl::ast::Statement::Expression(
                         hlsl::ast::Expression::BinaryOperation(hlsl::ast::BinOp::Assignment,
                             Box::new(hlsl::ast::Expression::Variable("a".to_string())),
