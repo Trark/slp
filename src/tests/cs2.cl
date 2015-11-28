@@ -24,6 +24,11 @@ void myFunc_1(float x)
 	x = 4.0f;
 }
 
+void outTest(__private float* x)
+{
+	*x = 4.0f;
+}
+
 __attribute__((reqd_work_group_size(8, 8, 1)))
 kernel void MyKernel(__constant struct myConstants_t* myConstants, __constant uint* g_myInBuffer, __global uint* g_myOutBuffer)
 {
@@ -56,4 +61,5 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __constant ui
 		myFunc_0((uint)y);
 	}
 	float u = (float)y + 5.4f;
+	outTest(&u);
 }

@@ -27,6 +27,11 @@ void myFunc(float x)
     x = 4.f;
 }
 
+void outTest(out float x)
+{
+    x = 4.f;
+}
+
 [numthreads(8, 8, 1)]
 void CSMAIN(uint3 dtid : SV_DispatchThreadID)
 {
@@ -58,4 +63,5 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
         myFunc((uint)y);
     }
     float u = y + 5.4f;
+    outTest(u);
 }

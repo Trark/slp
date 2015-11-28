@@ -976,7 +976,7 @@ fn write_function(unresolved: UnresolvedFunction, param_types: &[ExpressionType]
             ))
         },
         FunctionName::User(id) => {
-            Ok(TypedExpression::Value(ir::Expression::Call(Box::new(ir::Expression::Function(id)), param_values), return_type))
+            Ok(TypedExpression::Value(ir::Expression::Call(id, param_values), return_type))
         },
     }
 }

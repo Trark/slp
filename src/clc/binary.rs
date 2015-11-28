@@ -302,6 +302,14 @@ fn print_expression_inner(expression: &Expression, last_precedence: u32, printer
             printer.print(member);
             if last_precedence <= prec { printer.print(")") }
         },
+        &Expression::AddressOf(ref inner) => {
+            let prec = 2;
+            if last_precedence <= prec { printer.print("(") }
+            printer.print("&");
+            printer.separator();
+            print_expression_inner(inner, prec, printer);
+            if last_precedence <= prec { printer.print(")") }
+        },
         &Expression::Call(ref func, ref params) => {
             print_expression_inner(func, 1, printer);
             printer.print("(");

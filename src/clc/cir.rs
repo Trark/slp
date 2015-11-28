@@ -141,6 +141,7 @@ pub enum Expression {
     Member(Box<Expression>, Identifier),
     Deref(Box<Expression>),
     MemberDeref(Box<Expression>, Identifier),
+    AddressOf(Box<Expression>),
     Call(Box<Expression>, Vec<Expression>),
     Cast(Type, Box<Expression>),
     Intrinsic(Intrinsic),

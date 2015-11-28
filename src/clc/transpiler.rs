@@ -48,13 +48,32 @@ impl fmt::Display for TranspileError {
 
 type KernelParams = Vec<dst::KernelParam>;
 
+/// Tells us if a parameter is converted as is or as a
+/// pointer to a value
+#[derive(PartialEq, Debug, Clone)]
+enum ParamType {
+    Normal,
+    Pointer,
+}
+
+/// A variable name paired with its type
+#[derive(PartialEq, Debug, Clone)]
+struct VariableDecl(String, ParamType);
+
+impl VariableDecl {
+    fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 struct Context {
     kernel_params: KernelParams,
     function_name_map: HashMap<src::FunctionId, String>,
+    function_decl_map: HashMap<src::FunctionId, Vec<ParamType>>,
     struct_name_map: HashMap<src::StructId, String>,
     cbuffer_type_name_map: HashMap<src::ConstantBufferId, String>,
     cbuffer_instance_name_map: HashMap<src::ConstantBufferId, String>,
-    variable_scopes: Vec<HashMap<src::VariableId, String>>,
+    variable_scopes: Vec<HashMap<src::VariableId, VariableDecl>>,
 }
 
 impl Context {
@@ -63,11 +82,21 @@ impl Context {
         let mut context = Context {
             kernel_params: vec![],
             function_name_map: HashMap::new(),
+            function_decl_map: HashMap::new(),
             struct_name_map: HashMap::new(),
             cbuffer_type_name_map: HashMap::new(),
             cbuffer_instance_name_map: HashMap::new(),
-            variable_scopes: vec![globals.variables.clone()],
+            variable_scopes: vec![],
         };
+
+        // Insert global variables
+        {
+            let mut vars = HashMap::new();
+            for (var_id, var_name) in &globals.variables {
+                vars.insert(var_id.clone(), VariableDecl(var_name.clone(), ParamType::Normal));
+            }
+            context.variable_scopes.push(vars);
+        }
 
         // Insert functions (try to generate [name]_[overload number] for overloads)
         {
@@ -120,8 +149,17 @@ impl Context {
         context
     }
 
-    fn get_function(&self, id: &src::FunctionId) -> Result<dst::Expression, TranspileError> {
-        Ok(dst::Expression::Variable(try!(self.get_function_name(id))))
+    fn insert_function_decl(&mut self, id: &src::FunctionId, pts: Vec<ParamType>) {
+        let ret = self.function_decl_map.insert(*id, pts);
+        assert_eq!(ret, None);
+    }
+
+    fn get_function(&self, id: &src::FunctionId) -> Result<(dst::Expression, Vec<ParamType>), TranspileError> {
+        let name = try!(self.get_function_name(id));
+        match self.function_decl_map.get(id) {
+            Some(decl) => Ok((dst::Expression::Variable(name), decl.clone())),
+            None => panic!("Function not defined"), // Name exists but decl doesn't
+        }
     }
 
     fn get_function_name(&self, id: &src::FunctionId) -> Result<String, TranspileError> {
@@ -139,7 +177,10 @@ impl Context {
         };
         let scope = self.variable_scopes.len() - scopes_up - 1;
         match self.variable_scopes[scope].get(&var_ref.0) {
-            Some(v) => Ok(dst::Expression::Variable(v.clone())),
+            Some(&VariableDecl(ref s, ref pt)) => Ok(match *pt {
+                ParamType::Normal => dst::Expression::Variable(s.clone()),
+                ParamType::Pointer => dst::Expression::Deref(Box::new(dst::Expression::Variable(s.clone())))
+            }),
             None => Err(TranspileError::UnknownVariableId),
         }
     }
@@ -147,7 +188,7 @@ impl Context {
     /// Get the name of a variable declared in the current block
     fn get_variable_id(&self, id: &src::VariableId) -> Result<String, TranspileError> {
         match self.variable_scopes[self.variable_scopes.len() - 1].get(id) {
-            Some(v) => Ok(v.clone()),
+            Some(v) => Ok(v.as_str().to_string()),
             None => Err(TranspileError::UnknownVariableId),
         }
     }
@@ -199,7 +240,7 @@ impl Context {
         }
         for scope in &self.variable_scopes {
             for var in scope.values() {
-                if var == identifier {
+                if var.as_str() == identifier {
                     return false;
                 }
             }
@@ -222,11 +263,15 @@ impl Context {
     }
 
     fn push_scope(&mut self, decls: &src::ScopedDeclarations) {
+        self.push_scope_with_pointer_overrides(decls, &[])
+    }
+
+    fn push_scope_with_pointer_overrides(&mut self, decls: &src::ScopedDeclarations, pointers: &[src::VariableId]) {
         self.variable_scopes.push(HashMap::new());
         for (var_id, var_name) in &decls.variables {
             let identifier = self.make_identifier(&var_name);
             let map = self.variable_scopes.last_mut().unwrap();
-            map.insert(var_id.clone(), identifier);
+            map.insert(var_id.clone(), VariableDecl(identifier, if pointers.iter().any(|pp| pp == var_id) { ParamType::Pointer } else { ParamType::Normal }));
         }
     }
 
@@ -420,7 +465,6 @@ fn transpile_expression(expression: &src::Expression, context: &Context) -> Resu
             let cbuffer_instance_name = try!(context.get_cbuffer_instance_name(id));
             Ok(dst::Expression::MemberDeref(Box::new(dst::Expression::Variable(cbuffer_instance_name)), name.clone()))
         },
-        &src::Expression::Function(ref id) => context.get_function(id),
         &src::Expression::UnaryOperation(ref unaryop, ref expr) => {
             let cl_unaryop = try!(transpile_unaryop(unaryop));
             let cl_expr = Box::new(try!(transpile_expression(expr, context)));
@@ -441,11 +485,16 @@ fn transpile_expression(expression: &src::Expression, context: &Context) -> Resu
             let cl_expr = Box::new(try!(transpile_expression(expr, context)));
             Ok(dst::Expression::Member(cl_expr, member_name.clone()))
         },
-        &src::Expression::Call(ref func, ref params) => {
-            let func_expr = try!(transpile_expression(func, context));
+        &src::Expression::Call(ref func_id, ref params) => {
+            let (func_expr, pts) = try!(context.get_function(func_id));
+            assert_eq!(params.len(), pts.len());
             let mut params_exprs: Vec<dst::Expression> = vec![];
-            for param in params {
+            for (param, pt) in params.iter().zip(pts) {
                 let param_expr = try!(transpile_expression(param, context));
+                let param_expr = match pt {
+                    ParamType::Normal => param_expr,
+                    ParamType::Pointer => dst::Expression::AddressOf(Box::new(param_expr)),
+                };
                 params_exprs.push(param_expr);
             };
             Ok(dst::Expression::Call(Box::new(func_expr), params_exprs))
@@ -530,7 +579,12 @@ fn transpile_param(param: &src::FunctionParam, context: &Context) -> Result<dst:
     let &src::ParamType(ref ty_ast, ref it, ref interp) = &param.param_type;
     let ty = match *it {
         src::InputModifier::In => try!(transpile_type(ty_ast, context)),
-        _ => return Err(TranspileError::Unknown),
+        src::InputModifier::Out | src::InputModifier::InOut => {
+            // Only allow out params to work on Private address space
+            // as we don't support generating multiple function for each
+            // address space (and can't use __generic as it's 2.0)
+            dst::Type::Pointer(dst::AddressSpace::Private, Box::new(try!(transpile_type(ty_ast, context))))
+        },
     };
     match *interp {
         Some(_) => return Err(TranspileError::Unknown),
@@ -627,10 +681,27 @@ fn transpile_rootdefinition(rootdef: &src::RootDefinition, context: &mut Context
             }
         },
         &src::RootDefinition::Function(ref func) => {
-            context.push_scope(&func.scope);
+            // Find the parameters that need to be turned into pointers
+            // so the context can deref them
+            let (out_params, param_types) = func.params.iter().fold((vec![], vec![]),
+                |(mut out_params, mut param_types), param| {
+                    match param.param_type.1 {
+                        src::InputModifier::InOut | src::InputModifier::Out => {
+                            out_params.push(param.id);
+                            param_types.push(ParamType::Pointer);
+                        },
+                        src::InputModifier::In => {
+                            param_types.push(ParamType::Normal);
+                        },
+                    };
+                    (out_params, param_types)
+                }
+            );
+            context.push_scope_with_pointer_overrides(&func.scope, &out_params);
             let params = try!(transpile_params(&func.params, context));
             let body = try!(transpile_statements(&func.body, context));
             context.pop_scope();
+            context.insert_function_decl(&func.id, param_types);
             let cl_func = dst::FunctionDefinition {
                 name: try!(context.get_function_name(&func.id)),
                 returntype: try!(transpile_type(&func.returntype, context)),

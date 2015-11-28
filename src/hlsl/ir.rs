@@ -417,12 +417,11 @@ pub enum Expression {
     Literal(Literal),
     Variable(VariableRef),
     ConstantVariable(ConstantBufferId, String),
-    Function(FunctionId),
     UnaryOperation(UnaryOp, Box<Expression>),
     BinaryOperation(BinOp, Box<Expression>, Box<Expression>),
     ArraySubscript(Box<Expression>, Box<Expression>),
     Member(Box<Expression>, String),
-    Call(Box<Expression>, Vec<Expression>),
+    Call(FunctionId, Vec<Expression>),
     Cast(Type, Box<Expression>),
     Intrinsic(Box<Intrinsic>),
 }
