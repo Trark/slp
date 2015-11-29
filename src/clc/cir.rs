@@ -46,7 +46,7 @@ pub enum Type {
     UIntPtrT,
     Struct(Identifier),
     Pointer(AddressSpace, Box<Type>),
-    Array(Box<Type>, u32),
+    Array(Box<Type>, u64),
 
     Image1D(AccessModifier),
     Image1DBuffer(AccessModifier),

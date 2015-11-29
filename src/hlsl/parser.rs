@@ -447,6 +447,15 @@ fn parse_localtype(input: &[Token]) -> IResult<&[Token], LocalType, ParseErrorRe
     }
 }
 
+fn parse_arraydim(input: &[Token]) -> IResult<&[Token], Box<Expression>, ParseErrorReason> {
+    chain!(input,
+        token!(Token::LeftSquareBracket) ~
+        constant_expression: expr ~
+        token!(Token::RightSquareBracket),
+        || { Box::new(constant_expression) }
+    )
+}
+
 fn expr_paren(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
     alt!(input,
         delimited!(token!(Token::LeftParen), expr, token!(Token::RightParen)) |
@@ -705,6 +714,7 @@ fn vardef(input: &[Token]) -> IResult<&[Token], VarDef, ParseErrorReason> {
     chain!(input,
         typename: parse_localtype ~
         varname: parse_variablename ~
+        array_dim: opt!(parse_arraydim) ~
         assign: opt!(
             chain!(
                 token!(Token::Equals) ~
@@ -712,7 +722,18 @@ fn vardef(input: &[Token]) -> IResult<&[Token], VarDef, ParseErrorReason> {
                 || { assignment_expr }
             )
         ),
-        || { VarDef::new(varname, typename, assign) }
+        || {
+            VarDef::new(varname,
+                match array_dim {
+                    Some(ref dim) => {
+                        let LocalType(Type(layout, modifiers), ls, interp) = typename;
+                        LocalType(Type(TypeLayout::Array(Box::new(layout), dim.clone()), modifiers), ls, interp)
+                    },
+                    None => typename,
+                },
+                assign
+            )
+        }
     )
 }
 
@@ -1175,6 +1196,9 @@ fn test_statement() {
     // Variable declarations
     assert_eq!(statement_str("uint x = y;"),
         Statement::Var(VarDef::new("x".to_string(), Type::uint().into(), Some(exp_var("y"))))
+    );
+    assert_eq!(statement_str("float x[3];"),
+        Statement::Var(VarDef::new("x".to_string(), Type::from_layout(TypeLayout::array(TypeLayout::float(), 3)).into(), None))
     );
 
     // Blocks

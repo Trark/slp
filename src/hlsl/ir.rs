@@ -84,7 +84,7 @@ pub enum TypeLayout {
     Struct(StructId),
     SamplerState,
     Object(ObjectType),
-    Array(Box<Type>),
+    Array(Box<TypeLayout>, u64),
 }
 
 impl TypeLayout {

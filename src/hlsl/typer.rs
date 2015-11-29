@@ -57,6 +57,7 @@ pub enum TyperError {
     KernelHasParamWithoutSemantic(ast::FunctionParam),
 
     LvalueRequired,
+    ArrayDimensionsMustBeConstantExpression(ast::Expression),
 }
 
 pub type ReturnType = ir::Type;
@@ -137,6 +138,7 @@ impl error::Error for TyperError {
             TyperError::KernelHasParamWithoutSemantic(_) => "kernel parameter did not have a kernel semantic",
 
             TyperError::LvalueRequired => "lvalue is required in this context",
+            TyperError::ArrayDimensionsMustBeConstantExpression(_) => "array dimensions must be constant",
         }
     }
 }
@@ -436,7 +438,7 @@ impl TypeBlock {
             },
             ir::TypeLayout::SamplerState => ast::TypeLayout::SamplerState,
             ir::TypeLayout::Object(ref object_type) => ast::TypeLayout::Object(self.invert_objecttype(object_type)),
-            ir::TypeLayout::Array(ref array_type) => ast::TypeLayout::Array(Box::new(self.invert_type(array_type))),
+            ir::TypeLayout::Array(ref array_type, ref dim) => ast::TypeLayout::Array(Box::new(self.invert_typelayout(array_type)), Box::new(ast::Expression::Literal(ast::Literal::Int(*dim)))),
         }
     }
 
@@ -833,7 +835,16 @@ fn parse_typelayout(ty: &ast::TypeLayout, struct_finder: &StructIdFinder) -> Res
         ast::TypeLayout::Custom(ref name) => ir::TypeLayout::Struct(try!(struct_finder.find_struct_id(name))),
         ast::TypeLayout::SamplerState => ir::TypeLayout::SamplerState,
         ast::TypeLayout::Object(ref object_type) => ir::TypeLayout::Object(try!(parse_objecttype(object_type, struct_finder))),
-        ast::TypeLayout::Array(ref array_type) => ir::TypeLayout::Array(Box::new(try!(parse_type(array_type, struct_finder)))),
+        ast::TypeLayout::Array(ref array_type, ref const_expr) => {
+            // Todo: constant expressions
+            let dim = match **const_expr {
+                ast::Expression::Literal(ast::Literal::UntypedInt(i)) => i,
+                ast::Expression::Literal(ast::Literal::Int(i)) => i,
+                ast::Expression::Literal(ast::Literal::UInt(i)) => i,
+                _ => return Err(TyperError::ArrayDimensionsMustBeConstantExpression((**const_expr).clone())),
+            };
+            ir::TypeLayout::Array(Box::new(try!(parse_typelayout(array_type, struct_finder))), dim)
+        },
     })
 }
 
@@ -1202,6 +1213,9 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
             };
             let ExpressionType(ir::Type(array_tyl, _), _) = array_ty;
             let indexed_type = match array_tyl {
+                ir::TypeLayout::Array(ref element, _) => {
+                    ir::Type::from_layout(*element.clone()).to_lvalue()
+                },
                 ir::TypeLayout::Object(ir::ObjectType::Buffer(data_type)) => {
                     // Todo: const
                     ir::Type::from_data(data_type).to_lvalue()
@@ -1754,6 +1768,9 @@ fn test_typeparse() {
                         ),
                     ),
                     ast::Statement::Var(ast::VarDef { name: "testOut".to_string(), local_type: ast::Type::float().into(), assignment: None }),
+                    ast::Statement::Var(ast::VarDef::new("x".to_string(),
+                        ast::Type::from_layout(ast::TypeLayout::array(ast::TypeLayout::float(), 3)).into(), None
+                    )),
                     ast::Statement::Expression(
                         ast::Expression::Call(
                             Box::new(ast::Expression::Variable("outFunc".to_string())),

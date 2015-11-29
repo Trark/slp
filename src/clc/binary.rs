@@ -120,6 +120,7 @@ fn print_typename(typename: &Type, printer: &mut Printer) {
             printer.space();
             printer.print(identifier);
         },
+        &Type::Array(_, _) => panic!("Array types should not be printed directly"),
         _ => unimplemented!(),
     };
 }
@@ -355,9 +356,23 @@ fn print_expression(expression: &Expression, printer: &mut Printer) {
 }
 
 fn print_vardef(vardef: &VarDef, printer: &mut Printer) {
-    print_typename(&vardef.typename, printer);
+    let array_dim = match vardef.typename {
+        Type::Array(ref inner, ref dim) => {
+            print_typename(inner, printer);
+            Some(dim.clone())
+        },
+        ref ty => {
+            print_typename(ty, printer);
+            None
+        },
+    };
     printer.space();
-    printer.print(&vardef.name[..]);
+    printer.print(&vardef.name);
+    if let Some(dim) = array_dim {
+        printer.print("[");
+        print_literal(&Literal::Int(dim), printer);
+        printer.print("]");
+    };
     match &vardef.assignment {
         &Some(ref expr) => {
             printer.space();

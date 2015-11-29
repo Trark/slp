@@ -70,4 +70,10 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     float u = y + 5.4f;
     outTest(u);
     outTest(4.5, u, u > 4 ? 3.4 : u);
+    float vals[3];
+    vals[0] = 0.0f;
+    vals[1] = 1.0f;
+    vals[2] = 2.0f;
+    float val0 = vals[0] + 1.0f;
+    outTest(vals[2]);
 }

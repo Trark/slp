@@ -68,4 +68,10 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint
 	float u = (float)y + 5.4f;
 	outTest_0(&u);
 	outTest_1(4.5f, &u, u > (float)4 ? 3.4f : u);
+	float vals[3];
+	vals[(int)0] = 0.0f;
+	vals[(int)1] = 1.0f;
+	vals[(int)2] = 2.0f;
+	float val0 = vals[(int)0] + 1.0f;
+	outTest_0(&vals[(int)2]);
 }

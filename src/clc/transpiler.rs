@@ -11,7 +11,7 @@ pub enum TranspileError {
     Unknown,
 
     TypeIsNotAllowedAsGlobal(src::GlobalType),
-    CouldNotGetEquivalentType(src::Type),
+    CouldNotGetEquivalentType(src::TypeLayout),
 
     GlobalFoundThatIsntInKernelParams(src::GlobalVariable),
 
@@ -298,8 +298,7 @@ fn transpile_datatype(datatype: &src::DataType, context: &Context) -> Result<dst
     transpile_type(&src::Type::from(datatype.clone()), context)
 }
 
-fn transpile_type(hlsltype: &src::Type, context: &Context) -> Result<dst::Type, TranspileError> {
-    let &src::Type(ref ty, _) = hlsltype;
+fn transpile_typelayout(ty: &src::TypeLayout, context: &Context) -> Result<dst::Type, TranspileError> {
     match ty {
         &src::TypeLayout::Void => Ok(dst::Type::Void),
         &src::TypeLayout::Scalar(src::ScalarType::Bool) => Ok(dst::Type::Bool),
@@ -312,8 +311,17 @@ fn transpile_type(hlsltype: &src::Type, context: &Context) -> Result<dst::Type, 
             let struct_name = try!(context.get_struct_name(id));
             Ok(dst::Type::Struct(struct_name))
         },
-        _ => return Err(TranspileError::CouldNotGetEquivalentType(hlsltype.clone())),
+        &src::TypeLayout::Array(ref element, ref dim) => {
+            let inner_ty = try!(transpile_typelayout(element, context));
+            Ok(dst::Type::Array(Box::new(inner_ty), *dim))
+        },
+        _ => return Err(TranspileError::CouldNotGetEquivalentType(ty.clone())),
     }
+}
+
+fn transpile_type(hlsltype: &src::Type, context: &Context) -> Result<dst::Type, TranspileError> {
+    let &src::Type(ref ty, _) = hlsltype;
+    transpile_typelayout(ty, context)
 }
 
 fn transpile_localtype(local_type: &src::LocalType, context: &Context) -> Result<dst::Type, TranspileError> {

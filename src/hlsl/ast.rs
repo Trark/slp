@@ -87,7 +87,7 @@ pub enum TypeLayout {
     Custom(String),
     SamplerState,
     Object(ObjectType),
-    Array(Box<Type>),
+    Array(Box<TypeLayout>, Box<Expression>),
 }
 
 impl TypeLayout {
@@ -101,6 +101,7 @@ impl TypeLayout {
     pub fn double() -> TypeLayout { TypeLayout::from_scalar(ScalarType::Double) }
     pub fn float4x4() -> TypeLayout { TypeLayout::Matrix(ScalarType::Float, 4, 4) }
     pub fn custom(name: &str) -> TypeLayout { TypeLayout::Custom(name.to_string()) }
+    pub fn array(inner: TypeLayout, dim: u64) -> TypeLayout { TypeLayout::Array(Box::new(inner), Box::new(Expression::Literal(Literal::UntypedInt(dim)))) }
 }
 
 impl From<DataLayout> for TypeLayout {
