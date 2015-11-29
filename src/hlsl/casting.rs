@@ -243,3 +243,19 @@ impl ImplicitConversion {
         }
     }
 }
+
+#[test]
+fn test_implicitconversion() {
+
+    let basic_types = &[Type::bool(), Type::int(), Type::uint(), Type::float(), Type::floatn(4)];
+
+    for ty in basic_types {
+        assert_eq!(ImplicitConversion::find(&ty.to_rvalue(), &ty.to_rvalue()), Ok(ImplicitConversion(ty.to_rvalue(), None, None)));
+        assert_eq!(ImplicitConversion::find(&ty.to_lvalue(), &ty.to_rvalue()), Ok(ImplicitConversion(ty.to_lvalue(), Some(ValueTypeCast(ty.clone(), ValueType::Lvalue, ValueType::Rvalue)), None)));
+        assert_eq!(ImplicitConversion::find(&ty.to_rvalue(), &ty.to_lvalue()), Err(()));
+        assert_eq!(ImplicitConversion::find(&ty.to_lvalue(), &ty.to_lvalue()), Ok(ImplicitConversion(ty.to_lvalue(), None, None)));
+    }
+
+    assert_eq!(ImplicitConversion::find(&Type::from_layout(TypeLayout::SamplerState).to_lvalue(), &Type::uint().to_lvalue()), Err(()));
+    assert_eq!(ImplicitConversion::find(&Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::Float, 4), TypeModifier::default()))).to_lvalue(), &Type::uint().to_lvalue()), Err(()));
+}
