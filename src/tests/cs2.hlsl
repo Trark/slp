@@ -32,6 +32,11 @@ void outTest(out float x)
     x = 4.f;
 }
 
+void outTest(float x, out float y, float z)
+{
+    y = x + z;
+}
+
 [numthreads(8, 8, 1)]
 void CSMAIN(uint3 dtid : SV_DispatchThreadID)
 {
@@ -64,4 +69,5 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     }
     float u = y + 5.4f;
     outTest(u);
+    outTest(4.5, u, 3.4);
 }

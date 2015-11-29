@@ -24,9 +24,14 @@ void myFunc_1(float x)
 	x = 4.0f;
 }
 
-void outTest(__private float* x)
+void outTest_0(__private float* x)
 {
 	*x = 4.0f;
+}
+
+void outTest_1(float x, __private float* y, float z)
+{
+	*y = x + z;
 }
 
 __attribute__((reqd_work_group_size(8, 8, 1)))
@@ -61,5 +66,6 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __constant ui
 		myFunc_0((uint)y);
 	}
 	float u = (float)y + 5.4f;
-	outTest(&u);
+	outTest_0(&u);
+	outTest_1(4.5f, &u, 3.4f);
 }
