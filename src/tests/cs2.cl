@@ -35,7 +35,7 @@ void outTest_1(float x, __private float* y, float z)
 }
 
 __attribute__((reqd_work_group_size(8, 8, 1)))
-kernel void MyKernel(__constant struct myConstants_t* myConstants, __constant uint* g_myInBuffer, __global uint* g_myOutBuffer)
+kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint* g_myInBuffer, __global uint* g_myOutBuffer)
 {
 	uint3 dtid = (uint3)(get_global_id(0u), get_global_id(1u), get_global_id(2u));
 	uint myFunc_1_0;

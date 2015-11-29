@@ -751,7 +751,7 @@ fn transpile_global(table: &src::GlobalTable, context: &Context) -> Result<Kerne
         let &src::Type(ref tyl, _) = &global_entry.ty.0;
         let cl_type = match tyl {
             &src::TypeLayout::Object(src::ObjectType::Buffer(ref data_type)) => {
-                dst::Type::Pointer(dst::AddressSpace::Constant, Box::new(try!(transpile_datatype(data_type, context))))
+                dst::Type::Pointer(dst::AddressSpace::Global, Box::new(try!(transpile_datatype(data_type, context))))
             }
             _ => return Err(TranspileError::TypeIsNotAllowedAsGlobal(global_entry.ty.clone())),
         };
