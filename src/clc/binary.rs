@@ -3,7 +3,7 @@ use super::cir::*;
 
 /// A type to represent the final OpenCL source
 /// This is both the code (text) and slot binding metadata
-#[derive(Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Binary {
     source: String
 }

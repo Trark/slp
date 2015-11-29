@@ -8,6 +8,7 @@ pub mod clc;
 
 use std::error;
 use std::fmt;
+use std::collections::HashMap;
 use hlsl::lexer::LexError;
 use hlsl::parser::ParseError;
 use hlsl::typer::TyperError;
@@ -21,7 +22,34 @@ pub enum CompileError {
     TranspileError(TranspileError),
 }
 
-pub fn hlsl_to_cl(hlsl_source: &[u8], entry_point: &'static str) -> Result<clc::binary::Binary, CompileError> {
+pub type KernelParamSlot = u32;
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct BindMap {
+    read_map: HashMap<u32, KernelParamSlot>,
+    write_map: HashMap<u32, KernelParamSlot>,
+    cbuffer_map: HashMap<u32, KernelParamSlot>,
+    sampler_map: HashMap<u32, KernelParamSlot>,
+}
+
+impl BindMap {
+    fn new() -> BindMap {
+        BindMap {
+            read_map: HashMap::new(),
+            write_map: HashMap::new(),
+            cbuffer_map: HashMap::new(),
+            sampler_map: HashMap::new(),
+        }
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct Output {
+    pub code: clc::binary::Binary,
+    pub binds: BindMap,
+}
+
+pub fn hlsl_to_cl(hlsl_source: &[u8], entry_point: &'static str) -> Result<Output, CompileError> {
 
     let hlsl::tokens::TokenStream(tokens) = try!(hlsl::lexer::lex(hlsl_source));
 
@@ -33,7 +61,7 @@ pub fn hlsl_to_cl(hlsl_source: &[u8], entry_point: &'static str) -> Result<clc::
 
     let cl_binary = clc::binary::Binary::from_cir(&cir);
 
-    Ok(cl_binary)
+    Ok(Output { code: cl_binary, binds: cir.binds })
 }
 
 impl error::Error for CompileError {

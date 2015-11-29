@@ -2,6 +2,7 @@ use std::error;
 use std::fmt;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use BindMap;
 use super::cir as dst;
 use super::super::hlsl::ir as src;
 
@@ -732,10 +733,11 @@ fn transpile_rootdefinition(rootdef: &src::RootDefinition, context: &mut Context
     }
 }
 
-fn transpile_global(table: &src::GlobalTable, context: &Context) -> Result<KernelParams, TranspileError> {
+fn transpile_global(table: &src::GlobalTable, context: &Context) -> Result<(KernelParams, BindMap), TranspileError> {
     let mut global_params: KernelParams = vec![];
+    let mut binds = BindMap::new();
     // Todo: Pick slot numbers better
-    for (_, id) in &table.constants {
+    for (slot, id) in &table.constants {
         let cl_type = dst::Type::Pointer(
             dst::AddressSpace::Constant,
             Box::new(dst::Type::Struct(try!(context.get_cbuffer_struct_name(id))))
@@ -745,9 +747,11 @@ fn transpile_global(table: &src::GlobalTable, context: &Context) -> Result<Kerne
             name: cl_var,
             typename: cl_type,
         };
+        let entry = binds.cbuffer_map.insert(*slot, global_params.len() as u32);
+        assert!(entry.is_none());
         global_params.push(param);
     }
-    for (_, global_entry) in &table.r_resources {
+    for (slot, global_entry) in &table.r_resources {
         let &src::Type(ref tyl, _) = &global_entry.ty.0;
         let cl_type = match tyl {
             &src::TypeLayout::Object(src::ObjectType::Buffer(ref data_type)) => {
@@ -759,9 +763,11 @@ fn transpile_global(table: &src::GlobalTable, context: &Context) -> Result<Kerne
             name: try!(context.get_variable_id(&global_entry.id)),
             typename: cl_type,
         };
+        let entry = binds.read_map.insert(*slot, global_params.len() as u32);
+        assert!(entry.is_none());
         global_params.push(param);
     }
-    for (_, global_entry) in &table.rw_resources {
+    for (slot, global_entry) in &table.rw_resources {
         let &src::Type(ref tyl, _) = &global_entry.ty.0;
         let cl_type = match tyl {
             &src::TypeLayout::Object(src::ObjectType::RWBuffer(ref data_type)) => {
@@ -773,15 +779,17 @@ fn transpile_global(table: &src::GlobalTable, context: &Context) -> Result<Kerne
             name: try!(context.get_variable_id(&global_entry.id)),
             typename: cl_type,
         };
-        global_params.push(param);
+        let entry = binds.write_map.insert(*slot, global_params.len() as u32);
+        assert!(entry.is_none());        global_params.push(param);
     }
-    Ok(global_params)
+    Ok((global_params, binds))
 }
 
 pub fn transpile(module: &src::Module) -> Result<dst::Module, TranspileError> {
 
     let mut context = Context::new(&module.global_declarations);
-    context.kernel_params = try!(transpile_global(&module.global_table, &context));
+    let (kernel_params, binds) = try!(transpile_global(&module.global_table, &context));
+    context.kernel_params = kernel_params;
 
     let mut cl_defs = vec![];
     for rootdef in &module.root_definitions {
@@ -793,6 +801,7 @@ pub fn transpile(module: &src::Module) -> Result<dst::Module, TranspileError> {
 
     let cl_module = dst::Module {
         root_definitions: cl_defs,
+        binds: binds,
     };
 
     Ok(cl_module)

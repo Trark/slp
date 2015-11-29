@@ -1,4 +1,6 @@
 
+use BindMap;
+
 pub type Identifier = String;
 
 #[derive(PartialEq, Debug, Clone)]
@@ -225,4 +227,5 @@ pub enum RootDefinition {
 #[derive(PartialEq, Debug, Clone)]
 pub struct Module {
     pub root_definitions: Vec<RootDefinition>,
+    pub binds: BindMap,
 }
