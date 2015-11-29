@@ -275,8 +275,8 @@ impl ToExpressionType for Type {
 }
 
 impl<'a> ToExpressionType for &'a Type {
-    fn to_lvalue(self) -> ExpressionType { ExpressionType(self.clone(), ValueType::Lvalue) }
-    fn to_rvalue(self) -> ExpressionType { ExpressionType(self.clone(), ValueType::Rvalue) }
+    fn to_lvalue(self) -> ExpressionType { self.clone().to_lvalue() }
+    fn to_rvalue(self) -> ExpressionType { self.clone().to_rvalue() }
 }
 
 /// The type of any global declaration
