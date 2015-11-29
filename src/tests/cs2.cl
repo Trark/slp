@@ -15,6 +15,13 @@ struct myConstants_t
 	uint g_offset;
 };
 
+struct __globals
+{
+	__constant struct myConstants_t* myConstants;
+	__global uint* g_myInBuffer;
+	__global uint* g_myOutBuffer;
+};
+
 void myFunc_0(uint x)
 {
 }
@@ -38,11 +45,16 @@ __attribute__((reqd_work_group_size(8, 8, 1)))
 kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint* g_myInBuffer, __global uint* g_myOutBuffer)
 {
 	uint3 dtid = (uint3)(get_global_id(0u), get_global_id(1u), get_global_id(2u));
+	struct __globals __init;
+	__init.myConstants = myConstants;
+	__init.g_myInBuffer = g_myInBuffer;
+	__init.g_myOutBuffer = g_myOutBuffer;
+	__private struct __globals* globals = &__init;
 	uint myFunc_1_0;
 	uint alias_var = 2u;
-	int index = (int)(dtid.x + myConstants->g_offset);
-	myFunc_1_0 = g_myInBuffer[index];
-	g_myOutBuffer[index] = myFunc_1_0;
+	int index = (int)(dtid.x + globals->myConstants->g_offset);
+	myFunc_1_0 = globals->g_myInBuffer[index];
+	globals->g_myOutBuffer[index] = myFunc_1_0;
 	uint testStruct = (uint)0;
 	bool cond = true;
 	if (cond)

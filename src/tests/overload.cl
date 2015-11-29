@@ -1,4 +1,8 @@
 
+struct __globals
+{
+};
+
 void testIntOrUInt_0(int x)
 {
 }
@@ -27,6 +31,8 @@ __attribute__((reqd_work_group_size(8, 8, 1)))
 kernel void MyKernel()
 {
 	uint3 dtid = (uint3)(get_global_id(0u), get_global_id(1u), get_global_id(2u));
+	struct __globals __init;
+	__private struct __globals* globals = &__init;
 	testIntOrUInt_0((int)0);
 	testIntOrUInt_1((uint)0);
 	testIntOrFloat_0((int)0);

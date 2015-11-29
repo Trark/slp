@@ -287,7 +287,7 @@ fn print_expression_inner(expression: &Expression, last_precedence: u32, printer
         &Expression::ArraySubscript(ref array, ref sub) => {
             let prec = 1;
             if last_precedence <= prec { printer.print("(") }
-            print_expression_inner(array, prec, printer);
+            print_expression_inner(array, prec + 1, printer);
             printer.print("[");
             print_expression(sub, printer);
             printer.print("]");
@@ -296,7 +296,7 @@ fn print_expression_inner(expression: &Expression, last_precedence: u32, printer
         &Expression::Member(ref composite, ref member) => {
             let prec = 1;
             if last_precedence <= prec { printer.print("(") }
-            print_expression_inner(composite, prec, printer);
+            print_expression_inner(composite, prec + 1, printer);
             printer.print(".");
             printer.print(member);
             if last_precedence <= prec { printer.print(")") }
@@ -312,7 +312,7 @@ fn print_expression_inner(expression: &Expression, last_precedence: u32, printer
         &Expression::MemberDeref(ref composite, ref member) => {
             let prec = 1;
             if last_precedence <= prec { printer.print("(") }
-            print_expression_inner(composite, prec, printer);
+            print_expression_inner(composite, prec + 1, printer);
             printer.print("->");
             printer.print(member);
             if last_precedence <= prec { printer.print(")") }
