@@ -681,10 +681,19 @@ fn expr_p7(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
     )
 }
 
+fn expr_p13(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
+    alt!(input,
+        chain!(cond: expr_p7 ~ token!(Token::QuestionMark) ~ lhs: expr_p13 ~ token!(Token::Colon) ~ rhs: expr_p13, || {
+            Expression::TernaryConditional(Box::new(cond), Box::new(lhs), Box::new(rhs))
+        }) |
+        expr_p7
+    )
+}
+
 fn expr_p15(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
     alt!(input,
-        chain!(lhs: expr_p7 ~ token!(Token::Equals) ~ rhs: expr_p15, || { Expression::BinaryOperation(BinOp::Assignment, Box::new(lhs), Box::new(rhs)) }) |
-        expr_p7
+        chain!(lhs: expr_p13 ~ token!(Token::Equals) ~ rhs: expr_p15, || { Expression::BinaryOperation(BinOp::Assignment, Box::new(lhs), Box::new(rhs)) }) |
+        expr_p13
     )
 }
 
@@ -1121,6 +1130,14 @@ fn test_expr() {
             bexp_var("b"),
             bexp_var("c")
         ))
+    ));
+
+    assert_eq!(expr_str("a ? b : c"), Expression::TernaryConditional(bexp_var("a"), bexp_var("b"), bexp_var("c")));
+    assert_eq!(expr_str("a ? b ? c : d : e"), Expression::TernaryConditional(bexp_var("a"), Box::new(Expression::TernaryConditional(bexp_var("b"), bexp_var("c"), bexp_var("d"))), bexp_var("e")));
+    assert_eq!(expr_str("a ? b : c ? d : e"), Expression::TernaryConditional(bexp_var("a"), bexp_var("b"), Box::new(Expression::TernaryConditional(bexp_var("c"), bexp_var("d"), bexp_var("e")))));
+    assert_eq!(expr_str("a ? b ? c : d : e ? f : g"), Expression::TernaryConditional(bexp_var("a"),
+        Box::new(Expression::TernaryConditional(bexp_var("b"), bexp_var("c"), bexp_var("d"))),
+        Box::new(Expression::TernaryConditional(bexp_var("e"), bexp_var("f"), bexp_var("g")))
     ));
 }
 

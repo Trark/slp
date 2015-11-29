@@ -269,6 +269,20 @@ fn print_expression_inner(expression: &Expression, last_precedence: u32, printer
         &Expression::Variable(ref name) => printer.print(name),
         &Expression::UnaryOperation(ref unaryop, ref expr) => print_unaryoperation(unaryop, expr, last_precedence, printer),
         &Expression::BinaryOperation(ref binop, ref lhs, ref rhs) => print_binaryoperation(binop, lhs, rhs, last_precedence, printer),
+        &Expression::TernaryConditional(ref cond, ref lhs, ref rhs) => {
+            let prec = 13;
+            if last_precedence <= prec { printer.print("(") }
+            print_expression_inner(cond, prec, printer);
+            printer.space();
+            printer.print("?");
+            printer.space();
+            print_expression_inner(lhs, prec, printer);
+            printer.space();
+            printer.print(":");
+            printer.space();
+            print_expression_inner(rhs, prec, printer);
+            if last_precedence <= prec { printer.print(")") }
+        },
         &Expression::ArraySubscript(ref array, ref sub) => {
             let prec = 1;
             if last_precedence <= prec { printer.print("(") }

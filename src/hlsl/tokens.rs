@@ -47,6 +47,7 @@ pub enum Token {
     RightAngleBracket(FollowedBy),
     Semicolon,
     Comma,
+    QuestionMark,
 
     Plus,
     Minus,

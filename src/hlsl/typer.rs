@@ -40,6 +40,10 @@ pub enum TyperError {
 
     UnaryOperationWrongTypes(ir::UnaryOp, ErrorType),
     BinaryOperationWrongTypes(ir::BinOp, ErrorType, ErrorType),
+    TernaryConditionRequiresBoolean(ErrorType),
+    TernaryArmsMustHaveSameType(ErrorType, ErrorType),
+
+    ExpectedValueExpression(ErrorType),
 
     InvalidCast(ErrorType, ErrorType),
     FunctionTypeInInitExpression,
@@ -116,6 +120,10 @@ impl error::Error for TyperError {
 
             TyperError::UnaryOperationWrongTypes(_, _) => "operation does not support the given types",
             TyperError::BinaryOperationWrongTypes(_, _, _) => "operation does not support the given types",
+            TyperError::TernaryConditionRequiresBoolean(_) => "ternary condition must be boolean",
+            TyperError::TernaryArmsMustHaveSameType(_, _) => "ternary arms must have the same type",
+
+            TyperError::ExpectedValueExpression(_) => "expected a value expression",
 
             TyperError::InvalidCast(_, _) => "invalid cast",
             TyperError::FunctionTypeInInitExpression => "function not called",
@@ -1137,6 +1145,36 @@ fn parse_expr_binop(op: &ast::BinOp, lhs: &ast::Expression, rhs: &ast::Expressio
     }
 }
 
+fn unwrap_value_expr(texp: TypedExpression, context: &ScopeContext) -> Result<(ir::Expression, ExpressionType), TyperError> {
+    Ok(match texp {
+        TypedExpression::Value(expr_ir, expr_ty) => (expr_ir, expr_ty),
+        texp => return Err(TyperError::ExpectedValueExpression(context.typed_expression_to_error_type(&texp))),
+    })
+}
+
+fn parse_expr_ternary(cond: &ast::Expression, lhs: &ast::Expression, rhs: &ast::Expression, context: &ScopeContext) -> Result<TypedExpression, TyperError> {
+    let cond_texp = try!(parse_expr(cond, context));
+    let lhs_texp = try!(parse_expr(lhs, context));
+    let rhs_texp = try!(parse_expr(rhs, context));
+    let (cond, cond_ety) = try!(unwrap_value_expr(cond_texp, context));
+    let (lhs, lhs_ety) = try!(unwrap_value_expr(lhs_texp, context));
+    let (rhs, rhs_ety) = try!(unwrap_value_expr(rhs_texp, context));
+    let cond_cast = match ImplicitConversion::find(&cond_ety, &ir::Type::bool().to_rvalue()) {
+        Ok(cast) => cast,
+        Err(()) => return Err(TyperError::TernaryConditionRequiresBoolean(context.ir_type_to_error_type(&cond_ety.0)))
+    };
+    let cond = cond_cast.apply(cond);
+    let ExpressionType(lhs_ty, _) = lhs_ety;
+    let ExpressionType(rhs_ty, _) = rhs_ety;
+    let final_type = if lhs_ty == rhs_ty {
+        lhs_ty.to_rvalue()
+    } else {
+        assert!(false, "{:?} {:?}", lhs_ty, rhs_ty);
+        return Err(TyperError::TernaryArmsMustHaveSameType(context.ir_type_to_error_type(&lhs_ty), context.ir_type_to_error_type(&rhs_ty)))
+    };
+    Ok(TypedExpression::Value(ir::Expression::TernaryConditional(Box::new(cond), Box::new(lhs), Box::new(rhs)), final_type))
+}
+
 fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpression, TyperError> {
     match ast {
         &ast::Expression::Literal(ref lit) => parse_literal(lit),
@@ -1150,6 +1188,7 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
             }
         },
         &ast::Expression::BinaryOperation(ref op, ref lhs, ref rhs) => parse_expr_binop(op, lhs, rhs, context),
+        &ast::Expression::TernaryConditional(ref cond, ref lhs, ref rhs) => parse_expr_ternary(cond, lhs, rhs, context),
         &ast::Expression::ArraySubscript(ref array, ref subscript) => {
             let array_texp = try!(parse_expr(array, context));
             let subscript_texp = try!(parse_expr(subscript, context));

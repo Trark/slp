@@ -137,6 +137,7 @@ pub enum Expression {
     Variable(Identifier),
     UnaryOperation(UnaryOp, Box<Expression>),
     BinaryOperation(BinOp, Box<Expression>, Box<Expression>),
+    TernaryConditional(Box<Expression>, Box<Expression>, Box<Expression>),
     ArraySubscript(Box<Expression>, Box<Expression>),
     Member(Box<Expression>, Identifier),
     Deref(Box<Expression>),

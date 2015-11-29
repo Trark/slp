@@ -67,5 +67,5 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __constant ui
 	}
 	float u = (float)y + 5.4f;
 	outTest_0(&u);
-	outTest_1(4.5f, &u, 3.4f);
+	outTest_1(4.5f, &u, u > (float)4 ? 3.4f : u);
 }

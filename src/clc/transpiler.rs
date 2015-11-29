@@ -476,6 +476,12 @@ fn transpile_expression(expression: &src::Expression, context: &Context) -> Resu
             let cl_rhs = Box::new(try!(transpile_expression(rhs, context)));
             Ok(dst::Expression::BinaryOperation(cl_binop, cl_lhs, cl_rhs))
         }
+        &src::Expression::TernaryConditional(ref cond, ref lhs, ref rhs) => {
+            let cl_cond = Box::new(try!(transpile_expression(cond, context)));
+            let cl_lhs = Box::new(try!(transpile_expression(lhs, context)));
+            let cl_rhs = Box::new(try!(transpile_expression(rhs, context)));
+            Ok(dst::Expression::TernaryConditional(cl_cond, cl_lhs, cl_rhs))
+        }
         &src::Expression::ArraySubscript(ref expr, ref sub) => {
             let cl_expr = Box::new(try!(transpile_expression(expr, context)));
             let cl_sub = Box::new(try!(transpile_expression(sub, context)));

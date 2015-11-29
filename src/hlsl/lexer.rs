@@ -448,7 +448,8 @@ named!(token_no_whitespace_symbols<Token>, alt!(
     symbol_exclamation |
     tag!("~") => { |_| Token::Tilde } |
     tag!(".") => { |_| Token::Period } |
-    tag!(":") => { |_| { Token::Colon } }
+    tag!(":") => { |_| { Token::Colon } } |
+    tag!("?") => { |_| { Token::QuestionMark } }
 ));
 
 named!(token_no_whitespace_words<Token>, alt!(
@@ -569,6 +570,7 @@ fn test_token() {
     assert_eq!(token(&b"cbuffer"[..]), IResult::Done(&b""[..], Token::ConstantBuffer));
     assert_eq!(token(&b"register(t4)"[..]), IResult::Done(&b""[..], Token::Register(RegisterSlot::T(4))));
     assert_eq!(token(&b":"[..]), IResult::Done(&b""[..], Token::Colon));
+    assert_eq!(token(&b"?"[..]), IResult::Done(&b""[..], Token::QuestionMark));
 
     assert_eq!(token(&b"in"[..]), IResult::Done(&b""[..], Token::In));
     assert_eq!(token(&b"out"[..]), IResult::Done(&b""[..], Token::Out));

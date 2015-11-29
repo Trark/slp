@@ -294,6 +294,7 @@ pub enum Expression {
     Variable(String),
     UnaryOperation(UnaryOp, Box<Expression>),
     BinaryOperation(BinOp, Box<Expression>, Box<Expression>),
+    TernaryConditional(Box<Expression>, Box<Expression>, Box<Expression>),
     ArraySubscript(Box<Expression>, Box<Expression>),
     Member(Box<Expression>, String),
     Call(Box<Expression>, Vec<Expression>),
