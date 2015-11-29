@@ -344,14 +344,27 @@ impl Context {
 
     /// Get the expression to find the given constant
     fn get_constant(&self, id: &src::ConstantBufferId, name: String) -> Result<dst::Expression, TranspileError> {
-        let gin = self.global_names.global_name_map.get(&GlobalId::LiftInstance).unwrap();
         Ok(dst::Expression::MemberDeref(
             Box::new(dst::Expression::MemberDeref(
-                Box::new(dst::Expression::Variable(gin.clone())),
+                Box::new(try!(self.get_global_instance())),
                 try!(self.get_cbuffer_instance_name(id))
             )),
             name
         ))
+    }
+
+    fn get_global_instance(&self) -> Result<dst::Expression, TranspileError> {
+        let gin = self.global_names.global_name_map.get(&GlobalId::LiftInstance).unwrap();
+        Ok(dst::Expression::Variable(gin.clone()))
+    }
+
+    fn get_global_param(&self) -> Result<dst::FunctionParam, TranspileError> {
+        let gin = self.global_names.global_name_map.get(&GlobalId::LiftInstance).unwrap();
+        let git = self.global_names.global_name_map.get(&GlobalId::LiftType).unwrap();
+        Ok(dst::FunctionParam {
+            name: gin.clone(),
+            typename: dst::Type::Pointer(dst::AddressSpace::Private, Box::new(dst::Type::Struct(git.clone())))
+        })
     }
 
     fn is_free(&self, identifier: &str) -> bool {
@@ -656,7 +669,8 @@ fn transpile_expression(expression: &src::Expression, context: &Context) -> Resu
         &src::Expression::Call(ref func_id, ref params) => {
             let (func_expr, pts) = try!(context.get_function(func_id));
             assert_eq!(params.len(), pts.len());
-            let mut params_exprs: Vec<dst::Expression> = vec![];
+            let globals_instance = try!(context.get_global_instance());
+            let mut params_exprs: Vec<dst::Expression> = vec![globals_instance];
             for (param, pt) in params.iter().zip(pts) {
                 let param_expr = try!(transpile_expression(param, context));
                 let param_expr = match pt {
@@ -765,7 +779,7 @@ fn transpile_param(param: &src::FunctionParam, context: &Context) -> Result<dst:
 }
 
 fn transpile_params(params: &[src::FunctionParam], context: &Context) -> Result<Vec<dst::FunctionParam>, TranspileError> {
-    let mut cl_params = vec![];
+    let mut cl_params = vec![try!(context.get_global_param())];
     for param in params {
         cl_params.push(try!(transpile_param(param, context)));
     }

@@ -22,21 +22,21 @@ struct __globals
 	__global uint* g_myOutBuffer;
 };
 
-void myFunc_0(uint x)
+void myFunc_0(__private struct __globals* globals, uint x)
 {
 }
 
-void myFunc_1(float x)
+void myFunc_1(__private struct __globals* globals, float x)
 {
 	x = 4.0f;
 }
 
-void outTest_0(__private float* x)
+void outTest_0(__private struct __globals* globals, __private float* x)
 {
 	*x = 4.0f;
 }
 
-void outTest_1(float x, __private float* y, float z)
+void outTest_1(__private struct __globals* globals, float x, __private float* y, float z)
 {
 	*y = x + z;
 }
@@ -64,26 +64,26 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint
 		uint testStruct_1 = (uint)1;
 		struct testStruct_0 data;
 	}
-	myFunc_1(4.0f);
+	myFunc_1(globals, 4.0f);
 	for (uint x = 4u; x < 10u; ++x)
 	{
-		myFunc_0(x);
+		myFunc_0(globals, x);
 		bool p = false;
-		myFunc_0((uint)p);
+		myFunc_0(globals, (uint)p);
 	}
 	int y = (int)10;
 	while (y > (int)0)
 	{
 		y--;
-		myFunc_0((uint)y);
+		myFunc_0(globals, (uint)y);
 	}
 	float u = (float)y + 5.4f;
-	outTest_0(&u);
-	outTest_1(4.5f, &u, u > (float)4 ? 3.4f : u);
+	outTest_0(globals, &u);
+	outTest_1(globals, 4.5f, &u, u > (float)4 ? 3.4f : u);
 	float vals[3];
 	vals[(int)0] = 0.0f;
 	vals[(int)1] = 1.0f;
 	vals[(int)2] = 2.0f;
 	float val0 = vals[(int)0] + 1.0f;
-	outTest_0(&vals[(int)2]);
+	outTest_0(globals, &vals[(int)2]);
 }
