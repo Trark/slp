@@ -317,6 +317,10 @@ pub enum Intrinsic {
 
     AllMemoryBarrier,
     AllMemoryBarrierWithGroupSync,
+    DeviceMemoryBarrier,
+    DeviceMemoryBarrierWithGroupSync,
+    GroupMemoryBarrier,
+    GroupMemoryBarrierWithGroupSync,
 
     AsIntU(Expression),
     AsIntU1(Expression),

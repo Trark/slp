@@ -100,6 +100,10 @@ const INTRINSICS: &'static [IntrinsicDefinition] = & [
 
     (T_VOID_TY, "AllMemoryBarrier", &[], I0(Intrinsic::AllMemoryBarrier)),
     (T_VOID_TY, "AllMemoryBarrierWithGroupSync", &[], I0(Intrinsic::AllMemoryBarrierWithGroupSync)),
+    (T_VOID_TY, "DeviceMemoryBarrier", &[], I0(Intrinsic::DeviceMemoryBarrier)),
+    (T_VOID_TY, "DeviceMemoryBarrierWithGroupSync", &[], I0(Intrinsic::DeviceMemoryBarrierWithGroupSync)),
+    (T_VOID_TY, "GroupMemoryBarrier", &[], I0(Intrinsic::GroupMemoryBarrier)),
+    (T_VOID_TY, "GroupMemoryBarrierWithGroupSync", &[], I0(Intrinsic::GroupMemoryBarrierWithGroupSync)),
 
     (T_INT_TY, "asint", &[T_UINT], I1(Intrinsic::AsIntU)),
     (T_INT1_TY, "asint", &[T_UINT1], I1(Intrinsic::AsIntU1)),

@@ -4,6 +4,10 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
 {
     AllMemoryBarrier();
     AllMemoryBarrierWithGroupSync();
+    DeviceMemoryBarrier();
+    DeviceMemoryBarrierWithGroupSync();
+    GroupMemoryBarrier();
+    GroupMemoryBarrierWithGroupSync();
     int i = 0;
     int1 i1;
     int2 i2;

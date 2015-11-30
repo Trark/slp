@@ -572,6 +572,18 @@ fn transpile_intrinsic(intrinsic: &src::Intrinsic, context: &Context) -> Result<
                 )]
             ))
         },
+        src::Intrinsic::DeviceMemoryBarrier | src::Intrinsic::DeviceMemoryBarrierWithGroupSync => {
+            Ok(dst::Expression::Call(
+                Box::new(dst::Expression::Variable("barrier".to_string())),
+                vec![dst::Expression::Variable("CLK_GLOBAL_MEM_FENCE".to_string())]
+            ))
+        },
+        src::Intrinsic::GroupMemoryBarrier | src::Intrinsic::GroupMemoryBarrierWithGroupSync => {
+            Ok(dst::Expression::Call(
+                Box::new(dst::Expression::Variable("barrier".to_string())),
+                vec![dst::Expression::Variable("CLK_LOCAL_MEM_FENCE".to_string())]
+            ))
+        },
         src::Intrinsic::AsIntU(ref e) => write_func("as_int", &[e], context),
         src::Intrinsic::AsIntU1(ref e) => write_func("as_int", &[e], context),
         src::Intrinsic::AsIntU2(ref e) => write_func("as_int2", &[e], context),
