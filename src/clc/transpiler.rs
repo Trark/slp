@@ -22,6 +22,8 @@ pub enum TranspileError {
     UnknownVariableId,
 
     BoolVectorsNotSupported,
+
+    IntrinsicUnimplemented,
 }
 
 impl error::Error for TranspileError {
@@ -37,6 +39,7 @@ impl error::Error for TranspileError {
             TranspileError::InvalidVariableRef => "invalid variable ref",
             TranspileError::UnknownVariableId => "unknown variable id",
             TranspileError::BoolVectorsNotSupported => "bool vectors not supported",
+            TranspileError::IntrinsicUnimplemented => "intrinsic function is not implemented",
         }
     }
 }
@@ -629,6 +632,27 @@ fn transpile_intrinsic(intrinsic: &src::Intrinsic, context: &Context) -> Result<
         src::Intrinsic::ClampF2(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
         src::Intrinsic::ClampF3(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
         src::Intrinsic::ClampF4(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
+        src::Intrinsic::Cross(ref x, ref y) => write_func("cross", &[x, y], context),
+        src::Intrinsic::Distance1(ref x, ref y) |
+        src::Intrinsic::Distance2(ref x, ref y) |
+        src::Intrinsic::Distance3(ref x, ref y) |
+        src::Intrinsic::Distance4(ref x, ref y) => {
+            Ok(dst::Expression::Call(
+                Box::new(dst::Expression::Variable("length".to_string())),
+                vec![dst::Expression::BinaryOperation(dst::BinOp::Subtract,
+                    Box::new(try!(transpile_expression(x, context))),
+                    Box::new(try!(transpile_expression(y, context)))
+                )]
+            ))
+        },
+        src::Intrinsic::DotI1(_, _) => Err(TranspileError::IntrinsicUnimplemented),
+        src::Intrinsic::DotI2(_, _) => Err(TranspileError::IntrinsicUnimplemented),
+        src::Intrinsic::DotI3(_, _) => Err(TranspileError::IntrinsicUnimplemented),
+        src::Intrinsic::DotI4(_, _) => Err(TranspileError::IntrinsicUnimplemented),
+        src::Intrinsic::DotF1(ref x, ref y) => write_func("dot", &[x, y], context),
+        src::Intrinsic::DotF2(ref x, ref y) => write_func("dot", &[x, y], context),
+        src::Intrinsic::DotF3(ref x, ref y) => write_func("dot", &[x, y], context),
+        src::Intrinsic::DotF4(ref x, ref y) => write_func("dot", &[x, y], context),
         src::Intrinsic::Float4(ref x, ref y, ref z, ref w) => {
             Ok(dst::Expression::Constructor(dst::Constructor::Float4(
                 Box::new(try!(transpile_expression(x, context))),

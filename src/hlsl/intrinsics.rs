@@ -156,6 +156,22 @@ const INTRINSICS: &'static [IntrinsicDefinition] = & [
     (T_FLOAT3_TY, "clamp", &[T_FLOAT3, T_FLOAT3, T_FLOAT3], I3(Intrinsic::ClampF3)),
     (T_FLOAT4_TY, "clamp", &[T_FLOAT4, T_FLOAT4, T_FLOAT4], I3(Intrinsic::ClampF4)),
 
+    (T_FLOAT3_TY, "cross", &[T_FLOAT3, T_FLOAT3], I2(Intrinsic::Cross)),
+
+    (T_FLOAT_TY, "distance", &[T_FLOAT1, T_FLOAT1], I2(Intrinsic::Distance1)),
+    (T_FLOAT_TY, "distance", &[T_FLOAT2, T_FLOAT2], I2(Intrinsic::Distance2)),
+    (T_FLOAT_TY, "distance", &[T_FLOAT3, T_FLOAT3], I2(Intrinsic::Distance3)),
+    (T_FLOAT_TY, "distance", &[T_FLOAT4, T_FLOAT4], I2(Intrinsic::Distance4)),
+
+    (T_INT_TY, "dot", &[T_INT1, T_INT1], I2(Intrinsic::DotI1)),
+    (T_INT_TY, "dot", &[T_INT2, T_INT2], I2(Intrinsic::DotI2)),
+    (T_INT_TY, "dot", &[T_INT3, T_INT3], I2(Intrinsic::DotI3)),
+    (T_INT_TY, "dot", &[T_INT4, T_INT4], I2(Intrinsic::DotI4)),
+    (T_FLOAT_TY, "dot", &[T_FLOAT1, T_FLOAT1], I2(Intrinsic::DotF1)),
+    (T_FLOAT_TY, "dot", &[T_FLOAT2, T_FLOAT2], I2(Intrinsic::DotF2)),
+    (T_FLOAT_TY, "dot", &[T_FLOAT3, T_FLOAT3], I2(Intrinsic::DotF3)),
+    (T_FLOAT_TY, "dot", &[T_FLOAT4, T_FLOAT4], I2(Intrinsic::DotF4)),
+
     (T_INT_TY, "min", &[T_INT, T_INT], I2(Intrinsic::Min)),
     (T_INT1_TY, "min", &[T_INT1, T_INT1], I2(Intrinsic::Min)),
     (T_INT2_TY, "min", &[T_INT2, T_INT2], I2(Intrinsic::Min)),

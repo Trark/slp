@@ -98,4 +98,13 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     float2 clamp_7 = clamp(fx2, fy2, fz2);
     float3 clamp_8 = clamp(fx3, fy3, fz3);
     float4 clamp_9 = clamp(fx4, fy4, fz4);
+    float3 cross_0 = cross(fx3, fx3);
+    float distance_1 = distance(fx1, fy1);
+    float distance_2 = distance(fx2, fy2);
+    float distance_3 = distance(fx3, fy3);
+    float distance_4 = distance(fx4, fy4);
+    float dot_f1 = dot(fx1, fy1);
+    float dot_f2 = dot(fx2, fy2);
+    float dot_f3 = dot(fx3, fy3);
+    float dot_f4 = dot(fx4, fy4);
 }

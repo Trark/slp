@@ -373,6 +373,22 @@ pub enum Intrinsic {
     ClampF3(Expression, Expression, Expression),
     ClampF4(Expression, Expression, Expression),
 
+    Cross(Expression, Expression),
+
+    Distance1(Expression, Expression),
+    Distance2(Expression, Expression),
+    Distance3(Expression, Expression),
+    Distance4(Expression, Expression),
+
+    DotI1(Expression, Expression),
+    DotI2(Expression, Expression),
+    DotI3(Expression, Expression),
+    DotI4(Expression, Expression),
+    DotF1(Expression, Expression),
+    DotF2(Expression, Expression),
+    DotF3(Expression, Expression),
+    DotF4(Expression, Expression),
+
     Min(Expression, Expression),
     Max(Expression, Expression),
 
