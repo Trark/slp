@@ -256,6 +256,10 @@ named!(reserved_word_packoffset, complete!(tag!("packoffset")));
 named!(reserved_word_in, complete!(tag!("in")));
 named!(reserved_word_out, complete!(tag!("out")));
 named!(reserved_word_inout, complete!(tag!("inout")));
+named!(reserved_word_const, complete!(tag!("const")));
+named!(reserved_word_extern, complete!(tag!("extern")));
+named!(reserved_word_static, complete!(tag!("static")));
+named!(reserved_word_groupshared, complete!(tag!("groupshared")));
 
 // Unused reserved words
 named!(reserved_word_auto, complete!(tag!("auto")));
@@ -321,7 +325,11 @@ named!(reserved_word_s1, alt!(
     reserved_word_default |
     reserved_word_delete |
     reserved_word_dynamic_cast |
-    reserved_word_enum
+    reserved_word_enum |
+    reserved_word_const |
+    reserved_word_extern |
+    reserved_word_static |
+    reserved_word_groupshared
 ));
 
 named!(reserved_word_s2, alt!(
@@ -466,7 +474,13 @@ named!(token_no_whitespace_words<Token>, alt!(
 
     reserved_word_inout => { |_| Token::InOut } |
     reserved_word_in => { |_| Token::In } |
-    reserved_word_out => { |_| Token::Out }
+    reserved_word_out => { |_| Token::Out } |
+
+    reserved_word_const => { |_| Token::Const } |
+
+    reserved_word_extern => { |_| Token::Extern } |
+    reserved_word_static => { |_| Token::Static } |
+    reserved_word_groupshared => { |_| Token::GroupShared }
 ));
 
 named!(token_no_whitespace<Token>, alt!(
@@ -575,6 +589,12 @@ fn test_token() {
     assert_eq!(token(&b"in"[..]), IResult::Done(&b""[..], Token::In));
     assert_eq!(token(&b"out"[..]), IResult::Done(&b""[..], Token::Out));
     assert_eq!(token(&b"inout"[..]), IResult::Done(&b""[..], Token::InOut));
+
+    assert_eq!(token(&b"const"[..]), IResult::Done(&b""[..], Token::Const));
+
+    assert_eq!(token(&b"extern"[..]), IResult::Done(&b""[..], Token::Extern));
+    assert_eq!(token(&b"static"[..]), IResult::Done(&b""[..], Token::Static));
+    assert_eq!(token(&b"groupshared"[..]), IResult::Done(&b""[..], Token::GroupShared));
 
     assert_eq!(token(&b"structName"[..]), IResult::Done(&b""[..], Token::Id(Identifier("structName".to_string()))));
 }

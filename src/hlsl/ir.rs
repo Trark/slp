@@ -161,6 +161,10 @@ pub enum InterpolationModifier {
 /// Storage type for global variables
 #[derive(PartialEq, Debug, Clone)]
 pub enum GlobalStorage {
+
+    // Input from outside the kernel (default)
+    Extern,
+
     /// Statically allocated thread-local variable in global scope
     Static,
 

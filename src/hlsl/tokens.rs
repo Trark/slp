@@ -83,6 +83,12 @@ pub enum Token {
     Out,
     InOut,
 
+    Const,
+
+    Extern,
+    Static,
+    GroupShared,
+
     Auto,
     Case,
     Catch,

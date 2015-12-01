@@ -865,6 +865,7 @@ fn parse_interpolationmodifier(im: &ast::InterpolationModifier) -> Result<ir::In
 
 fn parse_globalstorage(local_storage: &ast::GlobalStorage) -> Result<ir::GlobalStorage, TyperError> {
     Ok(match *local_storage {
+        ast::GlobalStorage::Extern => ir::GlobalStorage::Extern,
         ast::GlobalStorage::Static => ir::GlobalStorage::Static,
         ast::GlobalStorage::GroupShared => ir::GlobalStorage::GroupShared,
     })
@@ -1702,6 +1703,13 @@ fn test_typeparse() {
                 name: "g_myInBuffer".to_string(),
                 global_type: ast::Type::from_object(ast::ObjectType::Buffer(ast::DataType(ast::DataLayout::Scalar(ast::ScalarType::Int), ast::TypeModifier::default()))).into(),
                 slot: Some(ast::GlobalSlot::ReadSlot(0)),
+                assignment: None,
+            }),
+            ast::RootDefinition::GlobalVariable(ast::GlobalVariable {
+                name: "g_myFour".to_string(),
+                global_type: ast::Type::from_object(ast::ObjectType::Buffer(ast::DataType(ast::DataLayout::Scalar(ast::ScalarType::Int), ast::TypeModifier::default()))).into(),
+                slot: None,
+                assignment: Some(ast::Expression::Literal(ast::Literal::UntypedInt(4))),
             }),
             ast::RootDefinition::Function(ast::FunctionDefinition {
                 name: "myFunc".to_string(),

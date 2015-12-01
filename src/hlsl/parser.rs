@@ -399,21 +399,30 @@ fn parse_typelayout(input: &[Token]) -> IResult<&[Token], TypeLayout, ParseError
 }
 
 fn parse_typename(input: &[Token]) -> IResult<&[Token], Type, ParseErrorReason> {
-    // Todo: Modifiers
-    match parse_typelayout(input) {
-        IResult::Done(rest, layout) => IResult::Done(rest, Type(layout, Default::default())),
-        IResult::Incomplete(i) => IResult::Incomplete(i),
-        IResult::Error(err) => IResult::Error(err),
-    }
+    // Todo: modifiers that aren't const
+    chain!(input,
+        is_const: opt!(token!(Token::Const)) ~
+        tl: parse_typelayout,
+        || {
+            Type(tl, TypeModifier { is_const: !is_const.is_none(), .. TypeModifier::default() })
+        }
+    )
 }
 
 fn parse_globaltype(input: &[Token]) -> IResult<&[Token], GlobalType, ParseErrorReason> {
-    // Todo: input modifiers
-    match parse_typename(input) {
-        IResult::Done(rest, ty) => IResult::Done(rest, GlobalType(ty, GlobalStorage::default(), None)),
-        IResult::Incomplete(i) => IResult::Incomplete(i),
-        IResult::Error(err) => IResult::Error(err),
-    }
+    // Interpolation modifiers unimplemented
+    // Non-standard combinations of storage classes unimplemented
+    chain!(input,
+        gs: opt!(alt!(
+            token!(Token::Static => GlobalStorage::Static) |
+            token!(Token::GroupShared => GlobalStorage::GroupShared) |
+            token!(Token::Extern => GlobalStorage::Extern)
+        )) ~
+        ty: parse_typename,
+        || {
+            GlobalType(ty, gs.unwrap_or(GlobalStorage::default()), None)
+        }
+    )
 }
 
 fn parse_inputmodifier(input: &[Token]) -> IResult<&[Token], InputModifier, ParseErrorReason> {
@@ -842,8 +851,9 @@ fn globalvariable(input: &[Token]) -> IResult<&[Token], GlobalVariable, ParseErr
         typename: parse_globaltype ~
         name: parse_variablename ~
         slot: opt!(globalvariable_register) ~
+        assignment:  opt!(chain!(token!(Token::Equals) ~ expr: expr, || expr)) ~
         token!(Token::Semicolon),
-        || { GlobalVariable { name: name, global_type: typename, slot: slot } }
+        || { GlobalVariable { name: name, global_type: typename, slot: slot, assignment: assignment } }
     )
 }
 
@@ -1324,6 +1334,7 @@ fn test_rootdefinition() {
         name: "g_myBuffer".to_string(),
         global_type: Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::Float, 4), TypeModifier::default()))).into(),
         slot: Some(GlobalSlot::ReadSlot(1)),
+        assignment: None,
     };
     assert_eq!(globalvariable_str(test_buffersrv_str), test_buffersrv_ast.clone());
     assert_eq!(rootdefinition_str(test_buffersrv_str), RootDefinition::GlobalVariable(test_buffersrv_ast.clone()));
@@ -1333,6 +1344,7 @@ fn test_rootdefinition() {
         name: "g_myBuffer".to_string(),
         global_type: Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::UInt, 4), TypeModifier::default()))).into(),
         slot: Some(GlobalSlot::ReadSlot(1)),
+        assignment: None,
     };
     assert_eq!(globalvariable_str(test_buffersrv2_str), test_buffersrv2_ast.clone());
     assert_eq!(rootdefinition_str(test_buffersrv2_str), RootDefinition::GlobalVariable(test_buffersrv2_ast.clone()));
@@ -1342,6 +1354,7 @@ fn test_rootdefinition() {
         name: "g_myBuffer".to_string(),
         global_type: Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::Int, 4), TypeModifier::default()))).into(),
         slot: Some(GlobalSlot::ReadSlot(1)),
+        assignment: None,
     };
     assert_eq!(globalvariable_str(test_buffersrv3_str), test_buffersrv3_ast.clone());
     assert_eq!(rootdefinition_str(test_buffersrv3_str), RootDefinition::GlobalVariable(test_buffersrv3_ast.clone()));
@@ -1351,8 +1364,19 @@ fn test_rootdefinition() {
         name: "g_myBuffer".to_string(),
         global_type: Type::from_object(ObjectType::StructuredBuffer(StructuredType(StructuredLayout::Custom("CustomType".to_string()), TypeModifier::default()))).into(),
         slot: Some(GlobalSlot::ReadSlot(1)),
+        assignment: None,
     };
     assert_eq!(globalvariable_str(test_buffersrv4_str), test_buffersrv4_ast.clone());
     assert_eq!(rootdefinition_str(test_buffersrv4_str), RootDefinition::GlobalVariable(test_buffersrv4_ast.clone()));
+
+    let test_static_const_str = "static const int c_numElements = 4;";
+    let test_static_const_ast = GlobalVariable {
+        name: "c_numElements".to_string(),
+        global_type: GlobalType(Type(TypeLayout::int(), TypeModifier { is_const: true, .. TypeModifier::default() }), GlobalStorage::Static, None),
+        slot: None,
+        assignment: Some(Expression::Literal(Literal::UntypedInt(4))),
+    };
+    assert_eq!(globalvariable_str(test_static_const_str), test_static_const_ast.clone());
+    assert_eq!(rootdefinition_str(test_static_const_str), RootDefinition::GlobalVariable(test_static_const_ast.clone()));
 }
 

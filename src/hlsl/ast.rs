@@ -156,12 +156,13 @@ pub enum InterpolationModifier {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum GlobalStorage {
+    Extern,
     Static,
     GroupShared,
 }
 
 impl Default for GlobalStorage {
-    fn default() -> GlobalStorage { GlobalStorage::Static }
+    fn default() -> GlobalStorage { GlobalStorage::Extern }
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -388,6 +389,7 @@ pub struct GlobalVariable {
     pub name: String,
     pub global_type: GlobalType,
     pub slot: Option<GlobalSlot>,
+    pub assignment: Option<Expression>,
 }
 
 #[derive(PartialEq, Debug, Clone)]

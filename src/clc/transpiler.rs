@@ -1029,6 +1029,7 @@ fn test_transpile() {
                     hlsl::ast::DataType(hlsl::ast::DataLayout::Scalar(hlsl::ast::ScalarType::Int), hlsl::ast::TypeModifier::default())
                 )).into(),
                 slot: Some(hlsl::ast::GlobalSlot::ReadSlot(0)),
+                assignment: None,
             }),
             hlsl::ast::RootDefinition::Function(hlsl::ast::FunctionDefinition {
                 name: "myFunc".to_string(),
