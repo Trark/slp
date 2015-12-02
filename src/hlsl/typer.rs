@@ -222,7 +222,7 @@ impl UnresolvedMethod {
 
 impl VariableBlock {
     fn new() -> VariableBlock {
-        VariableBlock { variables: HashMap::new(), next_free_variable_id: 0 }
+        VariableBlock { variables: HashMap::new(), next_free_variable_id: ir::VariableId(0) }
     }
 
     fn insert_variable(&mut self, name: String, typename: ir::Type, context: &ErrorTypeContext) -> Result<ir::VariableId, TyperError> {
@@ -233,7 +233,7 @@ impl VariableBlock {
             Entry::Occupied(occupied) => Err(TyperError::ValueAlreadyDefined(name, context.ir_type_to_error_type(&occupied.get().0), context.ir_type_to_error_type(&typename))),
             Entry::Vacant(vacant) => {
                 let id = self.next_free_variable_id;
-                self.next_free_variable_id = self.next_free_variable_id + 1;
+                self.next_free_variable_id = ir::VariableId(self.next_free_variable_id.0 + 1);
                 vacant.insert((typename, id)); Ok(id)
             },
         }
@@ -245,7 +245,7 @@ impl VariableBlock {
 
     fn find_variable(&self, name: &String, scopes_up: u32) -> Option<TypedExpression> {
         match self.variables.get(name) {
-            Some(&(ref ty, ref id)) => return Some(TypedExpression::Value(ir::Expression::Variable(ir::VariableRef(id.clone(), scopes_up)), ty.to_lvalue())),
+            Some(&(ref ty, ref id)) => return Some(TypedExpression::Value(ir::Expression::Variable(ir::VariableRef(id.clone(), ir::ScopeRef(scopes_up))), ty.to_lvalue())),
             None => None,
         }
     }
@@ -265,16 +265,16 @@ impl TypeBlock {
         TypeBlock {
             struct_ids: HashMap::new(),
             struct_definitions: HashMap::new(),
-            next_free_struct_id: 0,
+            next_free_struct_id: ir::StructId(0),
             cbuffer_ids: HashMap::new(),
             cbuffer_definitions: HashMap::new(),
-            next_free_cbuffer_id: 0,
+            next_free_cbuffer_id: ir::ConstantBufferId(0),
         }
     }
 
     fn insert_struct(&mut self, name: &String, members: HashMap<String, ir::Type>) -> Option<ir::StructId> {
         let id = self.next_free_struct_id;
-        self.next_free_struct_id = self.next_free_struct_id + 1;
+        self.next_free_struct_id = ir::StructId(self.next_free_struct_id.0 + 1);
         match (self.struct_ids.entry(name.clone()), self.struct_definitions.entry(id.clone())) {
             (Entry::Vacant(id_entry), Entry::Vacant(def_entry)) => {
                 id_entry.insert(id.clone());
@@ -301,7 +301,7 @@ impl TypeBlock {
 
     fn insert_cbuffer(&mut self, name: &String, members: HashMap<String, ir::Type>) -> Option<ir::ConstantBufferId> {
         let id = self.next_free_cbuffer_id;
-        self.next_free_cbuffer_id = self.next_free_cbuffer_id + 1;
+        self.next_free_cbuffer_id = ir::ConstantBufferId(self.next_free_cbuffer_id.0 + 1);
         match (self.cbuffer_ids.entry(name.clone()), self.cbuffer_definitions.entry(id.clone())) {
             (Entry::Vacant(id_entry), Entry::Vacant(def_entry)) => {
                 id_entry.insert(id.clone());
@@ -491,7 +491,7 @@ impl GlobalContext {
     fn new() -> GlobalContext {
         GlobalContext {
             functions: get_intrinsics(),
-            next_free_function_id: 0,
+            next_free_function_id: ir::FunctionId(0),
             types: TypeBlock::new(),
             variables: VariableBlock::new(),
         }
@@ -540,7 +540,7 @@ impl GlobalContext {
 
     fn make_function_id(&mut self) -> ir::FunctionId {
         let value = self.next_free_function_id;
-        self.next_free_function_id = self.next_free_function_id + 1;
+        self.next_free_function_id = ir::FunctionId(self.next_free_function_id.0 + 1);
         value
     }
 

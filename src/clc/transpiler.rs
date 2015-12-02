@@ -283,7 +283,7 @@ impl Context {
 
     /// Get the expression to access an in scope variable
     fn get_variable_ref(&self, var_ref: &src::VariableRef) -> Result<dst::Expression, TranspileError> {
-        let scopes_up = var_ref.1 as usize;
+        let scopes_up = (var_ref.1).0 as usize;
         if scopes_up == self.variable_scopes.len() {
             match self.global_names.global_name_map.get(&GlobalId::Variable(var_ref.0)) {
                 Some(ref s) => Ok({

@@ -408,15 +408,20 @@ pub enum Intrinsic {
 pub use super::ast::Literal as Literal;
 
 /// Id to function (in global scope)
-pub type FunctionId = u32;
+#[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone, Copy)]
+pub struct FunctionId(pub u32);
 /// Id to a user defined struct
-pub type StructId = u32;
+#[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone, Copy)]
+pub struct StructId(pub u32);
 /// Id to constant buffer
-pub type ConstantBufferId = u32;
+#[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone, Copy)]
+pub struct ConstantBufferId(pub u32);
 /// Id to variable in current scope
-pub type VariableId = u32;
+#[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone, Copy)]
+pub struct VariableId(pub u32);
 /// Number of scope levels to go up
-pub type ScopeRef = u32;
+#[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone, Copy)]
+pub struct ScopeRef(pub u32);
 /// Reference to a variable, combining both id and scope level
 #[derive(PartialEq, Debug, Clone)]
 pub struct VariableRef(pub VariableId, pub ScopeRef);
