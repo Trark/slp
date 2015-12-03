@@ -21,8 +21,8 @@ pub enum TyperError {
     ConstantBufferAlreadyDefined(String),
 
     ConstantSlotAlreadyUsed(String),
-    ReadResourceSlotAlreadyUsed(ir::VariableId, ir::VariableId),
-    ReadWriteResourceSlotAlreadyUsed(ir::VariableId, ir::VariableId),
+    ReadResourceSlotAlreadyUsed(ir::GlobalId, ir::GlobalId),
+    ReadWriteResourceSlotAlreadyUsed(ir::GlobalId, ir::GlobalId),
 
     UnknownIdentifier(String),
     UnknownType(ErrorType),
@@ -182,7 +182,8 @@ struct GlobalContext {
     next_free_function_id: ir::FunctionId,
 
     types: TypeBlock,
-    variables: VariableBlock,
+    globals: HashMap<String, (ir::Type, ir::GlobalId)>,
+    next_free_global_id: ir::GlobalId,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -493,7 +494,8 @@ impl GlobalContext {
             functions: get_intrinsics(),
             next_free_function_id: ir::FunctionId(0),
             types: TypeBlock::new(),
-            variables: VariableBlock::new(),
+            globals: HashMap::new(),
+            next_free_global_id: ir::GlobalId(0)
         }
     }
 
@@ -523,6 +525,7 @@ impl GlobalContext {
     }
 
     fn find_variable_recur(&self, name: &String, scopes_up: u32) -> Result<TypedExpression, TyperError> {
+        assert!(scopes_up != 0);
         match self.functions.get(name) {
             Some(tys) => return Ok(TypedExpression::Function(tys.clone())),
             None => { },
@@ -531,7 +534,7 @@ impl GlobalContext {
             Some(tys) => return Ok(tys),
             None => { },
         };
-        match self.variables.find_variable(name, scopes_up) {
+        match self.find_global(name) {
             Some(tys) => return Ok(tys),
             None => { },
         };
@@ -544,17 +547,31 @@ impl GlobalContext {
         value
     }
 
-    fn insert_variable(&mut self, name: String, typename: ir::Type) -> Result<ir::VariableId, TyperError> {
-        self.variables.insert_variable(name, typename, &self.types)
+    fn has_variable(&self, name: &String) -> Option<&(ir::Type, ir::GlobalId)> {
+        self.globals.get(name)
     }
 
-    fn has_variable(&self, name: &String) -> Option<&(ir::Type, ir::VariableId)> {
-        self.variables.has_variable(name)
+    fn insert_global(&mut self, name: String, typename: ir::Type) -> Result<ir::GlobalId, TyperError> {
+        if let Some(&(ref ty, _)) = self.has_variable(&name) {
+            return Err(TyperError::ValueAlreadyDefined(name, self.ir_type_to_error_type(ty), self.ir_type_to_error_type(&typename)))
+        };
+        let cur_ty = match self.globals.entry(name.clone()) {
+            Entry::Occupied(occupied) => occupied.get().0.clone(),
+            Entry::Vacant(vacant) => {
+                let id = self.next_free_global_id;
+                self.next_free_global_id = ir::GlobalId(self.next_free_global_id.0 + 1);
+                vacant.insert((typename, id));
+                return Ok(id)
+            },
+        };
+        Err(TyperError::ValueAlreadyDefined(name, self.ir_type_to_error_type(&cur_ty), self.ir_type_to_error_type(&typename)))
     }
 
-    #[allow(dead_code)]
-    fn find_variable(&self, name: &String) -> Result<TypedExpression, TyperError> {
-        self.find_variable_recur(name, 0)
+    fn find_global(&self, name: &String) -> Option<TypedExpression> {
+        match self.globals.get(name) {
+            Some(&(ref ty, ref id)) => return Some(TypedExpression::Value(ir::Expression::Global(id.clone()), ty.to_lvalue())),
+            None => None,
+        }
     }
 
     fn insert_struct(&mut self, name: &String, members: HashMap<String, ir::Type>) -> Option<ir::StructId> {
@@ -574,9 +591,15 @@ impl GlobalContext {
     }
 
     fn destruct(self) -> ir::GlobalDeclarations {
+        let globals = self.globals.iter().fold(HashMap::new(),
+            |mut map, (name, &(_, ref id))| {
+                map.insert(id.clone(), name.clone());
+                map
+            }
+        );
         let (structs, constants) = self.types.destruct();
         ir::GlobalDeclarations {
-            variables: self.variables.destruct(),
+            globals: globals,
             functions: self.functions.iter().fold(HashMap::new(),
                 |mut map, (_, &UnresolvedFunction(ref name, ref overloads))| {
                     for overload in overloads {
@@ -1547,7 +1570,7 @@ fn parse_rootdefinition_constantbuffer(cb: &ast::ConstantBuffer, mut context: Gl
 fn parse_rootdefinition_globalvariable(gv: &ast::GlobalVariable, mut context: GlobalContext, globals: &mut ir::GlobalTable) -> Result<(ir::RootDefinition, GlobalContext), TyperError> {
     let var_name = gv.name.clone();
     let var_type = try!(parse_globaltype(&gv.global_type, &context));
-    let var_id = try!(context.insert_variable(var_name.clone(), var_type.0.clone()));
+    let var_id = try!(context.insert_global(var_name.clone(), var_type.0.clone()));
     let gv_ir = ir::GlobalVariable { id: var_id, global_type: var_type };
     let entry = ir::GlobalEntry { id: var_id, ty: gv_ir.global_type.clone() };
     match gv.slot {

@@ -416,6 +416,9 @@ pub struct StructId(pub u32);
 /// Id to constant buffer
 #[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone, Copy)]
 pub struct ConstantBufferId(pub u32);
+/// Id to a global variable
+#[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone, Copy)]
+pub struct GlobalId(pub u32);
 /// Id to variable in current scope
 #[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone, Copy)]
 pub struct VariableId(pub u32);
@@ -436,7 +439,7 @@ pub struct ScopedDeclarations {
 #[derive(PartialEq, Debug, Clone)]
 pub struct GlobalDeclarations {
     pub functions: HashMap<FunctionId, String>,
-    pub variables: HashMap<VariableId, String>,
+    pub globals: HashMap<GlobalId, String>,
     pub structs: HashMap<StructId, String>,
     pub constants: HashMap<ConstantBufferId, String>,
 }
@@ -445,6 +448,7 @@ pub struct GlobalDeclarations {
 pub enum Expression {
     Literal(Literal),
     Variable(VariableRef),
+    Global(GlobalId),
     ConstantVariable(ConstantBufferId, String),
     UnaryOperation(UnaryOp, Box<Expression>),
     BinaryOperation(BinOp, Box<Expression>, Box<Expression>),
@@ -513,7 +517,7 @@ pub struct ConstantBuffer {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct GlobalVariable {
-    pub id: VariableId,
+    pub id: GlobalId,
     pub global_type: GlobalType,
 }
 
@@ -569,7 +573,7 @@ pub enum RootDefinition {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct GlobalEntry {
-    pub id: VariableId,
+    pub id: GlobalId,
     pub ty: GlobalType,
 }
 

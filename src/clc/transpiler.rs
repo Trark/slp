@@ -76,7 +76,7 @@ enum GlobalId {
     Struct(src::StructId),
     ConstantBufferType(src::ConstantBufferId),
     ConstantBufferInstance(src::ConstantBufferId),
-    Variable(src::VariableId),
+    Variable(src::GlobalId),
     LiftInstance,
     LiftType,
     LiftInit,
@@ -98,7 +98,7 @@ impl GlobalNameContext {
 
         // Insert global variables
         {
-            for (var_id, var_name) in &globals.variables {
+            for (var_id, var_name) in &globals.globals {
                 context.insert_identifier(GlobalId::Variable(var_id.clone()), var_name);
             }
         }
@@ -238,7 +238,7 @@ impl Context {
                     _ => return Err(TranspileError::TypeIsNotAllowedAsGlobal(global_entry.ty.clone())),
                 };
                 let param = dst::KernelParam {
-                    name: try!(context.get_variable_id(&global_entry.id)),
+                    name: try!(context.get_global_name(&global_entry.id)),
                     typename: cl_type,
                 };
                 let entry = binds.read_map.insert(*slot, context.kernel_params.len() as u32);
@@ -254,7 +254,7 @@ impl Context {
                     _ => return Err(TranspileError::TypeIsNotAllowedAsGlobal(global_entry.ty.clone())),
                 };
                 let param = dst::KernelParam {
-                    name: try!(context.get_variable_id(&global_entry.id)),
+                    name: try!(context.get_global_name(&global_entry.id)),
                     typename: cl_type,
                 };
                 let entry = binds.write_map.insert(*slot, context.kernel_params.len() as u32);
@@ -284,15 +284,7 @@ impl Context {
     /// Get the expression to access an in scope variable
     fn get_variable_ref(&self, var_ref: &src::VariableRef) -> Result<dst::Expression, TranspileError> {
         let scopes_up = (var_ref.1).0 as usize;
-        if scopes_up == self.variable_scopes.len() {
-            match self.global_names.global_name_map.get(&GlobalId::Variable(var_ref.0)) {
-                Some(ref s) => Ok({
-                    let gin = self.global_names.global_name_map.get(&GlobalId::LiftInstance).unwrap();
-                    dst::Expression::MemberDeref(Box::new(dst::Expression::Variable(gin.clone())), (*s).clone())
-                }),
-                None => Err(TranspileError::UnknownVariableId),
-            }
-        } else if scopes_up >= self.variable_scopes.len() {
+        if scopes_up >= self.variable_scopes.len() {
             return Err(TranspileError::UnknownVariableId)
         } else {
             let scope = self.variable_scopes.len() - scopes_up - 1;
@@ -308,16 +300,25 @@ impl Context {
 
     /// Get the name of a variable declared in the current block
     fn get_variable_id(&self, id: &src::VariableId) -> Result<String, TranspileError> {
-        if self.variable_scopes.len() == 0 {
-            match self.global_names.global_name_map.get(&GlobalId::Variable(*id)) {
-                Some(v) => Ok(v.to_string()),
-                None => Err(TranspileError::UnknownVariableId),
-            }
-        } else {
-            match self.variable_scopes[self.variable_scopes.len() - 1].get(id) {
-                Some(v) => Ok(v.as_str().to_string()),
-                None => Err(TranspileError::UnknownVariableId),
-            }
+        assert!(self.variable_scopes.len() > 0);
+        match self.variable_scopes[self.variable_scopes.len() - 1].get(id) {
+            Some(v) => Ok(v.as_str().to_string()),
+            None => Err(TranspileError::UnknownVariableId),
+        }
+    }
+
+    /// Get the name of a variable declared in the current block
+    fn get_global_var(&self, id: &src::GlobalId) -> Result<dst::Expression, TranspileError> {
+        let gin = self.global_names.global_name_map.get(&GlobalId::LiftInstance).unwrap();
+        let global_name = try!(self.get_global_name(id));
+        Ok(dst::Expression::MemberDeref(Box::new(dst::Expression::Variable(gin.clone())), global_name))
+    }
+
+    /// Get the name of a variable declared in the current block
+    fn get_global_name(&self, id: &src::GlobalId) -> Result<String, TranspileError> {
+        match self.global_names.global_name_map.get(&GlobalId::Variable(*id)) {
+            Some(v) => Ok(v.to_string()),
+            None => Err(TranspileError::UnknownVariableId),
         }
     }
 
@@ -675,6 +676,7 @@ fn transpile_expression(expression: &src::Expression, context: &Context) -> Resu
     match expression {
         &src::Expression::Literal(ref lit) => Ok(dst::Expression::Literal(try!(transpile_literal(lit)))),
         &src::Expression::Variable(ref var_ref) => context.get_variable_ref(var_ref),
+        &src::Expression::Global(ref id) => context.get_global_var(id),
         &src::Expression::ConstantVariable(ref id, ref name) => context.get_constant(id, name.clone()),
         &src::Expression::UnaryOperation(ref unaryop, ref expr) => {
             let cl_unaryop = try!(transpile_unaryop(unaryop));
@@ -890,7 +892,7 @@ fn transpile_cbuffer(cb: &src::ConstantBuffer, context: &mut Context) -> Result<
 }
 
 fn transpile_globalvariable(gv: &src::GlobalVariable, context: &mut Context) -> Result<(), TranspileError> {
-    let global_name = try!(context.get_variable_id(&gv.id));
+    let global_name = try!(context.get_global_name(&gv.id));
     if context.kernel_params.iter().any(|gp| { gp.name == global_name }) {
         return Ok(())
     } else {
