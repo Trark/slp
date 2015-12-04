@@ -2,6 +2,8 @@
 Buffer<uint> g_myInBuffer : register(t0);
 RWBuffer<uint> g_myOutBuffer : register(u0);
 
+static const int g_myFour = 4;
+
 struct myStruct
 {
     float4 pos;

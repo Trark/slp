@@ -455,6 +455,25 @@ fn print_statements(statements: &[Statement], printer: &mut Printer) {
     }
 }
 
+fn print_rootdefinition_globalvariable(gv: &GlobalVariable, printer: &mut Printer) {
+    print_typename(&gv.ty, printer);
+    printer.space();
+    print_address_space(&gv.address_space, printer);
+    printer.space();
+    printer.print(&gv.name);
+    match &gv.init {
+        &Some(ref expr) => {
+            printer.space();
+            printer.print("=");
+            printer.space();
+            print_expression(expr, printer);
+        },
+        &None => { },
+    }
+    printer.print(";");
+}
+
+
 fn print_rootdefinition_struct(structdefinition: &StructDefinition, printer: &mut Printer) {
     printer.print("struct");
     printer.space();
@@ -556,6 +575,7 @@ fn print_rootdefinition_kernel(kernel: &Kernel, printer: &mut Printer) {
 fn print_rootdefinition(rootdef: &RootDefinition, printer: &mut Printer) {
     printer.line();
     match rootdef {
+        &RootDefinition::GlobalVariable(ref gv) => print_rootdefinition_globalvariable(gv, printer),
         &RootDefinition::Struct(ref sd) => print_rootdefinition_struct(sd, printer),
         &RootDefinition::Function(ref fd) => print_rootdefinition_function(fd, printer),
         &RootDefinition::Kernel(ref kernel) => print_rootdefinition_kernel(kernel, printer),

@@ -176,6 +176,14 @@ pub enum Statement {
 }
 
 #[derive(PartialEq, Debug, Clone)]
+pub struct GlobalVariable {
+    pub name: Identifier,
+    pub ty: Type,
+    pub address_space: AddressSpace, // Make part of Type?
+    pub init: Option<Expression>,
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub struct StructMember {
     pub name: Identifier,
     pub typename: Type,
@@ -219,6 +227,7 @@ pub struct Kernel {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum RootDefinition {
+    GlobalVariable(GlobalVariable),
     Struct(StructDefinition),
     Function(FunctionDefinition),
     Kernel(Kernel),

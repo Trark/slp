@@ -1,4 +1,6 @@
 
+int __constant g_myFour = (int)4;
+
 struct myStruct
 {
 	float4 pos;

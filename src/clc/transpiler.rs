@@ -891,12 +891,27 @@ fn transpile_cbuffer(cb: &src::ConstantBuffer, context: &mut Context) -> Result<
     }))
 }
 
-fn transpile_globalvariable(gv: &src::GlobalVariable, context: &mut Context) -> Result<(), TranspileError> {
+fn transpile_globalvariable(gv: &src::GlobalVariable, context: &mut Context) -> Result<Option<dst::RootDefinition>, TranspileError> {
     let global_name = try!(context.get_global_name(&gv.id));
     if context.kernel_params.iter().any(|gp| { gp.name == global_name }) {
-        return Ok(())
+        return Ok(None)
     } else {
-        return Err(TranspileError::GlobalFoundThatIsntInKernelParams(gv.clone()))
+        let &src::GlobalType(src::Type(ref ty, ref modifiers), ref gs, _) = &gv.global_type;
+        if *gs == src::GlobalStorage::Static && modifiers.is_const {
+            let cl_type = try!(transpile_type(&src::Type(ty.clone(), modifiers.clone()), &context));
+            let cl_init = match &gv.assignment {
+                &Some(ref expr) => Some(try!(transpile_expression(expr, &context))),
+                &None => None,
+            };
+            Ok(Some(dst::RootDefinition::GlobalVariable(dst::GlobalVariable {
+                name: global_name,
+                ty: cl_type,
+                address_space: dst::AddressSpace::Constant,
+                init: cl_init,
+            })))
+        } else {
+            return Err(TranspileError::GlobalFoundThatIsntInKernelParams(gv.clone()))
+        }
     }
 }
 
@@ -950,21 +965,15 @@ fn transpile_roots(root_defs: &[src::RootDefinition], context: &mut Context) -> 
             src::RootDefinition::Struct(ref structdefinition) => {
                 cl_defs.push(try!(transpile_structdefinition(structdefinition, context)));
             },
-            _ => { },
-        };
-    }
-
-    for rootdef in root_defs {
-        match *rootdef {
             src::RootDefinition::ConstantBuffer(ref cb) => {
                 cl_defs.push(try!(transpile_cbuffer(cb, context)));
             },
-            _ => { },
-        };
-    }
-
-    for rootdef in root_defs {
-        match *rootdef {
+            src::RootDefinition::GlobalVariable(ref gv) => {
+                match try!(transpile_globalvariable(gv, context)) {
+                    Some(root) => cl_defs.push(root),
+                    None => { },
+                }
+            },
             src::RootDefinition::SamplerState => unimplemented!(),
             _ => { },
         };
@@ -974,24 +983,9 @@ fn transpile_roots(root_defs: &[src::RootDefinition], context: &mut Context) -> 
 
     for rootdef in root_defs {
         match *rootdef {
-            src::RootDefinition::GlobalVariable(ref gv) => {
-                try!(transpile_globalvariable(gv, context));
-            },
-            _ => { },
-        };
-    }
-
-    for rootdef in root_defs {
-        match *rootdef {
             src::RootDefinition::Function(ref func) => {
                 cl_defs.push(try!(transpile_functiondefinition(func, context)));
             },
-            _ => { },
-        };
-    }
-
-    for rootdef in root_defs {
-        match *rootdef {
             src::RootDefinition::Kernel(ref kernel) => {
                 cl_defs.push(try!(transpile_kernel(kernel, context)));
             },
