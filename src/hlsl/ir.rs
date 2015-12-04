@@ -519,6 +519,7 @@ pub struct ConstantBuffer {
 pub struct GlobalVariable {
     pub id: GlobalId,
     pub global_type: GlobalType,
+    pub assignment: Option<Expression>,
 }
 
 pub use super::ast::FunctionAttribute as FunctionAttribute;

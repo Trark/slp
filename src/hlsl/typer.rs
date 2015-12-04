@@ -199,6 +199,13 @@ enum Context {
     Scope(ScopeContext),
 }
 
+trait ExpressionContext : StructIdFinder + ErrorTypeContext {
+    fn find_variable(&self, name: &String) -> Result<TypedExpression, TyperError>;
+    fn find_struct_member(&self, id: &ir::StructId, member_name: &String) -> Result<ir::Type, TyperError>;
+
+    fn as_struct_id_finder(&self) -> &StructIdFinder;
+}
+
 trait StructIdFinder {
     fn find_struct_id(&self, name: &String) -> Result<ir::StructId, TyperError>;
 }
@@ -578,10 +585,6 @@ impl GlobalContext {
         self.types.insert_struct(name, members)
     }
 
-    fn find_struct_member(&self, id: &ir::StructId, member_name: &String) -> Result<ir::Type, TyperError> {
-        self.types.find_struct_member(id, member_name)
-    }
-
     fn insert_cbuffer(&mut self, name: &String, members: HashMap<String, ir::Type>) -> Option<ir::ConstantBufferId> {
         self.types.insert_cbuffer(name, members)
     }
@@ -614,6 +617,20 @@ impl GlobalContext {
             structs: structs,
             constants: constants,
         }
+    }
+}
+
+impl ExpressionContext for GlobalContext {
+    fn find_variable(&self, name: &String) -> Result<TypedExpression, TyperError> {
+        self.find_variable_recur(name, 0)
+    }
+
+    fn find_struct_member(&self, id: &ir::StructId, member_name: &String) -> Result<ir::Type, TyperError> {
+        self.types.find_struct_member(id, member_name)
+    }
+
+    fn as_struct_id_finder(&self) -> &StructIdFinder {
+        self
     }
 }
 
@@ -661,6 +678,12 @@ impl ScopeContext {
         variables.insert_variable(name, typename, type_block)
     }
 
+    fn get_type_block(&self) -> &TypeBlock {
+        self.parent.get_type_block()
+    }
+}
+
+impl ExpressionContext for ScopeContext {
     fn find_variable(&self, name: &String) -> Result<TypedExpression, TyperError> {
         self.find_variable_recur(name, 0)
     }
@@ -669,8 +692,8 @@ impl ScopeContext {
         self.parent.find_struct_member(id, member_name)
     }
 
-    fn get_type_block(&self) -> &TypeBlock {
-        self.parent.get_type_block()
+    fn as_struct_id_finder(&self) -> &StructIdFinder {
+        self
     }
 }
 
@@ -1057,7 +1080,7 @@ fn parse_literal(ast: &ast::Literal) -> Result<TypedExpression, TyperError> {
     }
 }
 
-fn resolve_arithmetic_types(binop: &ir::BinOp, left: &ExpressionType, right: &ExpressionType, context: &ScopeContext) -> Result<(ImplicitConversion, ImplicitConversion), TyperError> {
+fn resolve_arithmetic_types(binop: &ir::BinOp, left: &ExpressionType, right: &ExpressionType, context: &ExpressionContext) -> Result<(ImplicitConversion, ImplicitConversion), TyperError> {
     use hlsl::ir::Type;
     use hlsl::ir::ScalarType;
 
@@ -1123,7 +1146,7 @@ fn resolve_arithmetic_types(binop: &ir::BinOp, left: &ExpressionType, right: &Ex
     }
 }
 
-fn parse_expr_binop(op: &ast::BinOp, lhs: &ast::Expression, rhs: &ast::Expression, context: &ScopeContext) -> Result<TypedExpression, TyperError> {
+fn parse_expr_binop(op: &ast::BinOp, lhs: &ast::Expression, rhs: &ast::Expression, context: &ExpressionContext) -> Result<TypedExpression, TyperError> {
     let lhs_texp = try!(parse_expr(lhs, context));
     let rhs_texp = try!(parse_expr(rhs, context));
     let lhs_pt = context.typed_expression_to_error_type(&lhs_texp);
@@ -1180,14 +1203,14 @@ fn parse_expr_binop(op: &ast::BinOp, lhs: &ast::Expression, rhs: &ast::Expressio
     }
 }
 
-fn unwrap_value_expr(texp: TypedExpression, context: &ScopeContext) -> Result<(ir::Expression, ExpressionType), TyperError> {
+fn unwrap_value_expr(texp: TypedExpression, context: &ExpressionContext) -> Result<(ir::Expression, ExpressionType), TyperError> {
     Ok(match texp {
         TypedExpression::Value(expr_ir, expr_ty) => (expr_ir, expr_ty),
         texp => return Err(TyperError::ExpectedValueExpression(context.typed_expression_to_error_type(&texp))),
     })
 }
 
-fn parse_expr_ternary(cond: &ast::Expression, lhs: &ast::Expression, rhs: &ast::Expression, context: &ScopeContext) -> Result<TypedExpression, TyperError> {
+fn parse_expr_ternary(cond: &ast::Expression, lhs: &ast::Expression, rhs: &ast::Expression, context: &ExpressionContext) -> Result<TypedExpression, TyperError> {
     let cond_texp = try!(parse_expr(cond, context));
     let lhs_texp = try!(parse_expr(lhs, context));
     let rhs_texp = try!(parse_expr(rhs, context));
@@ -1210,7 +1233,7 @@ fn parse_expr_ternary(cond: &ast::Expression, lhs: &ast::Expression, rhs: &ast::
     Ok(TypedExpression::Value(ir::Expression::TernaryConditional(Box::new(cond), Box::new(lhs), Box::new(rhs)), final_type))
 }
 
-fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpression, TyperError> {
+fn parse_expr(ast: &ast::Expression, context: &ExpressionContext) -> Result<TypedExpression, TyperError> {
     match ast {
         &ast::Expression::Literal(ref lit) => parse_literal(lit),
         &ast::Expression::Variable(ref s) => Ok(try!(context.find_variable(s))),
@@ -1359,7 +1382,7 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
             let expr_pt = context.typed_expression_to_error_type(&expr_texp);
             match expr_texp {
                 TypedExpression::Value(expr_ir, _) => {
-                    let ir_type = try!(parse_type(ty, context));
+                    let ir_type = try!(parse_type(ty, context.as_struct_id_finder()));
                     Ok(TypedExpression::Value(ir::Expression::Cast(ir_type.clone(), Box::new(expr_ir)), ir_type.to_rvalue()))
                 },
                 _ => Err(TyperError::InvalidCast(expr_pt, ErrorType::Value(ty.clone()))),
@@ -1368,7 +1391,7 @@ fn parse_expr(ast: &ast::Expression, context: &ScopeContext) -> Result<TypedExpr
     }
 }
 
-fn parse_expr_value_only(expr: &ast::Expression, context: &ScopeContext) -> Result<ir::Expression, TyperError> {
+fn parse_expr_value_only(expr: &ast::Expression, context: &ExpressionContext) -> Result<ir::Expression, TyperError> {
     let expr_ir = try!(parse_expr(expr, context));
     match expr_ir {
         TypedExpression::Value(expr, _) => Ok(expr),
@@ -1570,8 +1593,26 @@ fn parse_rootdefinition_constantbuffer(cb: &ast::ConstantBuffer, mut context: Gl
 fn parse_rootdefinition_globalvariable(gv: &ast::GlobalVariable, mut context: GlobalContext, globals: &mut ir::GlobalTable) -> Result<(ir::RootDefinition, GlobalContext), TyperError> {
     let var_name = gv.name.clone();
     let var_type = try!(parse_globaltype(&gv.global_type, &context));
-    let var_id = try!(context.insert_global(var_name.clone(), var_type.0.clone()));
-    let gv_ir = ir::GlobalVariable { id: var_id, global_type: var_type };
+    let input_type = var_type.0.clone();
+    let var_id = try!(context.insert_global(var_name.clone(), input_type.clone()));
+    let var_assign = match &gv.assignment { &Some(ref assign) => {
+            let (uncasted, ty) = match try!(parse_expr(assign, &context)) {
+                TypedExpression::Value(expr, ty) => (expr, ty),
+                TypedExpression::Function(_) => return Err(TyperError::FunctionNotCalled),
+                TypedExpression::Method(_) => return Err(TyperError::FunctionNotCalled),
+            };
+            // Todo: review if we want to purge modifiers for rhs of assignment
+            let cast_to = ir::Type(input_type.0.clone(), ir::TypeModifier::default()).to_rvalue();
+            let cast = match ImplicitConversion::find(&ty, &cast_to) {
+                Ok(cast) => cast,
+                Err(()) => return Err(TyperError::WrongTypeInInitExpression),
+            };
+            let casted = cast.apply(uncasted);
+            Some(casted)
+        },
+        &None => None
+    };
+    let gv_ir = ir::GlobalVariable { id: var_id, global_type: var_type, assignment: var_assign };
     let entry = ir::GlobalEntry { id: var_id, ty: gv_ir.global_type.clone() };
     match gv.slot {
         Some(ast::GlobalSlot::ReadSlot(slot)) => {
@@ -1730,7 +1771,7 @@ fn test_typeparse() {
             }),
             ast::RootDefinition::GlobalVariable(ast::GlobalVariable {
                 name: "g_myFour".to_string(),
-                global_type: ast::Type::from_object(ast::ObjectType::Buffer(ast::DataType(ast::DataLayout::Scalar(ast::ScalarType::Int), ast::TypeModifier::default()))).into(),
+                global_type: ast::GlobalType(ast::Type(ast::TypeLayout::from_scalar(ast::ScalarType::Int), ast::TypeModifier { is_const: true, .. ast::TypeModifier::default() }), ast::GlobalStorage::Static, None),
                 slot: None,
                 assignment: Some(ast::Expression::Literal(ast::Literal::UntypedInt(4))),
             }),
@@ -1815,4 +1856,25 @@ fn test_typeparse() {
     };
     let res = typeparse(&module);
     assert!(res.is_ok(), "{:?}", res);
+
+    let static_global_test = ast::Module {
+        entry_point: "CSMAIN".to_string(),
+        root_definitions: vec![
+            ast::RootDefinition::GlobalVariable(ast::GlobalVariable {
+                name: "g_myFour".to_string(),
+                global_type: ast::GlobalType(ast::Type(ast::TypeLayout::from_scalar(ast::ScalarType::Int), ast::TypeModifier { is_const: true, .. ast::TypeModifier::default() }), ast::GlobalStorage::Static, None),
+                slot: None,
+                assignment: Some(ast::Expression::Literal(ast::Literal::UntypedInt(4))),
+            }),
+            ast::RootDefinition::Function(ast::FunctionDefinition {
+                name: "CSMAIN".to_string(),
+                returntype: ast::Type::void(),
+                params: vec![],
+                body: vec![],
+                attributes: vec![ast::FunctionAttribute::NumThreads(8, 8, 1)],
+            }),
+        ],
+    };
+    let static_global_result = typeparse(&static_global_test);
+    assert!(static_global_result.is_ok(), "{:?}", static_global_result);
 }
