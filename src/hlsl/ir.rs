@@ -586,6 +586,17 @@ pub struct GlobalTable {
     pub constants: HashMap<u32, ConstantBufferId>,
 }
 
+impl Default for GlobalTable {
+    fn default() -> GlobalTable {
+        GlobalTable {
+            r_resources: HashMap::new(),
+            rw_resources: HashMap::new(),
+            samplers: HashMap::new(),
+            constants: HashMap::new(),
+        }
+    }
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub struct Module {
     pub entry_point: String,

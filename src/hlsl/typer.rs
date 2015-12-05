@@ -1876,5 +1876,28 @@ fn test_typeparse() {
         ],
     };
     let static_global_result = typeparse(&static_global_test);
-    assert!(static_global_result.is_ok(), "{:?}", static_global_result);
+    let static_global_expected = Ok(ir::Module {
+        entry_point: "CSMAIN".to_string(),
+        global_table: ir::GlobalTable::default(),
+        global_declarations: ir::GlobalDeclarations {
+            functions: HashMap::new(),
+            globals: { let mut map = HashMap::new(); map.insert(ir::GlobalId(0), "g_myFour".to_string()); map },
+            structs: HashMap::new(),
+            constants: HashMap::new(),
+        },
+        root_definitions: vec![
+            ir::RootDefinition::GlobalVariable(ir::GlobalVariable {
+                id: ir::GlobalId(0),
+                global_type: ir::GlobalType(ir::Type(ir::TypeLayout::from_scalar(ir::ScalarType::Int), ir::TypeModifier { is_const: true, .. ir::TypeModifier::default() }), ir::GlobalStorage::Static, None),
+                assignment: Some(ir::Expression::Cast(ir::Type::int(), Box::new(ir::Expression::Literal(ir::Literal::UntypedInt(4))))),
+            }),
+            ir::RootDefinition::Kernel(ir::Kernel {
+                group_dimensions: ir::Dimension(8, 8, 1),
+                params: vec![],
+                body: vec![],
+                scope: ir::ScopedDeclarations { variables: HashMap::new() },
+            }),
+        ],
+    });
+    assert_eq!(static_global_result, static_global_expected);
 }
