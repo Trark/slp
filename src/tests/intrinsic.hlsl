@@ -5,8 +5,10 @@ RWBuffer<uint4> g_rwBuffer : register(u0);
 void test_buffer(uint3 dtid)
 {
     uint4 read0 = g_roBuffer[dtid.x];
+    uint4 read2 = g_roBuffer.Load(dtid.x);
     uint4 read1 = g_rwBuffer[dtid.x];
-    g_rwBuffer[dtid.x] = read0 + read1;
+    uint4 read3 = g_rwBuffer.Load(dtid.x);
+    g_rwBuffer[dtid.x] = read0 + read1 + read2 + read3;
 }
 
 struct testStruct {
@@ -19,9 +21,11 @@ RWStructuredBuffer<testStruct> g_rwStructuredBuffer : register(u1);
 void test_structured_buffer(uint3 dtid)
 {
     testStruct read0 = g_roStructuredBuffer[dtid.x];
+    testStruct read2 = g_roStructuredBuffer.Load(dtid.x);
     testStruct read1 = g_rwStructuredBuffer[dtid.x];
+    testStruct read3 = g_rwStructuredBuffer.Load(dtid.x);
     testStruct modified;
-    modified.value = read0.value + read1.value;
+    modified.value = read0.value + read1.value + read2.value + read3.value;
     g_rwStructuredBuffer[dtid.x] = modified;
 }
 

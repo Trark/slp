@@ -404,7 +404,9 @@ pub enum Intrinsic {
     Float4(Expression, Expression, Expression, Expression),
 
     BufferLoad(Expression, Expression),
+    RWBufferLoad(Expression, Expression),
     StructuredBufferLoad(Expression, Expression),
+    RWStructuredBufferLoad(Expression, Expression),
 }
 
 pub use super::ast::Literal as Literal;

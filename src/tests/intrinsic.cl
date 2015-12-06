@@ -15,16 +15,20 @@ struct __globals
 void test_buffer(__private struct __globals* globals, uint3 dtid)
 {
 	uint4 read0 = globals->g_roBuffer[(int)dtid.x];
+	uint4 read2 = globals->g_roBuffer[(int)dtid.x];
 	uint4 read1 = globals->g_rwBuffer[(int)dtid.x];
-	globals->g_rwBuffer[(int)dtid.x] = read0 + read1;
+	uint4 read3 = globals->g_rwBuffer[(int)dtid.x];
+	globals->g_rwBuffer[(int)dtid.x] = read0 + read1 + read2 + read3;
 }
 
 void test_structured_buffer(__private struct __globals* globals, uint3 dtid)
 {
 	struct testStruct read0 = globals->g_roStructuredBuffer[(int)dtid.x];
+	struct testStruct read2 = globals->g_roStructuredBuffer[(int)dtid.x];
 	struct testStruct read1 = globals->g_rwStructuredBuffer[(int)dtid.x];
+	struct testStruct read3 = globals->g_rwStructuredBuffer[(int)dtid.x];
 	struct testStruct modified;
-	modified.value = read0.value + read1.value;
+	modified.value = read0.value + read1.value + read2.value + read3.value;
 	globals->g_rwStructuredBuffer[(int)dtid.x] = modified;
 }
 

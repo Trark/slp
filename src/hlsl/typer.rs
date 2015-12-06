@@ -1333,6 +1333,23 @@ fn parse_expr(ast: &ast::Expression, context: &ExpressionContext) -> Result<Type
                         _ => return Err(TyperError::UnknownTypeMember(composite_pt, member.clone())),
                     }
                 }
+                &ir::TypeLayout::Object(ir::ObjectType::RWBuffer(ref data_type)) => {
+                    match &member[..] {
+                        "Load" => {
+                            return Ok(TypedExpression::Method(UnresolvedMethod(
+                                "RWBuffer::Load".to_string(),
+                                ir::Type::from_object(ir::ObjectType::RWBuffer(data_type.clone())),
+                                vec![FunctionOverload(
+                                    FunctionName::Intrinsic(IntrinsicFactory::Intrinsic2(ir::Intrinsic::RWBufferLoad)),
+                                    ir::Type::from_data(data_type.clone()),
+                                    vec![ir::Type::int().into()]
+                                )],
+                                composite_ir
+                            )))
+                        },
+                        _ => return Err(TyperError::UnknownTypeMember(composite_pt, member.clone())),
+                    }
+                }
                 &ir::TypeLayout::Object(ir::ObjectType::StructuredBuffer(ref structured_type)) => {
                     match &member[..] {
                         "Load" => {
@@ -1341,6 +1358,23 @@ fn parse_expr(ast: &ast::Expression, context: &ExpressionContext) -> Result<Type
                                 ir::Type::from_object(ir::ObjectType::StructuredBuffer(structured_type.clone())),
                                 vec![FunctionOverload(
                                     FunctionName::Intrinsic(IntrinsicFactory::Intrinsic2(ir::Intrinsic::StructuredBufferLoad)),
+                                    ir::Type::from_structured(structured_type.clone()),
+                                    vec![ir::Type::int().into()]
+                                )],
+                                composite_ir
+                            )))
+                        },
+                        _ => return Err(TyperError::UnknownTypeMember(composite_pt, member.clone())),
+                    }
+                }
+                &ir::TypeLayout::Object(ir::ObjectType::RWStructuredBuffer(ref structured_type)) => {
+                    match &member[..] {
+                        "Load" => {
+                            return Ok(TypedExpression::Method(UnresolvedMethod(
+                                "RWStructuredBuffer::Load".to_string(),
+                                ir::Type::from_object(ir::ObjectType::RWStructuredBuffer(structured_type.clone())),
+                                vec![FunctionOverload(
+                                    FunctionName::Intrinsic(IntrinsicFactory::Intrinsic2(ir::Intrinsic::RWStructuredBufferLoad)),
                                     ir::Type::from_structured(structured_type.clone()),
                                     vec![ir::Type::int().into()]
                                 )],

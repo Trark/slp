@@ -196,7 +196,7 @@ fn print_binaryoperation(binop: &BinOp, lhs: &Box<Expression>, rhs: &Box<Express
     };
 
     if last_precedence <= op_prec { printer.print("("); }
-    print_expression_inner(lhs, op_prec, printer);
+    print_expression_inner(lhs, op_prec + 1, printer);
     printer.space();
     printer.print(op_symbol);
     printer.space();

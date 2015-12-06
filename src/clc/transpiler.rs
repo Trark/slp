@@ -696,12 +696,14 @@ fn transpile_intrinsic(intrinsic: &src::Intrinsic, context: &Context) -> Result<
                 Box::new(try!(transpile_expression(w, context)))
             )))
         },
-        src::Intrinsic::BufferLoad(ref buffer, ref loc) => {
+        src::Intrinsic::BufferLoad(ref buffer, ref loc) |
+        src::Intrinsic::RWBufferLoad(ref buffer, ref loc) |
+        src::Intrinsic::StructuredBufferLoad(ref buffer, ref loc) |
+        src::Intrinsic::RWStructuredBufferLoad(ref buffer, ref loc) => {
             let cl_buffer = Box::new(try!(transpile_expression(buffer, context)));
             let cl_loc = Box::new(try!(transpile_expression(loc, context)));
             Ok(dst::Expression::ArraySubscript(cl_buffer, cl_loc))
         },
-        src::Intrinsic::StructuredBufferLoad(_, _) => unimplemented!(),
         _ => unimplemented!(),
     }
 }
