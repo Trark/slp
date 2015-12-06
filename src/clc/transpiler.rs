@@ -222,7 +222,11 @@ impl Context {
 
         // Create list of kernel parameters
         {
-            for (slot, id) in &table.constants {
+            // Ensure a stable order (for easier testing + repeatability)
+            let mut c_keys = table.constants.keys().collect::<Vec<&u32>>();
+            c_keys.sort();
+            for slot in c_keys {
+                let id = table.constants.get(slot).unwrap_or_else(|| panic!("bad key"));
                 let cl_type = dst::Type::Pointer(
                     dst::AddressSpace::Constant,
                     Box::new(dst::Type::Struct(try!(context.get_cbuffer_struct_name(id))))
@@ -236,11 +240,17 @@ impl Context {
                 assert!(entry.is_none());
                 context.kernel_params.push(param);
             }
-            for (slot, global_entry) in &table.r_resources {
+            let mut r_keys = table.r_resources.keys().collect::<Vec<&u32>>();
+            r_keys.sort();
+            for slot in r_keys {
+                let global_entry = table.r_resources.get(slot).unwrap_or_else(|| panic!("bad key"));
                 let &src::Type(ref tyl, _) = &global_entry.ty.0;
                 let cl_type = match tyl {
                     &src::TypeLayout::Object(src::ObjectType::Buffer(ref data_type)) => {
                         dst::Type::Pointer(dst::AddressSpace::Global, Box::new(try!(transpile_datatype(data_type, &context))))
+                    }
+                    &src::TypeLayout::Object(src::ObjectType::StructuredBuffer(ref structured_type)) => {
+                        dst::Type::Pointer(dst::AddressSpace::Global, Box::new(try!(transpile_structuredtype(structured_type, &context))))
                     }
                     _ => return Err(TranspileError::TypeIsNotAllowedAsGlobal(global_entry.ty.clone())),
                 };
@@ -252,11 +262,17 @@ impl Context {
                 assert!(entry.is_none());
                 context.kernel_params.push(param);
             }
-            for (slot, global_entry) in &table.rw_resources {
+            let mut rw_keys = table.rw_resources.keys().collect::<Vec<&u32>>();
+            rw_keys.sort();
+            for slot in rw_keys {
+                let global_entry = table.rw_resources.get(slot).unwrap_or_else(|| panic!("bad key"));
                 let &src::Type(ref tyl, _) = &global_entry.ty.0;
                 let cl_type = match tyl {
                     &src::TypeLayout::Object(src::ObjectType::RWBuffer(ref data_type)) => {
                         dst::Type::Pointer(dst::AddressSpace::Global, Box::new(try!(transpile_datatype(data_type, &context))))
+                    }
+                    &src::TypeLayout::Object(src::ObjectType::RWStructuredBuffer(ref structured_type)) => {
+                        dst::Type::Pointer(dst::AddressSpace::Global, Box::new(try!(transpile_structuredtype(structured_type, &context))))
                     }
                     _ => return Err(TranspileError::TypeIsNotAllowedAsGlobal(global_entry.ty.clone())),
                 };
@@ -483,6 +499,10 @@ fn transpile_scalartype(scalartype: &src::ScalarType) -> Result<dst::Scalar, Tra
 
 fn transpile_datatype(datatype: &src::DataType, context: &Context) -> Result<dst::Type, TranspileError> {
     transpile_type(&src::Type::from(datatype.clone()), context)
+}
+
+fn transpile_structuredtype(structured_type: &src::StructuredType, context: &Context) -> Result<dst::Type, TranspileError> {
+    transpile_type(&src::Type::from(structured_type.clone()), context)
 }
 
 fn transpile_typelayout(ty: &src::TypeLayout, context: &Context) -> Result<dst::Type, TranspileError> {

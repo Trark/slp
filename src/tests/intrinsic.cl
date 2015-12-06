@@ -1,14 +1,45 @@
 
-struct __globals
+struct testStruct
 {
+	float4 value;
 };
 
+struct __globals
+{
+	__global uint4* g_roBuffer;
+	__global struct testStruct* g_roStructuredBuffer;
+	__global uint4* g_rwBuffer;
+	__global struct testStruct* g_rwStructuredBuffer;
+};
+
+void test_buffer(__private struct __globals* globals, uint3 dtid)
+{
+	uint4 read0 = globals->g_roBuffer[(int)dtid.x];
+	uint4 read1 = globals->g_rwBuffer[(int)dtid.x];
+	globals->g_rwBuffer[(int)dtid.x] = read0 + read1;
+}
+
+void test_structured_buffer(__private struct __globals* globals, uint3 dtid)
+{
+	struct testStruct read0 = globals->g_roStructuredBuffer[(int)dtid.x];
+	struct testStruct read1 = globals->g_rwStructuredBuffer[(int)dtid.x];
+	struct testStruct modified;
+	modified.value = read0.value + read1.value;
+	globals->g_rwStructuredBuffer[(int)dtid.x] = modified;
+}
+
 __attribute__((reqd_work_group_size(8, 8, 1)))
-kernel void MyKernel()
+kernel void MyKernel(__global uint4* g_roBuffer, __global struct testStruct* g_roStructuredBuffer, __global uint4* g_rwBuffer, __global struct testStruct* g_rwStructuredBuffer)
 {
 	uint3 dtid = (uint3)(get_global_id(0u), get_global_id(1u), get_global_id(2u));
 	struct __globals __init;
+	__init.g_roBuffer = g_roBuffer;
+	__init.g_roStructuredBuffer = g_roStructuredBuffer;
+	__init.g_rwBuffer = g_rwBuffer;
+	__init.g_rwStructuredBuffer = g_rwStructuredBuffer;
 	__private struct __globals* globals = &__init;
+	test_buffer(globals, dtid);
+	test_structured_buffer(globals, dtid);
 	barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 	barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 	barrier(CLK_GLOBAL_MEM_FENCE);

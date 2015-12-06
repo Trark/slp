@@ -43,5 +43,20 @@ fn overload_full() {
 fn intrinsic_full() {
     const HLSL: &'static [u8] = include_bytes!("intrinsic.hlsl");
     const CL: &'static str = include_str!("intrinsic.cl");
-    run_full(HLSL, CL, BindMap::new());
+    run_full(HLSL, CL, BindMap {
+        read_map: {
+            let mut map = HashMap::new();
+            map.insert(0, 0);
+            map.insert(1, 1);
+            map
+        },
+        write_map: {
+            let mut map = HashMap::new();
+            map.insert(0, 2);
+            map.insert(1, 3);
+            map
+        },
+        cbuffer_map: HashMap::new(),
+        sampler_map: HashMap::new(),
+    });
 }

@@ -1,7 +1,35 @@
 
+Buffer<uint4> g_roBuffer : register(t0);
+RWBuffer<uint4> g_rwBuffer : register(u0);
+
+void test_buffer(uint3 dtid)
+{
+    uint4 read0 = g_roBuffer[dtid.x];
+    uint4 read1 = g_rwBuffer[dtid.x];
+    g_rwBuffer[dtid.x] = read0 + read1;
+}
+
+struct testStruct {
+    float4 value;
+};
+
+StructuredBuffer<testStruct> g_roStructuredBuffer : register(t1);
+RWStructuredBuffer<testStruct> g_rwStructuredBuffer : register(u1);
+
+void test_structured_buffer(uint3 dtid)
+{
+    testStruct read0 = g_roStructuredBuffer[dtid.x];
+    testStruct read1 = g_rwStructuredBuffer[dtid.x];
+    testStruct modified;
+    modified.value = read0.value + read1.value;
+    g_rwStructuredBuffer[dtid.x] = modified;
+}
+
 [numthreads(8, 8, 1)]
 void CSMAIN(uint3 dtid : SV_DispatchThreadID)
 {
+    test_buffer(dtid);
+    test_structured_buffer(dtid);
     AllMemoryBarrier();
     AllMemoryBarrierWithGroupSync();
     DeviceMemoryBarrier();
