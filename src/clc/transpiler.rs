@@ -178,6 +178,7 @@ impl GlobalNameContext {
 struct Context {
     kernel_params: KernelParams,
     global_names: GlobalNameContext,
+    global_lifted_vars: HashMap<src::GlobalId, bool>,
     function_decl_map: HashMap<src::FunctionId, Vec<ParamType>>,
     variable_scopes: Vec<HashMap<src::VariableId, VariableDecl>>,
 }
@@ -188,12 +189,18 @@ impl Context {
         let mut context = Context {
             kernel_params: vec![],
             global_names: try!(GlobalNameContext::from_globals(globals)),
+            global_lifted_vars: HashMap::new(),
             function_decl_map: HashMap::new(),
             variable_scopes: vec![],
         };
 
         for rootdef in root_defs {
             match rootdef {
+                &src::RootDefinition::GlobalVariable(ref gv) => {
+                    let &src::GlobalType(src::Type(_, ref modifier), ref gs, _) = &gv.global_type;
+                    let static_const = modifier.is_const && *gs == src::GlobalStorage::Static;
+                    context.global_lifted_vars.insert(gv.id, !static_const);
+                },
                 &src::RootDefinition::Function(ref func) => {
                     let param_types = func.params.iter().fold(vec![],
                         |mut param_types, param| {
@@ -238,7 +245,7 @@ impl Context {
                     _ => return Err(TranspileError::TypeIsNotAllowedAsGlobal(global_entry.ty.clone())),
                 };
                 let param = dst::KernelParam {
-                    name: try!(context.get_global_name(&global_entry.id)),
+                    name: try!(context.get_global_name(&global_entry.id)).0,
                     typename: cl_type,
                 };
                 let entry = binds.read_map.insert(*slot, context.kernel_params.len() as u32);
@@ -254,7 +261,7 @@ impl Context {
                     _ => return Err(TranspileError::TypeIsNotAllowedAsGlobal(global_entry.ty.clone())),
                 };
                 let param = dst::KernelParam {
-                    name: try!(context.get_global_name(&global_entry.id)),
+                    name: try!(context.get_global_name(&global_entry.id)).0,
                     typename: cl_type,
                 };
                 let entry = binds.write_map.insert(*slot, context.kernel_params.len() as u32);
@@ -310,14 +317,21 @@ impl Context {
     /// Get the name of a variable declared in the current block
     fn get_global_var(&self, id: &src::GlobalId) -> Result<dst::Expression, TranspileError> {
         let gin = self.global_names.global_name_map.get(&GlobalId::LiftInstance).unwrap();
-        let global_name = try!(self.get_global_name(id));
-        Ok(dst::Expression::MemberDeref(Box::new(dst::Expression::Variable(gin.clone())), global_name))
+        let (global_name, lifted) = try!(self.get_global_name(id));
+        if lifted {
+            Ok(dst::Expression::MemberDeref(Box::new(dst::Expression::Variable(gin.clone())), global_name))
+        } else {
+            Ok(dst::Expression::Variable(global_name))
+        }
     }
 
     /// Get the name of a variable declared in the current block
-    fn get_global_name(&self, id: &src::GlobalId) -> Result<String, TranspileError> {
+    fn get_global_name(&self, id: &src::GlobalId) -> Result<(String, bool), TranspileError> {
         match self.global_names.global_name_map.get(&GlobalId::Variable(*id)) {
-            Some(v) => Ok(v.to_string()),
+            Some(v) => match self.global_lifted_vars.get(id) {
+                Some(lifted) => Ok((v.to_string(), *lifted)),
+                None => panic!(),
+            },
             None => Err(TranspileError::UnknownVariableId),
         }
     }
@@ -892,8 +906,9 @@ fn transpile_cbuffer(cb: &src::ConstantBuffer, context: &mut Context) -> Result<
 }
 
 fn transpile_globalvariable(gv: &src::GlobalVariable, context: &mut Context) -> Result<Option<dst::RootDefinition>, TranspileError> {
-    let global_name = try!(context.get_global_name(&gv.id));
-    if context.kernel_params.iter().any(|gp| { gp.name == global_name }) {
+    let (global_name, lifted) = try!(context.get_global_name(&gv.id));
+    assert_eq!(lifted, context.kernel_params.iter().any(|gp| { gp.name == global_name }));
+    if lifted {
         return Ok(None)
     } else {
         let &src::GlobalType(src::Type(ref ty, ref modifiers), ref gs, _) = &gv.global_type;

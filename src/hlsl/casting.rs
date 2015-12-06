@@ -56,7 +56,10 @@ struct NumericCast(ScalarType, ScalarType, NumericDimension);
 struct ValueTypeCast(Type, ValueType, ValueType);
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct ImplicitConversion(ExpressionType, Option<ValueTypeCast>, Option<NumericCast>);
+struct ModifierCast(TypeModifier);
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct ImplicitConversion(ExpressionType, Option<ValueTypeCast>, Option<NumericCast>, Option<ModifierCast>);
 
 impl ConversionRank {
     pub fn compare(&self, other: &ConversionRank) -> ConversionPriority {
@@ -165,21 +168,18 @@ impl NumericCast {
             NumericDimension::Matrix(ref x, ref y) => TypeLayout::Matrix(self.1.clone(), *x, *y),
         }).to_rvalue()
     }
-
-    fn apply(&self, expr: Expression) -> Expression {
-        let &NumericCast(_, ref dest, ref dim) = self;
-        let to_type_data = match *dim {
-            NumericDimension::Scalar => TypeLayout::Scalar(dest.clone()),
-            NumericDimension::Vector(ref x) => TypeLayout::Vector(dest.clone(), *x),
-            NumericDimension::Matrix(ref x, ref y) => TypeLayout::Matrix(dest.clone(), *x, *y),
-        };
-        Expression::Cast(Type::from_layout(to_type_data), Box::new(expr))
-    }
 }
 
 impl ValueTypeCast {
     fn get_target_type(&self) -> ExpressionType {
         ExpressionType(self.0.clone(), self.2.clone())
+    }
+}
+
+impl ModifierCast {
+    fn modify(&self, ty: ExpressionType) -> ExpressionType {
+        let ExpressionType(Type(ty, _), vt) = ty;
+        ExpressionType(Type(ty, self.0.clone()), vt)
     }
 }
 
@@ -195,9 +195,7 @@ impl ImplicitConversion {
         };
 
         let &Type(ref source_l, ref mods) = source_type;
-        assert!(mods.is_empty());
         let &Type(ref dest_l, ref modd) = dest_type;
-        assert!(modd.is_empty());
         let numeric_cast = match (source_l, dest_l) {
             (ref ty1, ref ty2) if ty1 == ty2 => None,
             (&TypeLayout::Scalar(ref s1), &TypeLayout::Scalar(ref s2)) => {
@@ -216,30 +214,70 @@ impl ImplicitConversion {
             // Struct casts only supported for same type structs
             _ => return Err(()),
         };
-        Ok(ImplicitConversion(source_copy, value_type_cast, numeric_cast))
+
+        let modifier_cast = if mods != modd {
+            // Can't remove important modifiers from lvalues
+            // If they're rvalues we're implicitly creating a new
+            // unmodified rvalues from the source lvalue/rvalue
+            // This should let us use consts + volatiles as normal
+            // typed inputs, but not as out params
+            if dest.1 == ValueType::Lvalue {
+                if mods.is_const && !modd.is_const {
+                    return Err(())
+                };
+                if mods.volatile && !modd.volatile {
+                    return Err(())
+                };
+            };
+            Some(ModifierCast(modd.clone()))
+        } else {
+            None
+        };
+
+        Ok(ImplicitConversion(source_copy, value_type_cast, numeric_cast, modifier_cast))
     }
 
     pub fn get_rank(&self) -> ConversionRank {
         match *self {
-            ImplicitConversion(_, _, None) => ConversionRank::Exact,
-            ImplicitConversion(_, _, Some(ref numeric)) => numeric.get_rank(),
+            ImplicitConversion(_, _, None, _) => ConversionRank::Exact,
+            ImplicitConversion(_, _, Some(ref numeric), _) => numeric.get_rank(),
         }
     }
 
      pub fn get_target_type(&self) -> ExpressionType {
-        match *self {
-            ImplicitConversion(ref source_type, None, None) => match source_type.clone() {
-                ExpressionType(ty, _) => ExpressionType(ty, ValueType::Rvalue)
-            },
-            ImplicitConversion(_, Some(ref vtc), None) => vtc.get_target_type(),
-            ImplicitConversion(_, _, Some(ref numeric)) => numeric.get_target_type(),
-        }
+        let &ImplicitConversion(ref source_type, ref value_type_cast, ref numeric_cast, ref mod_cast) = self;
+        let ty = source_type.clone();
+        let ty = match *value_type_cast {
+            Some(ref vtc) => vtc.get_target_type(),
+            None => ty,
+        };
+        let ty = match *numeric_cast {
+            Some(ref nc) => nc.get_target_type(),
+            None => ty,
+        };
+        let ty = match *mod_cast {
+            Some(ref mc) => mc.modify(ty),
+            None => ty,
+        };
+        ty
     }
 
     pub fn apply(&self, expr: Expression) -> Expression {
+        let source_type = &self.0;
         match *self {
-            ImplicitConversion(_, _, None) => expr,
-            ImplicitConversion(_, _, Some(ref cast)) => cast.apply(expr),
+            ImplicitConversion(_, _, None, ref mod_cast) => match *mod_cast {
+                Some(ref m) => Expression::Cast(Type((source_type.0).0.clone(), m.0.clone()), Box::new(expr)),
+                None => expr,
+            },
+            ImplicitConversion(_, _, Some(ref cast), ref mod_cast) => {
+                let &NumericCast(_, ref dest, ref dim) = cast;
+                let to_type_data = match *dim {
+                    NumericDimension::Scalar => TypeLayout::Scalar(dest.clone()),
+                    NumericDimension::Vector(ref x) => TypeLayout::Vector(dest.clone(), *x),
+                    NumericDimension::Matrix(ref x, ref y) => TypeLayout::Matrix(dest.clone(), *x, *y),
+                };
+                Expression::Cast(Type(to_type_data, match *mod_cast { Some(ref m) => m.0.clone(), None => (source_type.0).1.clone() }), Box::new(expr))
+            }
         }
     }
 }
@@ -250,12 +288,117 @@ fn test_implicitconversion() {
     let basic_types = &[Type::bool(), Type::int(), Type::uint(), Type::float(), Type::floatn(4)];
 
     for ty in basic_types {
-        assert_eq!(ImplicitConversion::find(&ty.to_rvalue(), &ty.to_rvalue()), Ok(ImplicitConversion(ty.to_rvalue(), None, None)));
-        assert_eq!(ImplicitConversion::find(&ty.to_lvalue(), &ty.to_rvalue()), Ok(ImplicitConversion(ty.to_lvalue(), Some(ValueTypeCast(ty.clone(), ValueType::Lvalue, ValueType::Rvalue)), None)));
+        assert_eq!(ImplicitConversion::find(&ty.to_rvalue(), &ty.to_rvalue()), Ok(ImplicitConversion(ty.to_rvalue(), None, None, None)));
+        assert_eq!(ImplicitConversion::find(&ty.to_lvalue(), &ty.to_rvalue()), Ok(ImplicitConversion(ty.to_lvalue(), Some(ValueTypeCast(ty.clone(), ValueType::Lvalue, ValueType::Rvalue)), None, None)));
         assert_eq!(ImplicitConversion::find(&ty.to_rvalue(), &ty.to_lvalue()), Err(()));
-        assert_eq!(ImplicitConversion::find(&ty.to_lvalue(), &ty.to_lvalue()), Ok(ImplicitConversion(ty.to_lvalue(), None, None)));
+        assert_eq!(ImplicitConversion::find(&ty.to_lvalue(), &ty.to_lvalue()), Ok(ImplicitConversion(ty.to_lvalue(), None, None, None)));
     }
 
     assert_eq!(ImplicitConversion::find(&Type::from_layout(TypeLayout::SamplerState).to_lvalue(), &Type::uint().to_lvalue()), Err(()));
     assert_eq!(ImplicitConversion::find(&Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::Float, 4), TypeModifier::default()))).to_lvalue(), &Type::uint().to_lvalue()), Err(()));
+}
+
+#[test]
+fn test_const() {
+    // Non-const to const rvalue
+    assert_eq!(ImplicitConversion::find(
+            &(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::default()).to_rvalue()),
+            &(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::const_only()).to_rvalue())
+        ),
+        Ok(ImplicitConversion(
+            ExpressionType(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::default()), ValueType::Rvalue),
+            None,
+            None,
+            Some(ModifierCast(TypeModifier::const_only()))
+        ))
+    );
+    assert_eq!(ImplicitConversion::find(
+            &(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::default()).to_lvalue()),
+            &(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::const_only()).to_rvalue())
+        ),
+        Ok(ImplicitConversion(
+            ExpressionType(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::default()), ValueType::Lvalue),
+            Some(ValueTypeCast(Type::int(), ValueType::Lvalue, ValueType::Rvalue)),
+            None,
+            Some(ModifierCast(TypeModifier::const_only()))
+        ))
+    );
+    // Const to const rvalue
+    assert_eq!(ImplicitConversion::find(
+            &(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::const_only()).to_rvalue()),
+            &(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::const_only()).to_rvalue())
+        ),
+        Ok(ImplicitConversion(
+            ExpressionType(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::const_only()), ValueType::Rvalue),
+            None,
+            None,
+            None
+        ))
+    );
+    assert_eq!(ImplicitConversion::find(
+            &(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::const_only()).to_lvalue()),
+            &(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::const_only()).to_rvalue())
+        ),
+        Ok(ImplicitConversion(
+            ExpressionType(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::const_only()), ValueType::Lvalue),
+            Some(ValueTypeCast(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::const_only()), ValueType::Lvalue, ValueType::Rvalue)),
+            None,
+            None
+        ))
+    );
+    // Const removing from rvalue
+    assert_eq!(ImplicitConversion::find(
+            &(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::const_only()).to_rvalue()),
+            &(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::default()).to_rvalue())
+        ),
+        Ok(ImplicitConversion(
+            ExpressionType(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::const_only()), ValueType::Rvalue),
+            None,
+            None,
+            Some(ModifierCast(TypeModifier::default()))
+        ))
+    );
+    assert_eq!(ImplicitConversion::find(
+            &(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::const_only()).to_lvalue()),
+            &(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::default()).to_rvalue())
+        ),
+        Ok(ImplicitConversion(
+            ExpressionType(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::const_only()), ValueType::Lvalue),
+            Some(ValueTypeCast(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::const_only()), ValueType::Lvalue, ValueType::Rvalue)),
+            None,
+            Some(ModifierCast(TypeModifier::default()))
+        ))
+    );
+
+    // Non-const to const lvalue
+    assert_eq!(ImplicitConversion::find(
+            &(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::default()).to_lvalue()),
+            &(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::const_only()).to_lvalue())
+        ),
+        Ok(ImplicitConversion(
+            ExpressionType(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::default()), ValueType::Lvalue),
+            None,
+            None,
+            Some(ModifierCast(TypeModifier::const_only()))
+        ))
+    );
+    // const to const lvalue
+    assert_eq!(ImplicitConversion::find(
+            &(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::const_only()).to_lvalue()),
+            &(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::const_only()).to_lvalue())
+        ),
+        Ok(ImplicitConversion(
+            ExpressionType(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::const_only()), ValueType::Lvalue),
+            None,
+            None,
+            None
+        ))
+    );
+    // const to non-const lvalue
+    assert_eq!(ImplicitConversion::find(
+            &(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::const_only()).to_lvalue()),
+            &(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::default()).to_lvalue())
+        ),
+        Err(())
+    );
 }

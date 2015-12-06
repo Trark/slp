@@ -64,7 +64,7 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
         myFunc((uint)p);
     }
     int y = 10;
-    while (y > 0)
+    while (y > g_myFour)
     {
         y--;
         myFunc((uint)y);
@@ -78,4 +78,5 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     vals[2] = 2.0f;
     float val0 = vals[0] + 1.0f;
     outTest(vals[2]);
+    myFunc(g_myFour);
 }

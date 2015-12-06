@@ -140,6 +140,8 @@ impl TypeModifier {
     pub fn is_empty(&self) -> bool {
         self.is_const == false && self.row_order == RowOrder::Column && self.precise == false && self.volatile == false
     }
+
+    pub fn const_only() -> TypeModifier { TypeModifier { is_const: true, .. TypeModifier::default() } }
 }
 
 impl Default for TypeModifier {

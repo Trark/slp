@@ -74,7 +74,7 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint
 		myFunc_0(globals, (uint)p);
 	}
 	int y = (int)10;
-	while (y > (int)0)
+	while (y > (int)g_myFour)
 	{
 		y--;
 		myFunc_0(globals, (uint)y);
@@ -88,4 +88,5 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint
 	vals[(int)2] = 2.0f;
 	float val0 = vals[(int)0] + 1.0f;
 	outTest_0(globals, &vals[(int)2]);
+	myFunc_0(globals, (uint)g_myFour);
 }

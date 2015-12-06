@@ -1108,33 +1108,33 @@ fn resolve_arithmetic_types(binop: &ir::BinOp, left: &ExpressionType, right: &Ex
     }
 
     fn do_noerror(_: &ir::BinOp, left: &ExpressionType, right: &ExpressionType) -> Result<(ImplicitConversion, ImplicitConversion), ()> {
-        let &ExpressionType(ir::Type(ref left_l, ref modl), ref left_value) = left;
-        assert!(modl.is_empty());
-        let &ExpressionType(ir::Type(ref right_l, ref modr), ref right_value) = right;
-        assert!(modr.is_empty());
-        let matched_value_type = match (left_value, right_value) {
-            (&ir::ValueType::Rvalue, _) | (_, &ir::ValueType::Rvalue) => ir::ValueType::Rvalue,
-            (&ir::ValueType::Lvalue, &ir::ValueType::Lvalue) => ir::ValueType::Lvalue,
-        };
-        let (left, right, common_type) = match (left_l, right_l) {
+        let &ExpressionType(ir::Type(ref left_l, ref modl), _) = left;
+        let &ExpressionType(ir::Type(ref right_l, ref modr), _) = right;
+        let common_layout = match (left_l, right_l) {
             (&ir::TypeLayout::Scalar(ref ls), &ir::TypeLayout::Scalar(ref rs)) => {
                 let common_scalar = try!(common_real_type(ls, rs));
-                let common = ir::Type::from_scalar(common_scalar);
-                (left, right, common)
+                let common = ir::TypeLayout::from_scalar(common_scalar);
+                common
             },
             (&ir::TypeLayout::Vector(ref ls, ref x1), &ir::TypeLayout::Vector(ref rs, ref x2)) if x1 == x2 => {
                 let common_scalar = try!(common_real_type(ls, rs));
-                let common = ir::Type::from_vector(common_scalar, *x2);
-                (left, right, common)
+                let common = ir::TypeLayout::from_vector(common_scalar, *x2);
+                common
             },
             (&ir::TypeLayout::Matrix(ref ls, ref x1, ref y1), &ir::TypeLayout::Matrix(ref rs, ref x2, ref y2)) if x1 == x2 && y1 == y2 => {
                 let common_scalar = try!(common_real_type(ls, rs));
-                let common = ir::Type::from_matrix(common_scalar, *x2, *y2);
-                (left, right, common)
+                let common = ir::TypeLayout::from_matrix(common_scalar, *x2, *y2);
+                common
             },
             _ => return Err(()),
         };
-        let common = ExpressionType(common_type, matched_value_type);
+        let out_mod = ir::TypeModifier {
+            is_const: false,
+            row_order: ir::RowOrder::Column,
+            precise: modl.precise || modr.precise,
+            volatile: false,
+        };
+        let common = ExpressionType(ir::Type(common_layout, out_mod), ir::ValueType::Rvalue);
         let lc = try!(ImplicitConversion::find(left, &common));
         let rc = try!(ImplicitConversion::find(right, &common));
         Ok((lc, rc))
