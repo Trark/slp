@@ -17,21 +17,21 @@ struct myConstants_t
 	uint g_offset;
 };
 
-void myFunc_0(__constant struct myConstants_t* myConstants, __global uint* g_myInBuffer, __global uint* g_myOutBuffer, uint x)
+void myFunc_0(uint x)
 {
 }
 
-void myFunc_1(__constant struct myConstants_t* myConstants, __global uint* g_myInBuffer, __global uint* g_myOutBuffer, float x)
+void myFunc_1(float x)
 {
 	x = 4.0f;
 }
 
-void outTest_0(__constant struct myConstants_t* myConstants, __global uint* g_myInBuffer, __global uint* g_myOutBuffer, __private float* x)
+void outTest_0(__private float* x)
 {
 	*x = 4.0f;
 }
 
-void outTest_1(__constant struct myConstants_t* myConstants, __global uint* g_myInBuffer, __global uint* g_myOutBuffer, float x, __private float* y, float z)
+void outTest_1(float x, __private float* y, float z)
 {
 	*y = x + z;
 }
@@ -54,27 +54,27 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint
 		uint testStruct_1 = (uint)1;
 		struct testStruct_0 data;
 	}
-	myFunc_1(myConstants, g_myInBuffer, g_myOutBuffer, 4.0f);
+	myFunc_1(4.0f);
 	for (uint x = 4u; x < 10u; ++x)
 	{
-		myFunc_0(myConstants, g_myInBuffer, g_myOutBuffer, x);
+		myFunc_0(x);
 		bool p = false;
-		myFunc_0(myConstants, g_myInBuffer, g_myOutBuffer, (uint)p);
+		myFunc_0((uint)p);
 	}
 	int y = (int)10;
 	while (y > (int)g_myFour)
 	{
 		y--;
-		myFunc_0(myConstants, g_myInBuffer, g_myOutBuffer, (uint)y);
+		myFunc_0((uint)y);
 	}
 	float u = (float)y + 5.4f;
-	outTest_0(myConstants, g_myInBuffer, g_myOutBuffer, &u);
-	outTest_1(myConstants, g_myInBuffer, g_myOutBuffer, 4.5f, &u, u > (float)4 ? 3.4f : u);
+	outTest_0(&u);
+	outTest_1(4.5f, &u, u > (float)4 ? 3.4f : u);
 	float vals[3];
 	vals[(int)0] = 0.0f;
 	vals[(int)1] = 1.0f;
 	vals[(int)2] = 2.0f;
 	float val0 = vals[(int)0] + 1.0f;
-	outTest_0(myConstants, g_myInBuffer, g_myOutBuffer, &vals[(int)2]);
-	myFunc_0(myConstants, g_myInBuffer, g_myOutBuffer, (uint)g_myFour);
+	outTest_0(&vals[(int)2]);
+	myFunc_0((uint)g_myFour);
 }

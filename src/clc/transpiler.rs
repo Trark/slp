@@ -5,6 +5,7 @@ use std::collections::hash_map::Entry;
 use BindMap;
 use super::cir as dst;
 use super::super::hlsl::ir as src;
+use super::super::hlsl::globals_analysis;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum TranspileError {
@@ -172,7 +173,7 @@ struct Context {
     kernel_params: KernelParams,
     global_names: GlobalNameContext,
     global_lifted_vars: HashMap<src::GlobalId, bool>,
-    function_decl_map: HashMap<src::FunctionId, Vec<ParamType>>,
+    function_decl_map: HashMap<src::FunctionId, (Vec<ParamType>, Vec<dst::FunctionParam>, Vec<dst::Expression>)>,
     variable_scopes: Vec<HashMap<src::VariableId, VariableDecl>>,
 }
 
@@ -194,19 +195,6 @@ impl Context {
                     let static_const = modifier.is_const && *gs == src::GlobalStorage::Static;
                     context.global_lifted_vars.insert(gv.id, !static_const);
                 },
-                &src::RootDefinition::Function(ref func) => {
-                    let param_types = func.params.iter().fold(vec![],
-                        |mut param_types, param| {
-                            match param.param_type.1 {
-                                src::InputModifier::InOut | src::InputModifier::Out => param_types.push(ParamType::Pointer),
-                                src::InputModifier::In => param_types.push(ParamType::Normal),
-                            };
-                            param_types
-                        }
-                    );
-                    let ret = context.function_decl_map.insert(func.id.clone(), param_types);
-                    assert_eq!(ret, None);
-                },
                 _ => { },
             }
         }
@@ -214,6 +202,8 @@ impl Context {
         let mut binds = BindMap::new();
 
         // Create list of kernel parameters
+        let mut kernel_param_ids = vec![];
+        enum GlobalKey { Global(src::GlobalId), Constant(src::ConstantBufferId) };
         {
             // Ensure a stable order (for easier testing + repeatability)
             let mut c_keys = table.constants.keys().collect::<Vec<&u32>>();
@@ -232,6 +222,7 @@ impl Context {
                 let entry = binds.cbuffer_map.insert(*slot, context.kernel_params.len() as u32);
                 assert!(entry.is_none());
                 context.kernel_params.push(param);
+                kernel_param_ids.push(GlobalKey::Constant(id.clone()));
             }
             let mut r_keys = table.r_resources.keys().collect::<Vec<&u32>>();
             r_keys.sort();
@@ -254,6 +245,7 @@ impl Context {
                 let entry = binds.read_map.insert(*slot, context.kernel_params.len() as u32);
                 assert!(entry.is_none());
                 context.kernel_params.push(param);
+                kernel_param_ids.push(GlobalKey::Global(global_entry.id));
             }
             let mut rw_keys = table.rw_resources.keys().collect::<Vec<&u32>>();
             rw_keys.sort();
@@ -276,16 +268,52 @@ impl Context {
                 let entry = binds.write_map.insert(*slot, context.kernel_params.len() as u32);
                 assert!(entry.is_none());
                 context.kernel_params.push(param);
+                kernel_param_ids.push(GlobalKey::Global(global_entry.id));
+            }
+        }
+
+        let usage = globals_analysis::GlobalUsage::analyse(root_defs);
+        for rootdef in root_defs {
+            match rootdef {
+                &src::RootDefinition::Function(ref func) => {
+                    let param_types = func.params.iter().fold(vec![],
+                        |mut param_types, param| {
+                            match param.param_type.1 {
+                                src::InputModifier::InOut | src::InputModifier::Out => param_types.push(ParamType::Pointer),
+                                src::InputModifier::In => param_types.push(ParamType::Normal),
+                            };
+                            param_types
+                        }
+                    );
+                    let function_global_usage = usage.functions.get(&func.id).unwrap_or_else(|| panic!("analysis missing function"));
+
+                    let mut global_params = vec![];
+                    let mut global_args = vec![];
+                    for (ref key, ref kernel_param) in kernel_param_ids.iter().zip(context.kernel_params.iter()) {
+                        let used = match *key {
+                            &GlobalKey::Global(ref global) => function_global_usage.globals.contains(&global),
+                            &GlobalKey::Constant(ref cb) => function_global_usage.cbuffers.contains(&cb)
+                        };
+                        if used {
+                            global_params.push(dst::FunctionParam { name: kernel_param.name.clone(), typename: kernel_param.typename.clone() });
+                            global_args.push(dst::Expression::Variable(kernel_param.name.clone()));
+                        }
+                    };
+
+                    let ret = context.function_decl_map.insert(func.id.clone(), (param_types, global_params, global_args));
+                    assert_eq!(ret, None);
+                },
+                _ => { },
             }
         }
 
         Ok((context, binds))
     }
 
-    fn get_function(&self, id: &src::FunctionId) -> Result<(dst::Expression, Vec<ParamType>), TranspileError> {
+    fn get_function(&self, id: &src::FunctionId) -> Result<(dst::Expression, Vec<ParamType>, Vec<dst::FunctionParam>, Vec<dst::Expression>), TranspileError> {
         let name = try!(self.get_function_name(id));
         match self.function_decl_map.get(id) {
-            Some(decl) => Ok((dst::Expression::Variable(name), decl.clone())),
+            Some(&(ref decl, ref params, ref args)) => Ok((dst::Expression::Variable(name), decl.clone(), params.clone(), args.clone())),
             None => panic!("Function not defined"), // Name exists but decl doesn't
         }
     }
@@ -418,22 +446,6 @@ impl Context {
     fn pop_scope(&mut self) {
         assert!(self.variable_scopes.len() > 0);
         self.variable_scopes.pop();
-    }
-
-    fn generate_function_global_params(&self) -> Result<Vec<dst::FunctionParam>, TranspileError> {
-        let mut params = vec![];
-        for kernel_param in &self.kernel_params {
-            params.push(dst::FunctionParam { name: kernel_param.name.clone(), typename: kernel_param.typename.clone() });
-        };
-        Ok(params)
-    }
-
-    fn generate_function_global_arguments(&self) -> Result<Vec<dst::Expression>, TranspileError> {
-        let mut args = vec![];
-        for kernel_param in &self.kernel_params {
-            args.push(dst::Expression::Variable(kernel_param.name.clone()));
-        };
-        Ok(args)
     }
 }
 
@@ -693,7 +705,7 @@ fn transpile_expression(expression: &src::Expression, context: &Context) -> Resu
             Ok(dst::Expression::Member(cl_expr, member_name.clone()))
         },
         &src::Expression::Call(ref func_id, ref params) => {
-            let (func_expr, pts) = try!(context.get_function(func_id));
+            let (func_expr, pts, _, args) = try!(context.get_function(func_id));
             assert_eq!(params.len(), pts.len());
             let mut params_exprs: Vec<dst::Expression> = vec![];
             for (param, pt) in params.iter().zip(pts) {
@@ -704,7 +716,7 @@ fn transpile_expression(expression: &src::Expression, context: &Context) -> Resu
                 };
                 params_exprs.push(param_expr);
             };
-            let mut final_arguments = try!(context.generate_function_global_arguments());
+            let mut final_arguments = args;
             final_arguments.append(&mut params_exprs);
             Ok(dst::Expression::Call(Box::new(func_expr), final_arguments))
         },
@@ -806,7 +818,7 @@ fn transpile_param(param: &src::FunctionParam, context: &Context) -> Result<dst:
 }
 
 fn transpile_params(params: &[src::FunctionParam], context: &Context) -> Result<Vec<dst::FunctionParam>, TranspileError> {
-    let mut cl_params = try!(context.generate_function_global_params());
+    let mut cl_params = vec![];
     for param in params {
         cl_params.push(try!(transpile_param(param, context)));
     }
@@ -920,7 +932,9 @@ fn transpile_functiondefinition(func: &src::FunctionDefinition, context: &mut Co
         }
     );
     context.push_scope_with_pointer_overrides(&func.scope, &out_params);
-    let params = try!(transpile_params(&func.params, context));
+    let (_, _, global_params, _) = try!(context.get_function(&func.id));
+    let mut params = global_params;
+    params.append(&mut try!(transpile_params(&func.params, context)));
     let body = try!(transpile_statements(&func.body, context));
     context.pop_scope();
     let cl_func = dst::FunctionDefinition {
