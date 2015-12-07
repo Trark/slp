@@ -10,6 +10,7 @@ fn run_full(hlsl: &'static [u8], cl: &'static str, binds: BindMap) {
     let output = code_result.unwrap();
 
     let expected = cl.to_string().replace("\r\n", "\n");
+    println!("{}", output.code.to_string());
     for (code_line, expected_line) in output.code.to_string().lines().zip(expected.lines()) {
         assert_eq!(&code_line[..], expected_line);
     }
