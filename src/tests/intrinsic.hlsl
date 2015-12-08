@@ -29,6 +29,8 @@ void test_structured_buffer(uint3 dtid)
     g_rwStructuredBuffer[dtid.x] = modified;
 }
 
+RWTexture2D<float4> g_rwTexture2D : register(u2);
+
 [numthreads(8, 8, 1)]
 void CSMAIN(uint3 dtid : SV_DispatchThreadID)
 {

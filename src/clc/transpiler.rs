@@ -259,6 +259,9 @@ impl Context {
                     &src::TypeLayout::Object(src::ObjectType::RWStructuredBuffer(ref structured_type)) => {
                         dst::Type::Pointer(dst::AddressSpace::Global, Box::new(try!(transpile_structuredtype(structured_type, &context))))
                     }
+                    &src::TypeLayout::Object(src::ObjectType::RWTexture2D(_)) => {
+                        dst::Type::Image2D(dst::AccessModifier::ReadWrite)
+                    }
                     _ => return Err(TranspileError::TypeIsNotAllowedAsGlobal(global_entry.ty.clone())),
                 };
                 let param = dst::KernelParam {

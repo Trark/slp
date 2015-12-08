@@ -100,6 +100,14 @@ fn print_address_space(address_space: &AddressSpace, printer: &mut Printer) {
     });
 }
 
+fn print_access_modifier(access_modifier: &AccessModifier, printer: &mut Printer) {
+    match *access_modifier {
+        AccessModifier::ReadOnly => printer.print("read_only "),
+        AccessModifier::WriteOnly => printer.print("write_only "),
+        AccessModifier::ReadWrite => { },
+    };
+}
+
 fn print_typename(typename: &Type, printer: &mut Printer) {
     match typename {
         &Type::Void => printer.print("void"),
@@ -121,6 +129,10 @@ fn print_typename(typename: &Type, printer: &mut Printer) {
             printer.print(identifier);
         },
         &Type::Array(_, _) => panic!("Array types should not be printed directly"),
+        &Type::Image2D(ref access_modifier) => {
+            print_access_modifier(access_modifier, printer);
+            printer.print("image2d_t");
+        },
         _ => unimplemented!(),
     };
 }
