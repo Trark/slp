@@ -1384,6 +1384,23 @@ fn parse_expr(ast: &ast::Expression, context: &ExpressionContext) -> Result<Type
                         _ => return Err(TyperError::UnknownTypeMember(composite_pt, member.clone())),
                     }
                 }
+                &ir::TypeLayout::Object(ir::ObjectType::RWTexture2D(ref data_type)) => {
+                    match &member[..] {
+                        "Load" => {
+                            return Ok(TypedExpression::Method(UnresolvedMethod(
+                                "RWTexture2D::Load".to_string(),
+                                ir::Type::from_object(ir::ObjectType::RWTexture2D(data_type.clone())),
+                                vec![FunctionOverload(
+                                    FunctionName::Intrinsic(IntrinsicFactory::Intrinsic2(ir::Intrinsic::RWTexture2DLoad)),
+                                    ir::Type::from_data(data_type.clone()),
+                                    vec![ir::Type::intn(2).into()]
+                                )],
+                                composite_ir
+                            )))
+                        },
+                        _ => return Err(TyperError::UnknownTypeMember(composite_pt, member.clone())),
+                    }
+                }
                 // Todo: Matrix components + Object members
                 _ => return Err(TyperError::TypeDoesNotHaveMembers(composite_pt)),
             };

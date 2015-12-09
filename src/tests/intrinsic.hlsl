@@ -31,11 +31,20 @@ void test_structured_buffer(uint3 dtid)
 
 RWTexture2D<float4> g_rwTexture2D : register(u2);
 
+void test_texture_2d(uint3 dtid)
+{
+    int2 coord;
+    coord.x = dtid.x;
+    coord.y = dtid.y;
+    float4 read_ui = g_rwTexture2D.Load(coord);
+}
+
 [numthreads(8, 8, 1)]
 void CSMAIN(uint3 dtid : SV_DispatchThreadID)
 {
     test_buffer(dtid);
     test_structured_buffer(dtid);
+    test_texture_2d(dtid);
     AllMemoryBarrier();
     AllMemoryBarrierWithGroupSync();
     DeviceMemoryBarrier();

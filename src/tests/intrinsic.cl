@@ -24,12 +24,21 @@ void test_structured_buffer(__global struct testStruct* g_roStructuredBuffer, __
 	g_rwStructuredBuffer[(int)dtid.x] = modified;
 }
 
+void test_texture_2d(image2d_t g_rwTexture2D, uint3 dtid)
+{
+	int2 coord;
+	coord.x = (int)dtid.x;
+	coord.y = (int)dtid.y;
+	float4 read_ui = read_imagef(g_rwTexture2D, coord);
+}
+
 __attribute__((reqd_work_group_size(8, 8, 1)))
 kernel void MyKernel(__global uint4* g_roBuffer, __global struct testStruct* g_roStructuredBuffer, __global uint4* g_rwBuffer, __global struct testStruct* g_rwStructuredBuffer, image2d_t g_rwTexture2D)
 {
 	uint3 dtid = (uint3)(get_global_id(0u), get_global_id(1u), get_global_id(2u));
 	test_buffer(g_roBuffer, g_rwBuffer, dtid);
 	test_structured_buffer(g_roStructuredBuffer, g_rwStructuredBuffer, dtid);
+	test_texture_2d(g_rwTexture2D, dtid);
 	barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 	barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 	barrier(CLK_GLOBAL_MEM_FENCE);

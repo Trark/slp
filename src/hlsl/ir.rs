@@ -407,6 +407,7 @@ pub enum Intrinsic {
     RWBufferLoad(Expression, Expression),
     StructuredBufferLoad(Expression, Expression),
     RWStructuredBufferLoad(Expression, Expression),
+    RWTexture2DLoad(Expression, Expression),
 }
 
 pub use super::ast::Literal as Literal;

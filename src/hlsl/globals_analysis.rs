@@ -204,7 +204,8 @@ fn search_intrinsic(intrinsic: &Intrinsic, usage: &mut LocalFunctionGlobalUsage)
         Intrinsic::BufferLoad(ref e1, ref e2) |
         Intrinsic::RWBufferLoad(ref e1, ref e2) |
         Intrinsic::StructuredBufferLoad(ref e1, ref e2) |
-        Intrinsic::RWStructuredBufferLoad(ref e1, ref e2) => {
+        Intrinsic::RWStructuredBufferLoad(ref e1, ref e2) |
+        Intrinsic::RWTexture2DLoad(ref e1, ref e2) => {
             search_expression(e1, usage);
             search_expression(e2, usage);
         }

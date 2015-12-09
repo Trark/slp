@@ -671,6 +671,15 @@ fn transpile_intrinsic(intrinsic: &src::Intrinsic, context: &Context) -> Result<
             let cl_loc = Box::new(try!(transpile_expression(loc, context)));
             Ok(dst::Expression::ArraySubscript(cl_buffer, cl_loc))
         },
+        src::Intrinsic::RWTexture2DLoad(ref tex, ref loc) => {
+            let cl_tex = try!(transpile_expression(tex, context));
+            let cl_loc = try!(transpile_expression(loc, context));
+            // Todo: Non-float4 textures
+            Ok(dst::Expression::Call(
+                Box::new(dst::Expression::Variable("read_imagef".to_string())),
+                vec![cl_tex, cl_loc]
+            ))
+        },
         _ => unimplemented!(),
     }
 }

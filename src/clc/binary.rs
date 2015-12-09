@@ -355,7 +355,7 @@ fn print_expression_inner(expression: &Expression, last_precedence: u32, printer
             printer.print("(");
             print_typename(ty, printer);
             printer.print(")");
-            print_expression_inner(expr, prec, printer);
+            print_expression_inner(expr, prec + 1, printer);
             if last_precedence <= prec { printer.print(")") }
         },
         &Expression::Intrinsic(ref intrinsic) => print_intrinsic(intrinsic, printer),
