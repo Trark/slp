@@ -1705,8 +1705,7 @@ fn parse_rootdefinition_function(fd: &ast::FunctionDefinition, mut context: Glob
         id: context.make_function_id(),
         returntype: return_type,
         params: func_params,
-        body: body_ir,
-        scope: decls,
+        scope_block: ir::ScopeBlock(body_ir, decls),
         attributes: fd.attributes.clone(),
     };
     let func_type = FunctionOverload(

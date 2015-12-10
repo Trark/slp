@@ -943,11 +943,11 @@ fn transpile_functiondefinition(func: &src::FunctionDefinition, context: &mut Co
             out_params
         }
     );
-    context.push_scope_with_pointer_overrides(&func.scope, &out_params);
+    context.push_scope_with_pointer_overrides(&func.scope_block.1, &out_params);
     let (_, _, global_params, _) = try!(context.get_function(&func.id));
     let mut params = global_params;
     params.append(&mut try!(transpile_params(&func.params, context)));
-    let body = try!(transpile_statements(&func.body, context));
+    let body = try!(transpile_statements(&func.scope_block.0, context));
     context.pop_scope();
     let cl_func = dst::FunctionDefinition {
         name: try!(context.get_function_name(&func.id)),

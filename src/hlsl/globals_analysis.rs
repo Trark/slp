@@ -61,7 +61,7 @@ impl LocalFunctionGlobalUsage {
     fn analyse(function: &FunctionDefinition) -> LocalFunctionGlobalUsage {
         let mut usage = LocalFunctionGlobalUsage { globals: HashSet::new(), cbuffers: HashSet::new(), functions: HashSet::new() };
         // this should really be a ir::ScopeBlock search
-        for statement in &function.body {
+        for statement in &function.scope_block.0 {
             search_statement(statement, &mut usage);
         };
         usage

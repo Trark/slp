@@ -540,8 +540,7 @@ pub struct FunctionDefinition {
     pub id: FunctionId,
     pub returntype: Type,
     pub params: Vec<FunctionParam>,
-    pub body: Vec<Statement>,
-    pub scope: ScopedDeclarations,
+    pub scope_block: ScopeBlock,
     pub attributes: Vec<FunctionAttribute>,
 }
 
