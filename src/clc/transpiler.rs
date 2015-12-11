@@ -175,6 +175,7 @@ struct Context {
     global_lifted_vars: HashMap<src::GlobalId, bool>,
     function_decl_map: HashMap<src::FunctionId, (Vec<ParamType>, Vec<dst::FunctionParam>, Vec<dst::Expression>)>,
     variable_scopes: Vec<HashMap<src::VariableId, VariableDecl>>,
+    type_context: src::TypeContext,
 }
 
 impl Context {
@@ -186,6 +187,10 @@ impl Context {
             global_lifted_vars: HashMap::new(),
             function_decl_map: HashMap::new(),
             variable_scopes: vec![],
+            type_context: match src::TypeContext::from_roots(root_defs) {
+                Ok(rt) => rt,
+                Err(()) => return Err(TranspileError::Unknown),
+            },
         };
 
         for rootdef in root_defs {
@@ -433,22 +438,24 @@ impl Context {
         }
     }
 
-    fn push_scope(&mut self, decls: &src::ScopedDeclarations) {
-        self.push_scope_with_pointer_overrides(decls, &[])
+    fn push_scope(&mut self, scope_block: &src::ScopeBlock) {
+        self.push_scope_with_pointer_overrides(scope_block, &[])
     }
 
-    fn push_scope_with_pointer_overrides(&mut self, decls: &src::ScopedDeclarations, pointers: &[src::VariableId]) {
+    fn push_scope_with_pointer_overrides(&mut self, scope_block: &src::ScopeBlock, pointers: &[src::VariableId]) {
         self.variable_scopes.push(HashMap::new());
-        for (var_id, var_name) in &decls.variables {
+        for (var_id, var_name) in &scope_block.1.variables {
             let identifier = self.make_identifier(&var_name);
             let map = self.variable_scopes.last_mut().unwrap();
             map.insert(var_id.clone(), VariableDecl(identifier, if pointers.iter().any(|pp| pp == var_id) { ParamType::Pointer } else { ParamType::Normal }));
-        }
+        };
+        self.type_context.push_scope(scope_block);
     }
 
     fn pop_scope(&mut self) {
         assert!(self.variable_scopes.len() > 0);
         self.variable_scopes.pop();
+        self.type_context.pop_scope();
     }
 }
 
@@ -674,9 +681,29 @@ fn transpile_intrinsic(intrinsic: &src::Intrinsic, context: &Context) -> Result<
         src::Intrinsic::RWTexture2DLoad(ref tex, ref loc) => {
             let cl_tex = try!(transpile_expression(tex, context));
             let cl_loc = try!(transpile_expression(loc, context));
-            // Todo: Non-float4 textures
+            let ty = match context.type_context.get_expression_type(tex) {
+                Ok(ty) => ty,
+                Err(()) => return Err(TranspileError::Unknown),
+            };
+            let func_name = match ty {
+                src::ExpressionType(src::Type(src::TypeLayout::Object(src::ObjectType::RWTexture2D(ref data_type)), _), _) => {
+                    match data_type.0 {
+                        src::DataLayout::Scalar(ref scalar) | src::DataLayout::Vector(ref scalar, _) => {
+                            match *scalar {
+                                src::ScalarType::Int => "read_imagei",
+                                src::ScalarType::UInt => "read_imageui",
+                                src::ScalarType::Float => "read_imagef",
+                                _ => return Err(TranspileError::Unknown),
+                            }
+                        },
+                        src::DataLayout::Matrix(_, _, _) => return Err(TranspileError::Unknown),
+                    }
+                },
+                _ => return Err(TranspileError::Unknown),
+            };
+            // Todo: Swizzle down
             Ok(dst::Expression::Call(
-                Box::new(dst::Expression::Variable("read_imagef".to_string())),
+                Box::new(dst::Expression::Variable(func_name.to_string())),
                 vec![cl_tex, cl_loc]
             ))
         },
@@ -767,21 +794,24 @@ fn transpile_statement(statement: &src::Statement, context: &mut Context) -> Res
     match statement {
         &src::Statement::Expression(ref expr) => Ok(dst::Statement::Expression(try!(transpile_expression(expr, context)))),
         &src::Statement::Var(ref vd) => Ok(dst::Statement::Var(try!(transpile_vardef(vd, context)))),
-        &src::Statement::Block(src::ScopeBlock(ref statements, ref decls)) => {
-            context.push_scope(decls);
+        &src::Statement::Block(ref scope_block) => {
+            let &src::ScopeBlock(ref statements, _) = scope_block;
+            context.push_scope(scope_block);
             let cl_statements = try!(transpile_statements(statements, context));
             context.pop_scope();
             Ok(dst::Statement::Block(cl_statements))
         },
-        &src::Statement::If(ref cond, src::ScopeBlock(ref statements, ref decls)) => {
-            context.push_scope(decls);
+        &src::Statement::If(ref cond, ref scope_block) => {
+            let &src::ScopeBlock(ref statements, _) = scope_block;
+            context.push_scope(scope_block);
             let cl_cond = try!(transpile_expression(cond, context));
             let cl_statements = try!(transpile_statements(statements, context));
             context.pop_scope();
             Ok(dst::Statement::If(cl_cond, Box::new(dst::Statement::Block(cl_statements))))
         },
-        &src::Statement::For(ref init, ref cond, ref update, src::ScopeBlock(ref statements, ref decls)) => {
-            context.push_scope(decls);
+        &src::Statement::For(ref init, ref cond, ref update, ref scope_block) => {
+            let &src::ScopeBlock(ref statements, _) = scope_block;
+            context.push_scope(scope_block);
             let cl_init = try!(transpile_condition(init, context));
             let cl_cond = try!(transpile_expression(cond, context));
             let cl_update = try!(transpile_expression(update, context));
@@ -789,8 +819,9 @@ fn transpile_statement(statement: &src::Statement, context: &mut Context) -> Res
             context.pop_scope();
             Ok(dst::Statement::For(cl_init, cl_cond, cl_update, Box::new(dst::Statement::Block(cl_statements))))
         },
-        &src::Statement::While(ref cond, src::ScopeBlock(ref statements, ref decls)) => {
-            context.push_scope(decls);
+        &src::Statement::While(ref cond, ref scope_block) => {
+            let &src::ScopeBlock(ref statements, _) = scope_block;
+            context.push_scope(scope_block);
             let cl_cond = try!(transpile_expression(cond, context));
             let cl_statements = try!(transpile_statements(statements, context));
             context.pop_scope();
@@ -943,7 +974,7 @@ fn transpile_functiondefinition(func: &src::FunctionDefinition, context: &mut Co
             out_params
         }
     );
-    context.push_scope_with_pointer_overrides(&func.scope_block.1, &out_params);
+    context.push_scope_with_pointer_overrides(&func.scope_block, &out_params);
     let (_, _, global_params, _) = try!(context.get_function(&func.id));
     let mut params = global_params;
     params.append(&mut try!(transpile_params(&func.params, context)));
@@ -959,9 +990,9 @@ fn transpile_functiondefinition(func: &src::FunctionDefinition, context: &mut Co
 }
 
 fn transpile_kernel(kernel: &src::Kernel, context: &mut Context) -> Result<dst::RootDefinition, TranspileError> {
-    context.push_scope(&kernel.scope);
+    context.push_scope(&kernel.scope_block);
     let mut body = try!(transpile_kernel_input_semantics(&kernel.params, context));
-    let mut main_body = try!(transpile_statements(&kernel.body, context));
+    let mut main_body = try!(transpile_statements(&kernel.scope_block.0, context));
     context.pop_scope();
     body.append(&mut main_body);
     let cl_kernel = dst::Kernel {

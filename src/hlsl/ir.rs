@@ -562,8 +562,7 @@ pub struct KernelParam(pub VariableId, pub KernelSemantic);
 pub struct Kernel {
     pub group_dimensions: Dimension,
     pub params: Vec<KernelParam>,
-    pub body: Vec<Statement>,
-    pub scope: ScopedDeclarations,
+    pub scope_block: ScopeBlock,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -627,6 +626,171 @@ impl GlobalTable {
             rw_resources: HashMap::new(),
             samplers: HashMap::new(),
             constants: HashMap::new(),
+        }
+    }
+}
+
+pub struct TypeContext {
+    globals: HashMap<GlobalId, Type>,
+    constants: HashMap<ConstantBufferId, HashMap<String, Type>>,
+    structs: HashMap<StructId, HashMap<String, Type>>,
+    functions: HashMap<FunctionId, Type>, // Return type
+    locals: Vec<HashMap<VariableId, Type>>,
+}
+
+impl TypeContext {
+    pub fn from_roots(root_definitions: &[RootDefinition]) -> Result<TypeContext, ()> {
+        let mut context = TypeContext {
+            globals: HashMap::new(),
+            constants: HashMap::new(),
+            structs: HashMap::new(),
+            functions: HashMap::new(),
+            locals: vec![],
+        };
+        for root_definition in root_definitions {
+            match *root_definition {
+                RootDefinition::Struct(ref sd) => {
+                    let mut name_map = HashMap::new();
+                    for constant in &sd.members {
+                        match name_map.insert(constant.name.clone(), constant.typename.clone()) {
+                            None => { },
+                            Some(_) => return Err(()),
+                        }
+                    };
+                    match context.structs.insert(sd.id, name_map) {
+                        None => { },
+                        Some(_) => return Err(()),
+                    }
+                },
+                RootDefinition::SamplerState => unimplemented!(),
+                RootDefinition::GlobalVariable(ref gv) => {
+                    match context.globals.insert(gv.id.clone(), gv.global_type.0.clone()) {
+                        None => { },
+                        Some(_) => return Err(()),
+                    }
+                },
+                RootDefinition::ConstantBuffer(ref cb) => {
+                    let mut name_map = HashMap::new();
+                    for constant in &cb.members {
+                        match name_map.insert(constant.name.clone(), constant.typename.clone()) {
+                            None => { },
+                            Some(_) => return Err(()),
+                        }
+                    };
+                    match context.constants.insert(cb.id, name_map) {
+                        None => { },
+                        Some(_) => return Err(()),
+                    }
+                },
+                RootDefinition::Function(ref func) => {
+                    match context.functions.insert(func.id.clone(), func.returntype.clone()) {
+                        None => { },
+                        Some(_) => return Err(()),
+                    }
+                },
+                RootDefinition::Kernel(_) => { },
+            }
+        };
+        Ok (context)
+    }
+
+    pub fn push_scope(&mut self, scope_block: &ScopeBlock) {
+        let mut scope = HashMap::new();
+        for statement in &scope_block.0 {
+            match *statement {
+                Statement::Var(ref vd) => {
+                    match scope.insert(vd.id.clone(), vd.local_type.0.clone()) {
+                        None => { },
+                        Some(_) => panic!("Multiple locals in block with same id"),
+                    }
+                },
+                _ => { },
+            }
+        };
+        self.locals.push(scope);
+    }
+
+    pub fn pop_scope(&mut self) {
+        assert!(self.locals.len() > 0);
+        self.locals.pop();
+    }
+
+    fn get_literal_type(literal: &Literal) -> ExpressionType {
+        (match *literal {
+            Literal::Bool(_) => Type::bool(),
+            Literal::UntypedInt(_) => panic!("untyped ints should be cast in a correct ir tree"),
+            Literal::Int(_) => Type::int(),
+            Literal::UInt(_) => Type::uint(),
+            Literal::Long(_) => unimplemented!(),
+            Literal::Half(_) => Type::from_scalar(ScalarType::Half),
+            Literal::Float(_) => Type::float(),
+            Literal::Double(_) => Type::double(),
+        }).to_rvalue()
+    }
+
+    pub fn get_expression_type(&self, expression: &Expression) -> Result<ExpressionType, ()> {
+        match *expression {
+            Expression::Literal(ref lit) => Ok(TypeContext::get_literal_type(lit)),
+            Expression::Variable(ref var_ref) => {
+                let up = (var_ref.1).0 as usize;
+                if self.locals.len() <= up {
+                    return Err(())
+                } else {
+                    let level = self.locals.len() - up - 1;
+                    match self.locals[level].get(&var_ref.0) {
+                        Some(ref ty) => Ok(ty.to_lvalue()),
+                        None => Err(()),
+                    }
+                }
+            },
+            Expression::Global(ref id) => {
+                match self.globals.get(id) {
+                    Some(ref ty) => Ok(ty.to_lvalue()),
+                    None => Err(()),
+                }
+            },
+            Expression::ConstantVariable(ref id, ref name) => {
+                match self.constants.get(id) {
+                    Some(ref cm) => {
+                        match cm.get(name) {
+                            Some(ref ty) => Ok(ty.to_lvalue()),
+                            None => Err(()),
+                        }
+                    }
+                    None => Err(()),
+                }
+            },
+            Expression::UnaryOperation(_, _) => unimplemented!(),
+            Expression::BinaryOperation(_, _, _) => unimplemented!(),
+            Expression::TernaryConditional(_, ref expr_left, ref expr_right) => {
+                assert_eq!(self.get_expression_type(expr_left), self.get_expression_type(expr_right));
+                self.get_expression_type(expr_left)
+            },
+            Expression::ArraySubscript(_, _) => unimplemented!(),
+            Expression::Member(ref expr, ref name)  => {
+                let expr_type = try!(self.get_expression_type(&expr));
+                let id = match (expr_type.0).0 {
+                    TypeLayout::Struct(id) => id,
+                    _ => return Err(())
+                };
+                match self.structs.get(&id) {
+                    Some(ref cm) => {
+                        match cm.get(name) {
+                            Some(ref ty) => Ok(ty.to_lvalue()),
+                            None => Err(()),
+                        }
+                    }
+                    None => Err(()),
+                }
+            },
+            Expression::Call(ref id, _) => {
+                match self.functions.get(id) {
+                    Some(ref ty) => Ok(ty.to_lvalue()),
+                    None => Err(()),
+                }
+            },
+            Expression::Cast(ref ty, _) => Ok(ty.to_rvalue()),
+            Expression::Intrinsic(_) => unimplemented!(),
         }
     }
 }

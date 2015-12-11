@@ -55,6 +55,8 @@ fn intrinsic_full() {
             map.insert(0, 2);
             map.insert(1, 3);
             map.insert(2, 4);
+            map.insert(3, 5);
+            map.insert(4, 6);
             map
         },
         cbuffer_map: HashMap::new(),

@@ -1749,8 +1749,7 @@ fn parse_rootdefinition_kernel(fd: &ast::FunctionDefinition, context: GlobalCont
     let kernel = ir::Kernel {
         group_dimensions: try!(find_dispatch_dimensions(&fd.attributes[..])),
         params: kernel_params,
-        body: body_ir,
-        scope: decls,
+        scope_block: ir::ScopeBlock(body_ir, decls),
     };
     Ok((ir::RootDefinition::Kernel(kernel), context))
 }
@@ -1944,8 +1943,7 @@ fn test_typeparse() {
             ir::RootDefinition::Kernel(ir::Kernel {
                 group_dimensions: ir::Dimension(8, 8, 1),
                 params: vec![],
-                body: vec![],
-                scope: ir::ScopedDeclarations { variables: HashMap::new() },
+                scope_block: ir::ScopeBlock(vec![], ir::ScopedDeclarations { variables: HashMap::new() }),
             }),
         ],
     });
