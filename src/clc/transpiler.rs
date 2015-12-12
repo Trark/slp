@@ -204,6 +204,8 @@ impl Context {
             }
         }
 
+        let usage = globals_analysis::GlobalUsage::analyse(root_defs);
+
         let mut binds = BindMap::new();
 
         // Create list of kernel parameters
@@ -265,7 +267,14 @@ impl Context {
                         dst::Type::Pointer(dst::AddressSpace::Global, Box::new(try!(transpile_structuredtype(structured_type, &context))))
                     }
                     &src::TypeLayout::Object(src::ObjectType::RWTexture2D(_)) => {
-                        dst::Type::Image2D(dst::AccessModifier::ReadWrite)
+                        let read = usage.image_reads.contains(&global_entry.id);
+                        let write = usage.image_writes.contains(&global_entry.id);
+                        let access = match (read, write) {
+                            (false, false) | (true, false) => dst::AccessModifier::ReadOnly,
+                            (false, true) => dst::AccessModifier::WriteOnly,
+                            (true, true) => dst::AccessModifier::ReadWrite, // OpenCL 2.0 only
+                        };
+                        dst::Type::Image2D(access)
                     }
                     _ => return Err(TranspileError::TypeIsNotAllowedAsGlobal(global_entry.ty.clone())),
                 };
@@ -280,7 +289,6 @@ impl Context {
             }
         }
 
-        let usage = globals_analysis::GlobalUsage::analyse(root_defs);
         for rootdef in root_defs {
             match rootdef {
                 &src::RootDefinition::Function(ref func) => {

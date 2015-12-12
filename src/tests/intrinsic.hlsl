@@ -29,18 +29,18 @@ void test_structured_buffer(uint3 dtid)
     g_rwStructuredBuffer[dtid.x] = modified;
 }
 
-RWTexture2D<float4> g_rwTexture2DFloat : register(u2);
-RWTexture2D<int4> g_rwTexture2DInt : register(u3);
-RWTexture2D<uint4> g_rwTexture2DUInt : register(u4);
+RWTexture2D<float4> g_rwRTexture2DFloat : register(u2);
+RWTexture2D<int4> g_rwRTexture2DInt : register(u3);
+RWTexture2D<uint4> g_rwRTexture2DUInt : register(u4);
 
 void test_texture_2d(uint3 dtid)
 {
     int2 coord;
     coord.x = dtid.x;
     coord.y = dtid.y;
-    float4 read_load_f = g_rwTexture2DFloat.Load(coord);
-    int4 read_load_i = g_rwTexture2DInt.Load(coord);
-    uint4 read_load_ui = g_rwTexture2DUInt.Load(coord);
+    float4 read_load_f = g_rwRTexture2DFloat.Load(coord);
+    int4 read_load_i = g_rwRTexture2DInt.Load(coord);
+    uint4 read_load_ui = g_rwRTexture2DUInt.Load(coord);
 }
 
 [numthreads(8, 8, 1)]

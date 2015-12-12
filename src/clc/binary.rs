@@ -104,7 +104,7 @@ fn print_access_modifier(access_modifier: &AccessModifier, printer: &mut Printer
     match *access_modifier {
         AccessModifier::ReadOnly => printer.print("read_only "),
         AccessModifier::WriteOnly => printer.print("write_only "),
-        AccessModifier::ReadWrite => { },
+        AccessModifier::ReadWrite => printer.print("read_write "),
     };
 }
 

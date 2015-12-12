@@ -12,6 +12,8 @@ pub struct FunctionGlobalUsage {
 #[derive(PartialEq, Debug, Clone)]
 pub struct GlobalUsage {
     pub functions: HashMap<FunctionId, FunctionGlobalUsage>,
+    pub image_reads: HashSet<GlobalId>,
+    pub image_writes: HashSet<GlobalId>,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -19,6 +21,8 @@ struct LocalFunctionGlobalUsage {
     globals: HashSet<GlobalId>,
     cbuffers: HashSet<ConstantBufferId>,
     functions: HashSet<FunctionId>,
+    image_reads: HashSet<GlobalId>,
+    image_writes: HashSet<GlobalId>,
 }
 
 impl GlobalUsage {
@@ -32,14 +36,20 @@ impl GlobalUsage {
                 _ => { }
             }
         }
+        let mut image_reads = HashSet::new();
+        let mut image_writes = HashSet::new();
+        for (_, current_usage) in &lfgus {
+            image_reads = image_reads.union(&current_usage.image_reads).cloned().collect::<HashSet<_>>();
+            image_writes = image_writes.union(&current_usage.image_writes).cloned().collect::<HashSet<_>>();
+        };
         let mut prev = lfgus;
         loop {
             let mut next = prev.clone();
             for (_, current_usage) in next.iter_mut() {
                 for (other_id, other_usage) in &prev {
                     if current_usage.functions.contains(&other_id) {
-                        current_usage.globals.union(&other_usage.globals);
-                        current_usage.cbuffers.union(&other_usage.cbuffers);
+                        current_usage.globals = current_usage.globals.union(&other_usage.globals).cloned().collect::<HashSet<_>>();
+                        current_usage.cbuffers = current_usage.cbuffers.union(&other_usage.cbuffers).cloned().collect::<HashSet<_>>();
                     }
                 }
             }
@@ -49,9 +59,16 @@ impl GlobalUsage {
                 break;
             }
         }
-        let mut usage = GlobalUsage { functions: HashMap::new() };
+        let mut usage = GlobalUsage {
+            functions: HashMap::new(),
+            image_reads: image_reads.clone(),
+            image_writes: image_writes.clone(),
+        };
         for (id, local_usage) in prev {
-            usage.functions.insert(id, FunctionGlobalUsage { globals: local_usage.globals.clone(), cbuffers: local_usage.cbuffers.clone() });
+            usage.functions.insert(id, FunctionGlobalUsage {
+                globals: local_usage.globals.clone(),
+                cbuffers: local_usage.cbuffers.clone(),
+            });
         }
         usage
     }
@@ -59,11 +76,14 @@ impl GlobalUsage {
 
 impl LocalFunctionGlobalUsage {
     fn analyse(function: &FunctionDefinition) -> LocalFunctionGlobalUsage {
-        let mut usage = LocalFunctionGlobalUsage { globals: HashSet::new(), cbuffers: HashSet::new(), functions: HashSet::new() };
-        // this should really be a ir::ScopeBlock search
-        for statement in &function.scope_block.0 {
-            search_statement(statement, &mut usage);
+        let mut usage = LocalFunctionGlobalUsage {
+            globals: HashSet::new(),
+            cbuffers: HashSet::new(),
+            functions: HashSet::new(),
+            image_reads: HashSet::new(),
+            image_writes: HashSet::new(),
         };
+        search_scope_block(&function.scope_block, &mut usage);
         usage
     }
 }
@@ -204,8 +224,23 @@ fn search_intrinsic(intrinsic: &Intrinsic, usage: &mut LocalFunctionGlobalUsage)
         Intrinsic::BufferLoad(ref e1, ref e2) |
         Intrinsic::RWBufferLoad(ref e1, ref e2) |
         Intrinsic::StructuredBufferLoad(ref e1, ref e2) |
-        Intrinsic::RWStructuredBufferLoad(ref e1, ref e2) |
+        Intrinsic::RWStructuredBufferLoad(ref e1, ref e2) => {
+            search_expression(e1, usage);
+            search_expression(e2, usage);
+        }
+
         Intrinsic::RWTexture2DLoad(ref e1, ref e2) => {
+
+            // Mark textures as used in reading
+            // This is not good enough for all HLSL use cases (such as reading
+            // from a struct member, but we can't do that in OpenCL anyway)
+            match *e1 {
+                Expression::Global(ref id) => {
+                    usage.image_reads.insert(id.clone());
+                },
+                _ => unimplemented!(),
+            };
+
             search_expression(e1, usage);
             search_expression(e2, usage);
         }
