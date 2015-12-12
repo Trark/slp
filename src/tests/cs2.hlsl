@@ -79,4 +79,6 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     float val0 = vals[0] + 1.0f;
     outTest(vals[2]);
     myFunc(g_myFour);
+    uint2 cast_from;
+    int2 cast_t0 = cast_from;
 }

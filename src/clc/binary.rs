@@ -418,6 +418,9 @@ fn print_block(block: &[Statement], printer: &mut Printer) {
 fn print_statement(statement: &Statement, printer: &mut Printer) {
     printer.line();
     match statement {
+        &Statement::Empty => {
+            printer.print(";");
+        },
         &Statement::Expression(ref expr) => {
             print_expression(expr, printer);
             printer.print(";");
@@ -457,7 +460,12 @@ fn print_statement(statement: &Statement, printer: &mut Printer) {
             printer.print(")");
             print_statement(statement, printer);
         },
-        _ => unimplemented!(),
+        &Statement::Return(ref expr) => {
+            printer.print("return");
+            printer.space();
+            print_expression(expr, printer);
+            printer.print(";");
+        },
     }
 }
 

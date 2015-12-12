@@ -1,4 +1,12 @@
 
+int2 __fragment_cast_uint_to_int_2(uint2 from)
+{
+	int2 to;
+	to[0] = from[0];
+	to[1] = from[1];
+	return to;
+}
+
 int __constant g_myFour = (int)4;
 
 struct myStruct
@@ -77,4 +85,6 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint
 	float val0 = vals[(int)0] + 1.0f;
 	outTest_0(&vals[(int)2]);
 	myFunc_0((uint)g_myFour);
+	uint2 cast_from;
+	int2 cast_t0 = __fragment_cast_uint_to_int_2(cast_from);
 }

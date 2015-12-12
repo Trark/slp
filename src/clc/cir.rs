@@ -10,7 +10,7 @@ pub enum AccessModifier {
     ReadWrite,
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone)]
 pub enum Scalar {
     Char,
     UChar,
@@ -25,13 +25,25 @@ pub enum Scalar {
     Double,
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone)]
 pub enum VectorDimension {
     Two,
     Three,
     Four,
     Eight,
     Sixteen,
+}
+
+impl VectorDimension {
+    pub fn as_u32(&self) -> u32 {
+        match *self {
+            VectorDimension::Two => 2,
+            VectorDimension::Three => 3,
+            VectorDimension::Four => 4,
+            VectorDimension::Eight => 8,
+            VectorDimension::Sixteen => 16,
+        }
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]
