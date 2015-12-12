@@ -196,17 +196,17 @@ impl ImplicitConversion {
 
         let &Type(ref source_l, ref mods) = source_type;
         let &Type(ref dest_l, ref modd) = dest_type;
-        let numeric_cast = match (source_l, dest_l) {
-            (ref ty1, ref ty2) if ty1 == ty2 => None,
-            (&TypeLayout::Scalar(ref s1), &TypeLayout::Scalar(ref s2)) => {
+        let numeric_cast = match (source_l, dest_l, dest.1 == ValueType::Lvalue) {
+            (ref ty1, ref ty2, _) if ty1 == ty2 => None,
+            (&TypeLayout::Scalar(ref s1), &TypeLayout::Scalar(ref s2), false) => {
                 let cast = try!(NumericCast::new(s1, s2, NumericDimension::Scalar));
                 Some(cast)
             },
-            (&TypeLayout::Vector(ref s1, ref x1), &TypeLayout::Vector(ref s2, ref x2)) if x1 == x2 => {
+            (&TypeLayout::Vector(ref s1, ref x1), &TypeLayout::Vector(ref s2, ref x2), false) if x1 == x2 => {
                 let cast = try!(NumericCast::new(s1, s2, NumericDimension::Vector(*x2)));
                 Some(cast)
             },
-            (&TypeLayout::Matrix(ref s1, ref x1, ref y1), &TypeLayout::Matrix(ref s2, ref x2, ref y2)) if x1 == x2 && y1 == y2 => {
+            (&TypeLayout::Matrix(ref s1, ref x1, ref y1), &TypeLayout::Matrix(ref s2, ref x2, ref y2), false) if x1 == x2 && y1 == y2 => {
                 let cast = try!(NumericCast::new(s1, s2, NumericDimension::Matrix(*x2, *y2)));
                 Some(cast)
             },
