@@ -1,5 +1,5 @@
 
-use super::cir::*;
+use super::cst::*;
 
 /// A type to represent the final OpenCL source
 /// This is both the code (text) and slot binding metadata

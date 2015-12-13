@@ -3,7 +3,7 @@ use std::fmt;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use BindMap;
-use super::cir as dst;
+use super::cil as dst;
 use super::fragments::Fragment;
 use super::super::hlsl::ir as src;
 use super::super::hlsl::globals_analysis;

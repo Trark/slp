@@ -13,6 +13,7 @@ use hlsl::lexer::LexError;
 use hlsl::parser::ParseError;
 use hlsl::typer::TyperError;
 use clc::transpiler::TranspileError;
+use clc::untyper::UntyperError;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum CompileError {
@@ -20,6 +21,7 @@ pub enum CompileError {
     ParseError(ParseError),
     TyperError(TyperError),
     TranspileError(TranspileError),
+    UntyperError(UntyperError),
 }
 
 pub type KernelParamSlot = u32;
@@ -57,11 +59,13 @@ pub fn hlsl_to_cl(hlsl_source: &[u8], entry_point: &'static str) -> Result<Outpu
 
     let ir = try!(hlsl::typer::typeparse(&ast));
 
-    let cir = try!(clc::transpiler::transpile(&ir));
+    let cil = try!(clc::transpiler::transpile(&ir));
 
-    let cl_binary = clc::binary::Binary::from_cir(&cir);
+    let cst = try!(clc::untyper::untype_module(&cil));
 
-    Ok(Output { code: cl_binary, binds: cir.binds })
+    let cl_binary = clc::binary::Binary::from_cir(&cst);
+
+    Ok(Output { code: cl_binary, binds: cst.binds })
 }
 
 impl error::Error for CompileError {
@@ -71,6 +75,7 @@ impl error::Error for CompileError {
             CompileError::ParseError(ref parser_error) => error::Error::description(parser_error),
             CompileError::TyperError(ref typer_error) => error::Error::description(typer_error),
             CompileError::TranspileError(ref transpiler_error) => error::Error::description(transpiler_error),
+            CompileError::UntyperError(ref untyper_error) => error::Error::description(untyper_error),
         }
     }
 }
@@ -102,6 +107,12 @@ impl From<TyperError> for CompileError {
 impl From<TranspileError> for CompileError {
     fn from(err: TranspileError) -> CompileError {
         CompileError::TranspileError(err)
+    }
+}
+
+impl From<UntyperError> for CompileError {
+    fn from(err: UntyperError) -> CompileError {
+        CompileError::UntyperError(err)
     }
 }
 

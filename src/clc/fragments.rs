@@ -1,5 +1,5 @@
 
-use super::cir::*;
+use super::cil::*;
 
 /// OpenCL function fragments
 /// For helper functions required by the transpiler. Used Fragments will be
