@@ -1,5 +1,7 @@
 
+use std::collections::HashMap;
 use BindMap;
+use super::fragments::Fragment;
 
 pub type Identifier = String;
 
@@ -17,7 +19,7 @@ pub enum Type {
     PtrDiffT,
     IntPtrT,
     UIntPtrT,
-    Struct(Identifier),
+    Struct(StructId),
     Pointer(AddressSpace, Box<Type>),
     Array(Box<Type>, u64),
 
@@ -45,6 +47,27 @@ pub use super::cst::BinOp as BinOp;
 pub use super::cst::UnaryOp as UnaryOp;
 pub use super::cst::Literal as Literal;
 
+#[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone, Copy)]
+pub struct FunctionId(pub u32);
+#[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone, Copy)]
+pub struct StructId(pub u32);
+#[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone, Copy)]
+pub struct GlobalId(pub u32);
+#[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone, Copy)]
+pub struct LocalId(pub u32);
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct LocalDeclarations {
+    pub locals: HashMap<LocalId, String>,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct GlobalDeclarations {
+    pub functions: HashMap<FunctionId, String>,
+    pub globals: HashMap<GlobalId, String>,
+    pub structs: HashMap<StructId, String>,
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum Constructor {
     UInt3(Box<Expression>, Box<Expression>, Box<Expression>),
@@ -60,7 +83,8 @@ pub enum Intrinsic {
 pub enum Expression {
     Literal(Literal),
     Constructor(Constructor),
-    Variable(Identifier),
+    Local(LocalId),
+    Global(GlobalId),
     UnaryOperation(UnaryOp, Box<Expression>),
     BinaryOperation(BinOp, Box<Expression>, Box<Expression>),
     TernaryConditional(Box<Expression>, Box<Expression>, Box<Expression>),
@@ -69,14 +93,16 @@ pub enum Expression {
     Deref(Box<Expression>),
     MemberDeref(Box<Expression>, Identifier),
     AddressOf(Box<Expression>),
-    Call(Box<Expression>, Vec<Expression>),
+    Call(FunctionId, Vec<Expression>),
     Cast(Type, Box<Expression>),
     Intrinsic(Intrinsic),
+    UntypedIntrinsic(String, Vec<Expression>),
+    UntypedLiteral(String),
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct VarDef {
-    pub name: Identifier,
+    pub id: LocalId,
     pub typename: Type,
     pub assignment: Option<Expression>
 }
@@ -101,7 +127,7 @@ pub enum Statement {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct GlobalVariable {
-    pub name: Identifier,
+    pub id: GlobalId,
     pub ty: Type,
     pub address_space: AddressSpace, // Make part of Type?
     pub init: Option<Expression>,
@@ -115,29 +141,30 @@ pub struct StructMember {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct StructDefinition {
-    pub name: Identifier,
+    pub id: StructId,
     pub members: Vec<StructMember>,
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct FunctionParam {
-    pub name: Identifier,
+    pub id: LocalId,
     pub typename: Type,
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct FunctionDefinition {
-    pub name: Identifier,
+    pub id: FunctionId,
     pub returntype: Type,
     pub params: Vec<FunctionParam>,
     pub body: Vec<Statement>,
+    pub local_declarations: LocalDeclarations,
 }
 
 pub use super::cst::Dimension as Dimension;
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct KernelParam {
-    pub name: Identifier,
+    pub id: LocalId,
     pub typename: Type,
 }
 
@@ -146,6 +173,7 @@ pub struct Kernel {
     pub params: Vec<KernelParam>,
     pub body: Vec<Statement>,
     pub group_dimensions: Dimension,
+    pub local_declarations: LocalDeclarations,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -159,5 +187,7 @@ pub enum RootDefinition {
 #[derive(PartialEq, Debug, Clone)]
 pub struct Module {
     pub root_definitions: Vec<RootDefinition>,
+    pub global_declarations: GlobalDeclarations,
+    pub fragments: HashMap<Fragment, FunctionId>,
     pub binds: BindMap,
 }
