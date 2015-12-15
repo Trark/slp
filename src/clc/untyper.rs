@@ -109,7 +109,10 @@ impl Context {
     fn push_scope(&mut self, locals: &src::LocalDeclarations) {
         assert_eq!(self.local_scope, None);
         self.local_scope = Some(HashMap::new());
-        for (local_id, candidate_name) in &locals.locals {
+        let mut keys = locals.locals.keys().collect::<Vec<&src::LocalId>>();
+        keys.sort();
+        for local_id in keys {
+            let candidate_name = locals.locals.get(local_id).expect("bad local key");
             let identifier = self.make_identifier(candidate_name);
             match self.local_scope {
                 Some(ref mut scope) => scope.insert(local_id.clone(), identifier),

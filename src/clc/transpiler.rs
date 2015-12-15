@@ -2,6 +2,7 @@ use std::error;
 use std::fmt;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashSet;
 use BindMap;
 use super::cil as dst;
 use super::fragments::Fragment;
@@ -94,7 +95,7 @@ struct GlobalIdAllocator {
 }
 
 impl GlobalIdAllocator {
-    fn from_globals(globals: &src::GlobalDeclarations) -> Result<GlobalIdAllocator, TranspileError> {
+    fn from_globals(globals: &src::GlobalDeclarations, lifted: &HashSet<src::GlobalId>) -> Result<GlobalIdAllocator, TranspileError> {
         let mut context = GlobalIdAllocator {
             global_id_map: HashMap::new(),
             function_id_map: HashMap::new(),
@@ -113,11 +114,11 @@ impl GlobalIdAllocator {
             let mut keys = globals.globals.keys().collect::<Vec<&src::GlobalId>>();
             keys.sort();
             for var_id in keys {
-                let var_name = globals.globals.get(var_id).expect("global variables from keys");
-                // Give all globals an id even if they never use it
-                // (for now so we don't have to parse the types here)
-                let dst_id = context.insert_identifier_global(var_id.clone());
-                context.global_name_map.insert(dst_id, var_name.clone());
+                if !lifted.contains(var_id) {
+                    let var_name = globals.globals.get(var_id).expect("global variables from keys");
+                    let dst_id = context.insert_identifier_global(var_id.clone());
+                    context.global_name_map.insert(dst_id, var_name.clone());
+                }
             }
         }
 
@@ -151,7 +152,7 @@ impl GlobalIdAllocator {
             for id in keys {
                 let cbuffer_name = globals.constants.get(id).expect("cbuffers from keys");
                 let dst_id = context.insert_identifier_struct(StructSource::ConstantBuffer(id.clone()));
-                context.struct_name_map.insert(dst_id, cbuffer_name.clone());
+                context.struct_name_map.insert(dst_id, (cbuffer_name.clone() + "_t"));
             };
         }
 
@@ -210,6 +211,8 @@ struct FunctionDecl {
 
 struct Context {
     global_ids: GlobalIdAllocator,
+    lifted_global_names: HashMap<src::GlobalId, String>,
+    lifted_cbuffer_names: HashMap<src::ConstantBufferId, String>,
     function_decl_map: HashMap<src::FunctionId, FunctionDecl>,
     variable_scopes: Vec<HashMap<src::VariableId, VariableDecl>>,
     lifted_arguments: Option<HashMap<GlobalArgument, dst::LocalId>>,
@@ -223,8 +226,23 @@ struct Context {
 impl Context {
 
     fn from_globals(table: &src::GlobalTable, globals: &src::GlobalDeclarations, root_defs: &[src::RootDefinition]) -> Result<(Context, BindMap), TranspileError> {
+
+        let mut lifted: HashSet<src::GlobalId> = HashSet::new();
+        for rootdef in root_defs {
+            match *rootdef {
+                src::RootDefinition::GlobalVariable(ref gv) => {
+                    if is_global_lifted(gv) {
+                        lifted.insert(gv.id);
+                    }
+                },
+                _ => { },
+            }
+        };
+
         let mut context = Context {
-            global_ids: try!(GlobalIdAllocator::from_globals(globals)),
+            global_ids: try!(GlobalIdAllocator::from_globals(globals, &lifted)),
+            lifted_global_names: HashMap::new(),
+            lifted_cbuffer_names: HashMap::new(),
             function_decl_map: HashMap::new(),
             variable_scopes: vec![],
             lifted_arguments: None,
@@ -248,7 +266,11 @@ impl Context {
                         global_type_map.insert(gv.id, gv.global_type.clone());
                         let cl_ty = try!(get_cl_global_type(&gv.id, &gv.global_type, &usage, &context));
                         context.global_type_map.insert(gv.id.clone(), cl_ty);
+                        context.lifted_global_names.insert(gv.id.clone(), globals.globals.get(&gv.id).expect("global does not exist").clone());
                     }
+                },
+                src::RootDefinition::ConstantBuffer(ref cb) => {
+                    context.lifted_cbuffer_names.insert(cb.id.clone(), globals.constants.get(&cb.id).expect("cbuffer does not exist").clone());
                 },
                 _ => { },
             }
@@ -263,7 +285,7 @@ impl Context {
             for cbuffer_key in c_keys {
                 let cbuffer_id = table.constants.get(cbuffer_key).expect("bad cbuffer key");
                 context.kernel_arguments.push(GlobalArgument::ConstantBuffer(cbuffer_id.clone()));
-                binds.cbuffer_map.insert(cbuffer_id.0, current);
+                binds.cbuffer_map.insert(*cbuffer_key, current);
                 current = current + 1;
             }
             let mut r_keys = table.r_resources.keys().collect::<Vec<&u32>>();
@@ -271,7 +293,7 @@ impl Context {
             for global_entry_key in r_keys {
                 let global_entry = table.r_resources.get(global_entry_key).expect("bad r key key");
                 context.kernel_arguments.push(GlobalArgument::Global(global_entry.id.clone()));
-                binds.read_map.insert(global_entry.id.0, current);
+                binds.read_map.insert(*global_entry_key, current);
                 current = current + 1;
             }
             let mut rw_keys = table.rw_resources.keys().collect::<Vec<&u32>>();
@@ -279,7 +301,7 @@ impl Context {
             for global_entry_key in rw_keys {
                 let global_entry = table.rw_resources.get(global_entry_key).expect("bad rw key key");
                 context.kernel_arguments.push(GlobalArgument::Global(global_entry.id.clone()));
-                binds.write_map.insert(global_entry.id.0, current);
+                binds.write_map.insert(*global_entry_key, current);
                 current = current + 1;
             }
         }
@@ -473,12 +495,10 @@ impl Context {
                 Some(ref mut names) => {
                     let name = match *arg {
                         GlobalArgument::Global(ref id) => {
-                            let dst_id = self.global_ids.global_id_map.get(id).expect("global does not exist");
-                            self.global_ids.global_name_map.get(dst_id).expect("global doesn't exist").clone()
+                            self.lifted_global_names.get(id).expect("global name doesn't exist").clone()
                         },
                         GlobalArgument::ConstantBuffer(ref id)=> {
-                            let dst_id = self.global_ids.struct_id_map.get(&StructSource::ConstantBuffer(id.clone())).expect("cbuffer does not exist");
-                            self.global_ids.struct_name_map.get(dst_id).expect("global doesn't exist").clone()
+                            self.lifted_cbuffer_names.get(id).expect("cbuffer name doesn't exist").clone()
                         },
                     };
                     names.insert(identifier, name.to_string())
