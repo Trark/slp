@@ -110,7 +110,10 @@ impl GlobalIdAllocator {
 
         // Insert global variables
         {
-            for (var_id, var_name) in &globals.globals {
+            let mut keys = globals.globals.keys().collect::<Vec<&src::GlobalId>>();
+            keys.sort();
+            for var_id in keys {
+                let var_name = globals.globals.get(var_id).expect("global variables from keys");
                 // Give all globals an id even if they never use it
                 // (for now so we don't have to parse the types here)
                 let dst_id = context.insert_identifier_global(var_id.clone());
@@ -120,7 +123,10 @@ impl GlobalIdAllocator {
 
         // Insert functions
         {
-            for (func_id, func_name) in &globals.functions {
+            let mut keys = globals.functions.keys().collect::<Vec<&src::FunctionId>>();
+            keys.sort();
+            for func_id in keys {
+                let func_name = globals.functions.get(func_id).expect("functions from keys");
                 let dst_id = context.insert_identifier_function(func_id.clone());
                 context.function_name_map.insert(dst_id, func_name.clone());
             }
@@ -129,7 +135,10 @@ impl GlobalIdAllocator {
 
         // Insert structs
         {
-            for (id, struct_name) in globals.structs.iter() {
+            let mut keys = globals.structs.keys().collect::<Vec<&src::StructId>>();
+            keys.sort();
+            for id in keys {
+                let struct_name = globals.structs.get(id).expect("structs from keys");
                 let dst_id = context.insert_identifier_struct(StructSource::Struct(id.clone()));
                 context.struct_name_map.insert(dst_id, struct_name.clone());
             };
@@ -137,7 +146,10 @@ impl GlobalIdAllocator {
 
         // Insert cbuffers
         {
-            for (id, cbuffer_name) in globals.constants.iter() {
+            let mut keys = globals.constants.keys().collect::<Vec<&src::ConstantBufferId>>();
+            keys.sort();
+            for id in keys {
+                let cbuffer_name = globals.constants.get(id).expect("cbuffers from keys");
                 let dst_id = context.insert_identifier_struct(StructSource::ConstantBuffer(id.clone()));
                 context.struct_name_map.insert(dst_id, cbuffer_name.clone());
             };
