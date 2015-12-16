@@ -224,7 +224,15 @@ fn search_intrinsic(intrinsic: &Intrinsic, usage: &mut LocalFunctionGlobalUsage)
         Intrinsic::BufferLoad(ref e1, ref e2) |
         Intrinsic::RWBufferLoad(ref e1, ref e2) |
         Intrinsic::StructuredBufferLoad(ref e1, ref e2) |
-        Intrinsic::RWStructuredBufferLoad(ref e1, ref e2) => {
+        Intrinsic::RWStructuredBufferLoad(ref e1, ref e2) |
+        Intrinsic::ByteAddressBufferLoad(ref e1, ref e2) |
+        Intrinsic::ByteAddressBufferLoad2(ref e1, ref e2) |
+        Intrinsic::ByteAddressBufferLoad3(ref e1, ref e2) |
+        Intrinsic::ByteAddressBufferLoad4(ref e1, ref e2) |
+        Intrinsic::RWByteAddressBufferLoad(ref e1, ref e2) |
+        Intrinsic::RWByteAddressBufferLoad2(ref e1, ref e2) |
+        Intrinsic::RWByteAddressBufferLoad3(ref e1, ref e2) |
+        Intrinsic::RWByteAddressBufferLoad4(ref e1, ref e2) => {
             search_expression(e1, usage);
             search_expression(e2, usage);
         }
@@ -254,7 +262,11 @@ fn search_intrinsic(intrinsic: &Intrinsic, usage: &mut LocalFunctionGlobalUsage)
         Intrinsic::ClampF1(ref e1, ref e2, ref e3) |
         Intrinsic::ClampF2(ref e1, ref e2, ref e3) |
         Intrinsic::ClampF3(ref e1, ref e2, ref e3) |
-        Intrinsic::ClampF4(ref e1, ref e2, ref e3) => {
+        Intrinsic::ClampF4(ref e1, ref e2, ref e3) |
+        Intrinsic::RWByteAddressBufferStore(ref e1, ref e2, ref e3) |
+        Intrinsic::RWByteAddressBufferStore2(ref e1, ref e2, ref e3) |
+        Intrinsic::RWByteAddressBufferStore3(ref e1, ref e2, ref e3) |
+        Intrinsic::RWByteAddressBufferStore4(ref e1, ref e2, ref e3) => {
             search_expression(e1, usage);
             search_expression(e2, usage);
             search_expression(e3, usage);

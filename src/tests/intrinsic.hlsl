@@ -43,12 +43,32 @@ void test_texture_2d(uint3 dtid)
     uint4 read_load_ui = g_rwRTexture2DUInt.Load(coord);
 }
 
+ByteAddressBuffer g_roRawBuffer : register(t5);
+RWByteAddressBuffer g_rwRawBuffer : register(u5);
+
+void test_byte_address_buffer(uint3 dtid)
+{
+    uint ro1 = g_roRawBuffer.Load(64u * dtid.x);
+    uint2 ro2 = g_roRawBuffer.Load2(64u * dtid.x + 16u);
+    uint3 ro3 = g_roRawBuffer.Load3(64u * dtid.x + 32u);
+    uint4 ro4 = g_roRawBuffer.Load4(64u * dtid.x + 48u);
+    uint rw1 = g_rwRawBuffer.Load(64u * dtid.x);
+    uint2 rw2 = g_rwRawBuffer.Load2(64u * dtid.x + 16u);
+    uint3 rw3 = g_rwRawBuffer.Load3(64u * dtid.x + 32u);
+    uint4 rw4 = g_rwRawBuffer.Load4(64u * dtid.x + 48u);
+    g_rwRawBuffer.Store(64u * dtid.x, ro1 + rw1);
+    g_rwRawBuffer.Store2(64u * dtid.x + 16u, ro2 + rw2);
+    g_rwRawBuffer.Store3(64u * dtid.x + 32u, ro3 + rw3);
+    g_rwRawBuffer.Store4(64u * dtid.x + 48u, ro4 + rw4);
+}
+
 [numthreads(8, 8, 1)]
 void CSMAIN(uint3 dtid : SV_DispatchThreadID)
 {
     test_buffer(dtid);
     test_structured_buffer(dtid);
     test_texture_2d(dtid);
+    test_byte_address_buffer(dtid);
     AllMemoryBarrier();
     AllMemoryBarrierWithGroupSync();
     DeviceMemoryBarrier();

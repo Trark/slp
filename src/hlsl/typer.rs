@@ -1401,6 +1401,160 @@ fn parse_expr(ast: &ast::Expression, context: &ExpressionContext) -> Result<Type
                         _ => return Err(TyperError::UnknownTypeMember(composite_pt, member.clone())),
                     }
                 }
+                &ir::TypeLayout::Object(ir::ObjectType::ByteAddressBuffer) => {
+                    match &member[..] {
+                        "Load" => {
+                            return Ok(TypedExpression::Method(UnresolvedMethod(
+                                "ByteAddressBuffer::Load".to_string(),
+                                ir::Type::from_object(ir::ObjectType::ByteAddressBuffer),
+                                vec![FunctionOverload(
+                                    FunctionName::Intrinsic(IntrinsicFactory::Intrinsic2(ir::Intrinsic::ByteAddressBufferLoad)),
+                                    ir::Type::uint(),
+                                    vec![ir::Type::uint().into()] // Assume MDSN lies in saying this is an int
+                                )],
+                                composite_ir
+                            )))
+                        },
+                        "Load2" => {
+                            return Ok(TypedExpression::Method(UnresolvedMethod(
+                                "ByteAddressBuffer::Load2".to_string(),
+                                ir::Type::from_object(ir::ObjectType::ByteAddressBuffer),
+                                vec![FunctionOverload(
+                                    FunctionName::Intrinsic(IntrinsicFactory::Intrinsic2(ir::Intrinsic::ByteAddressBufferLoad2)),
+                                    ir::Type::uintn(2),
+                                    vec![ir::Type::uint().into()]
+                                )],
+                                composite_ir
+                            )))
+                        },
+                        "Load3" => {
+                            return Ok(TypedExpression::Method(UnresolvedMethod(
+                                "ByteAddressBuffer::Load3".to_string(),
+                                ir::Type::from_object(ir::ObjectType::ByteAddressBuffer),
+                                vec![FunctionOverload(
+                                    FunctionName::Intrinsic(IntrinsicFactory::Intrinsic2(ir::Intrinsic::ByteAddressBufferLoad3)),
+                                    ir::Type::uintn(3),
+                                    vec![ir::Type::uint().into()]
+                                )],
+                                composite_ir
+                            )))
+                        },
+                        "Load4" => {
+                            return Ok(TypedExpression::Method(UnresolvedMethod(
+                                "ByteAddressBuffer::Load4".to_string(),
+                                ir::Type::from_object(ir::ObjectType::ByteAddressBuffer),
+                                vec![FunctionOverload(
+                                    FunctionName::Intrinsic(IntrinsicFactory::Intrinsic2(ir::Intrinsic::ByteAddressBufferLoad4)),
+                                    ir::Type::uintn(4),
+                                    vec![ir::Type::uint().into()]
+                                )],
+                                composite_ir
+                            )))
+                        },
+                        _ => return Err(TyperError::UnknownTypeMember(composite_pt, member.clone())),
+                    }
+                }
+                &ir::TypeLayout::Object(ir::ObjectType::RWByteAddressBuffer) => {
+                    match &member[..] {
+                        "Load" => {
+                            return Ok(TypedExpression::Method(UnresolvedMethod(
+                                "RWByteAddressBuffer::Load".to_string(),
+                                ir::Type::from_object(ir::ObjectType::RWByteAddressBuffer),
+                                vec![FunctionOverload(
+                                    FunctionName::Intrinsic(IntrinsicFactory::Intrinsic2(ir::Intrinsic::RWByteAddressBufferLoad)),
+                                    ir::Type::uint(),
+                                    vec![ir::Type::uint().into()]
+                                )],
+                                composite_ir
+                            )))
+                        },
+                        "Load2" => {
+                            return Ok(TypedExpression::Method(UnresolvedMethod(
+                                "RWByteAddressBuffer::Load2".to_string(),
+                                ir::Type::from_object(ir::ObjectType::RWByteAddressBuffer),
+                                vec![FunctionOverload(
+                                    FunctionName::Intrinsic(IntrinsicFactory::Intrinsic2(ir::Intrinsic::RWByteAddressBufferLoad2)),
+                                    ir::Type::uintn(2),
+                                    vec![ir::Type::uint().into()]
+                                )],
+                                composite_ir
+                            )))
+                        },
+                        "Load3" => {
+                            return Ok(TypedExpression::Method(UnresolvedMethod(
+                                "RWByteAddressBuffer::Load3".to_string(),
+                                ir::Type::from_object(ir::ObjectType::RWByteAddressBuffer),
+                                vec![FunctionOverload(
+                                    FunctionName::Intrinsic(IntrinsicFactory::Intrinsic2(ir::Intrinsic::RWByteAddressBufferLoad3)),
+                                    ir::Type::uintn(3),
+                                    vec![ir::Type::uint().into()]
+                                )],
+                                composite_ir
+                            )))
+                        },
+                        "Load4" => {
+                            return Ok(TypedExpression::Method(UnresolvedMethod(
+                                "RWByteAddressBuffer::Load4".to_string(),
+                                ir::Type::from_object(ir::ObjectType::RWByteAddressBuffer),
+                                vec![FunctionOverload(
+                                    FunctionName::Intrinsic(IntrinsicFactory::Intrinsic2(ir::Intrinsic::RWByteAddressBufferLoad4)),
+                                    ir::Type::uintn(4),
+                                    vec![ir::Type::uint().into()]
+                                )],
+                                composite_ir
+                            )))
+                        },
+                        "Store" => {
+                            return Ok(TypedExpression::Method(UnresolvedMethod(
+                                "RWByteAddressBuffer::Store".to_string(),
+                                ir::Type::from_object(ir::ObjectType::RWByteAddressBuffer),
+                                vec![FunctionOverload(
+                                    FunctionName::Intrinsic(IntrinsicFactory::Intrinsic3(ir::Intrinsic::RWByteAddressBufferStore)),
+                                    ir::Type::void(),
+                                    vec![ir::Type::uint().into(), ir::Type::uint().into()]
+                                )],
+                                composite_ir
+                            )))
+                        },
+                        "Store2" => {
+                            return Ok(TypedExpression::Method(UnresolvedMethod(
+                                "RWByteAddressBuffer::Store".to_string(),
+                                ir::Type::from_object(ir::ObjectType::RWByteAddressBuffer),
+                                vec![FunctionOverload(
+                                    FunctionName::Intrinsic(IntrinsicFactory::Intrinsic3(ir::Intrinsic::RWByteAddressBufferStore2)),
+                                    ir::Type::void(),
+                                    vec![ir::Type::uint().into(), ir::Type::uintn(2).into()]
+                                )],
+                                composite_ir
+                            )))
+                        },
+                        "Store3" => {
+                            return Ok(TypedExpression::Method(UnresolvedMethod(
+                                "RWByteAddressBuffer::Store".to_string(),
+                                ir::Type::from_object(ir::ObjectType::RWByteAddressBuffer),
+                                vec![FunctionOverload(
+                                    FunctionName::Intrinsic(IntrinsicFactory::Intrinsic3(ir::Intrinsic::RWByteAddressBufferStore3)),
+                                    ir::Type::void(),
+                                    vec![ir::Type::uint().into(), ir::Type::uintn(3).into()]
+                                )],
+                                composite_ir
+                            )))
+                        },
+                        "Store4" => {
+                            return Ok(TypedExpression::Method(UnresolvedMethod(
+                                "RWByteAddressBuffer::Store".to_string(),
+                                ir::Type::from_object(ir::ObjectType::RWByteAddressBuffer),
+                                vec![FunctionOverload(
+                                    FunctionName::Intrinsic(IntrinsicFactory::Intrinsic3(ir::Intrinsic::RWByteAddressBufferStore4)),
+                                    ir::Type::void(),
+                                    vec![ir::Type::uint().into(), ir::Type::uintn(4).into()]
+                                )],
+                                composite_ir
+                            )))
+                        },
+                        _ => return Err(TyperError::UnknownTypeMember(composite_pt, member.clone())),
+                    }
+                }
                 // Todo: Matrix components + Object members
                 _ => return Err(TyperError::TypeDoesNotHaveMembers(composite_pt)),
             };

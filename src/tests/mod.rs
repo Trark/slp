@@ -48,15 +48,17 @@ fn intrinsic_full() {
             let mut map = HashMap::new();
             map.insert(0, 0);
             map.insert(1, 1);
+            map.insert(5, 2);
             map
         },
         write_map: {
             let mut map = HashMap::new();
-            map.insert(0, 2);
-            map.insert(1, 3);
-            map.insert(2, 4);
-            map.insert(3, 5);
-            map.insert(4, 6);
+            map.insert(0, 3);
+            map.insert(1, 4);
+            map.insert(2, 5);
+            map.insert(3, 6);
+            map.insert(4, 7);
+            map.insert(5, 8);
             map
         },
         cbuffer_map: HashMap::new(),

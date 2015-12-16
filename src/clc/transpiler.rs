@@ -594,6 +594,12 @@ fn get_cl_global_type(id: &src::GlobalId, ty: &src::GlobalType, usage: &globals_
             };
             dst::Type::Image2D(access)
         }
+        src::TypeLayout::Object(src::ObjectType::ByteAddressBuffer) => {
+            dst::Type::Pointer(dst::AddressSpace::Global, Box::new(dst::Type::Scalar(dst::Scalar::UChar)))
+        }
+        src::TypeLayout::Object(src::ObjectType::RWByteAddressBuffer) => {
+            dst::Type::Pointer(dst::AddressSpace::Global, Box::new(dst::Type::Scalar(dst::Scalar::UChar)))
+        }
         _ => return Err(TranspileError::TypeIsNotAllowedAsGlobal(ty.clone())),
     })
 }
@@ -851,6 +857,63 @@ fn transpile_intrinsic(intrinsic: &src::Intrinsic, context: &mut Context) -> Res
             Ok(dst::Expression::UntypedIntrinsic(
                 func_name.to_string(),
                 vec![cl_tex, cl_loc]
+            ))
+        },
+        src::Intrinsic::ByteAddressBufferLoad(ref buffer, ref loc) |
+        src::Intrinsic::RWByteAddressBufferLoad(ref buffer, ref loc) |
+        src::Intrinsic::ByteAddressBufferLoad2(ref buffer, ref loc) |
+        src::Intrinsic::RWByteAddressBufferLoad2(ref buffer, ref loc) |
+        src::Intrinsic::ByteAddressBufferLoad3(ref buffer, ref loc) |
+        src::Intrinsic::RWByteAddressBufferLoad3(ref buffer, ref loc) |
+        src::Intrinsic::ByteAddressBufferLoad4(ref buffer, ref loc) |
+        src::Intrinsic::RWByteAddressBufferLoad4(ref buffer, ref loc) => {
+            let ty = Box::new(match *intrinsic {
+                src::Intrinsic::ByteAddressBufferLoad(_, _) |
+                src::Intrinsic::RWByteAddressBufferLoad(_, _) => {
+                    dst::Type::Scalar(dst::Scalar::UInt)
+                }
+                src::Intrinsic::ByteAddressBufferLoad2(_, _) |
+                src::Intrinsic::RWByteAddressBufferLoad2(_, _) => {
+                    dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Two)
+                }
+                src::Intrinsic::ByteAddressBufferLoad3(_, _)|
+                src::Intrinsic::RWByteAddressBufferLoad3(_, _) => {
+                    dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Three)
+                }
+                src::Intrinsic::ByteAddressBufferLoad4(_, _) |
+                src::Intrinsic::RWByteAddressBufferLoad4(_, _) => {
+                    dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Four)
+                }
+                _ => unreachable!(),
+            });
+            let cl_buffer = Box::new(try!(transpile_expression(buffer, context)));
+            let cl_loc = Box::new(try!(transpile_expression(loc, context)));
+            Ok(dst::Expression::Deref(Box::new(dst::Expression::Cast(
+                dst::Type::Pointer(dst::AddressSpace::Global, ty),
+                Box::new(dst::Expression::BinaryOperation(dst::BinOp::Add, cl_buffer, cl_loc))
+            ))))
+        },
+        src::Intrinsic::RWByteAddressBufferStore(ref buffer, ref loc, ref value) |
+        src::Intrinsic::RWByteAddressBufferStore2(ref buffer, ref loc, ref value) |
+        src::Intrinsic::RWByteAddressBufferStore3(ref buffer, ref loc, ref value) |
+        src::Intrinsic::RWByteAddressBufferStore4(ref buffer, ref loc, ref value) => {
+            let ty = Box::new(match *intrinsic {
+                src::Intrinsic::RWByteAddressBufferStore(_, _, _) => dst::Type::Scalar(dst::Scalar::UInt),
+                src::Intrinsic::RWByteAddressBufferStore2(_, _, _) => dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Two),
+                src::Intrinsic::RWByteAddressBufferStore3(_, _, _) => dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Three),
+                src::Intrinsic::RWByteAddressBufferStore4(_, _, _) => dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Four),
+                _ => unreachable!(),
+            });
+            let cl_buffer = Box::new(try!(transpile_expression(buffer, context)));
+            let cl_loc = Box::new(try!(transpile_expression(loc, context)));
+            let cl_value = Box::new(try!(transpile_expression(value, context)));
+            Ok(dst::Expression::BinaryOperation(
+                dst::BinOp::Assignment,
+                Box::new(dst::Expression::Deref(Box::new(dst::Expression::Cast(
+                    dst::Type::Pointer(dst::AddressSpace::Global, ty),
+                    Box::new(dst::Expression::BinaryOperation(dst::BinOp::Add, cl_buffer, cl_loc))
+                )))),
+                cl_value
             ))
         },
         _ => unimplemented!(),

@@ -34,13 +34,30 @@ void test_texture_2d(read_only image2d_t g_rwRTexture2DFloat, read_only image2d_
 	uint4 read_load_ui = read_imageui(g_rwRTexture2DUInt, coord);
 }
 
+void test_byte_address_buffer(__global uchar* g_roRawBuffer, __global uchar* g_rwRawBuffer, uint3 dtid)
+{
+	uint ro1 = *(__global uint*)(g_roRawBuffer + 64u * dtid.x);
+	uint2 ro2 = *(__global uint2*)(g_roRawBuffer + (64u * dtid.x + 16u));
+	uint3 ro3 = *(__global uint3*)(g_roRawBuffer + (64u * dtid.x + 32u));
+	uint4 ro4 = *(__global uint4*)(g_roRawBuffer + (64u * dtid.x + 48u));
+	uint rw1 = *(__global uint*)(g_rwRawBuffer + 64u * dtid.x);
+	uint2 rw2 = *(__global uint2*)(g_rwRawBuffer + (64u * dtid.x + 16u));
+	uint3 rw3 = *(__global uint3*)(g_rwRawBuffer + (64u * dtid.x + 32u));
+	uint4 rw4 = *(__global uint4*)(g_rwRawBuffer + (64u * dtid.x + 48u));
+	*(__global uint*)(g_rwRawBuffer + 64u * dtid.x) = ro1 + rw1;
+	*(__global uint2*)(g_rwRawBuffer + (64u * dtid.x + 16u)) = ro2 + rw2;
+	*(__global uint3*)(g_rwRawBuffer + (64u * dtid.x + 32u)) = ro3 + rw3;
+	*(__global uint4*)(g_rwRawBuffer + (64u * dtid.x + 48u)) = ro4 + rw4;
+}
+
 __attribute__((reqd_work_group_size(8, 8, 1)))
-kernel void MyKernel(__global uint4* g_roBuffer, __global struct testStruct* g_roStructuredBuffer, __global uint4* g_rwBuffer, __global struct testStruct* g_rwStructuredBuffer, read_only image2d_t g_rwRTexture2DFloat, read_only image2d_t g_rwRTexture2DInt, read_only image2d_t g_rwRTexture2DUInt)
+kernel void MyKernel(__global uint4* g_roBuffer, __global struct testStruct* g_roStructuredBuffer, __global uchar* g_roRawBuffer, __global uint4* g_rwBuffer, __global struct testStruct* g_rwStructuredBuffer, read_only image2d_t g_rwRTexture2DFloat, read_only image2d_t g_rwRTexture2DInt, read_only image2d_t g_rwRTexture2DUInt, __global uchar* g_rwRawBuffer)
 {
 	uint3 dtid = (uint3)(get_global_id(0u), get_global_id(1u), get_global_id(2u));
 	test_buffer(g_roBuffer, g_rwBuffer, dtid);
 	test_structured_buffer(g_roStructuredBuffer, g_rwStructuredBuffer, dtid);
 	test_texture_2d(g_rwRTexture2DFloat, g_rwRTexture2DInt, g_rwRTexture2DUInt, dtid);
+	test_byte_address_buffer(g_roRawBuffer, g_rwRawBuffer, dtid);
 	barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 	barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 	barrier(CLK_GLOBAL_MEM_FENCE);

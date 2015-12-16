@@ -408,6 +408,20 @@ pub enum Intrinsic {
     StructuredBufferLoad(Expression, Expression),
     RWStructuredBufferLoad(Expression, Expression),
     RWTexture2DLoad(Expression, Expression),
+
+    // ByteAddressBuffer methods
+    ByteAddressBufferLoad(Expression, Expression),
+    ByteAddressBufferLoad2(Expression, Expression),
+    ByteAddressBufferLoad3(Expression, Expression),
+    ByteAddressBufferLoad4(Expression, Expression),
+    RWByteAddressBufferLoad(Expression, Expression),
+    RWByteAddressBufferLoad2(Expression, Expression),
+    RWByteAddressBufferLoad3(Expression, Expression),
+    RWByteAddressBufferLoad4(Expression, Expression),
+    RWByteAddressBufferStore(Expression, Expression, Expression),
+    RWByteAddressBufferStore2(Expression, Expression, Expression),
+    RWByteAddressBufferStore3(Expression, Expression, Expression),
+    RWByteAddressBufferStore4(Expression, Expression, Expression),
 }
 
 pub use super::ast::Literal as Literal;

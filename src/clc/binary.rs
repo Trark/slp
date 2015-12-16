@@ -318,7 +318,7 @@ fn print_expression_inner(expression: &Expression, last_precedence: u32, printer
             if last_precedence <= prec { printer.print("(") }
             printer.print("*");
             printer.separator();
-            print_expression_inner(inner, prec, printer);
+            print_expression_inner(inner, prec + 1, printer);
             if last_precedence <= prec { printer.print(")") }
         },
         &Expression::MemberDeref(ref composite, ref member) => {
