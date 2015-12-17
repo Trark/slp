@@ -201,6 +201,100 @@ pub fn get_intrinsics() -> &'static [IntrinsicDefinition] {
     INTRINSICS
 }
 
+pub struct MethodDefinition(pub ObjectType, pub String, pub Vec<(Type, Vec<ParamType>, IntrinsicFactory)>);
+
+pub fn get_method(object: &ObjectType, name: &str) -> Result<MethodDefinition, ()> {
+
+    type MethodT0 = (&'static str, Type, &'static [ParamType], IntrinsicFactory);
+    fn find_method_0(object: &ObjectType, defs: &'static [MethodT0], name: &str) -> Result<MethodDefinition, ()> {
+        let mut methods = vec![];
+        for &(ref method_name, ref return_type, ref param_types, ref factory) in defs {
+            if *method_name == name {
+                methods.push((return_type.clone(), param_types.to_vec(), factory.clone()));
+            };
+        }
+        if methods.len() > 0 {
+            Ok(MethodDefinition(object.clone(), name.to_string(), methods))
+        } else {
+            Err(())
+        }
+    }
+
+    type MethodT1 = (&'static str, Box<Fn(&Type) -> (Type, Vec<ParamType>)>, IntrinsicFactory);
+    fn find_method_1(object: &ObjectType, t0: &Type, defs: &[MethodT1], name: &str) -> Result<MethodDefinition, ()> {
+        let mut methods = vec![];
+        for &(ref method_name, ref create, ref factory) in defs {
+            if *method_name == name {
+                let (return_type, param_types) = create(t0);
+                methods.push((return_type.clone(), param_types.to_vec(), factory.clone()));
+            }
+        }
+        if methods.len() > 0 {
+            Ok(MethodDefinition(object.clone(), name.to_string(), methods))
+        } else {
+            Err(())
+        }
+    }
+
+    match *object {
+        ObjectType::Buffer(ref data_type) => {
+            let methods: &[MethodT1] = &[
+                ("Load", Box::new(|ty: &Type| (ty.clone(), vec![T_INT])), I2(Intrinsic::BufferLoad)),
+            ];
+            find_method_1(object, &Type::from_data(data_type.clone()), &methods, name)
+        }
+        ObjectType::RWBuffer(ref data_type) => {
+            let methods: &[MethodT1] = &[
+                ("Load", Box::new(|ty: &Type| (ty.clone(), vec![T_INT])), I2(Intrinsic::RWBufferLoad)),
+            ];
+            find_method_1(object, &Type::from_data(data_type.clone()), &methods, name)
+        }
+        ObjectType::StructuredBuffer(ref structured_type) => {
+            let methods: &[MethodT1] = &[
+                ("Load", Box::new(|ty: &Type| (ty.clone(), vec![T_INT])), I2(Intrinsic::StructuredBufferLoad)),
+            ];
+            find_method_1(object, &Type::from_structured(structured_type.clone()), &methods, name)
+        }
+        ObjectType::RWStructuredBuffer(ref structured_type) => {
+            let methods: &[MethodT1] = &[
+                ("Load", Box::new(|ty: &Type| (ty.clone(), vec![T_INT])), I2(Intrinsic::RWStructuredBufferLoad)),
+            ];
+            find_method_1(object, &Type::from_structured(structured_type.clone()), &methods, name)
+        }
+        ObjectType::RWTexture2D(ref data_type) => {
+            let methods: &[MethodT1] = &[
+                ("Load", Box::new(|ty: &Type| (ty.clone(), vec![T_INT2])), I2(Intrinsic::RWTexture2DLoad)),
+            ];
+            find_method_1(object, &Type::from_data(data_type.clone()), &methods, name)
+        }
+        ObjectType::ByteAddressBuffer => {
+            const METHODS: &'static [MethodT0] = &[
+                ("Load", T_UINT_TY, &[T_UINT], I2(Intrinsic::ByteAddressBufferLoad)),
+                ("Load2", T_UINT2_TY, &[T_UINT], I2(Intrinsic::ByteAddressBufferLoad2)),
+                ("Load3", T_UINT3_TY, &[T_UINT], I2(Intrinsic::ByteAddressBufferLoad3)),
+                ("Load4", T_UINT4_TY, &[T_UINT], I2(Intrinsic::ByteAddressBufferLoad4)),
+            ];
+            find_method_0(object, METHODS, name)
+        }
+        ObjectType::RWByteAddressBuffer => {
+            const METHODS: &'static [MethodT0] = &[
+                ("Load", T_UINT_TY, &[T_UINT], I2(Intrinsic::RWByteAddressBufferLoad)),
+                ("Load2", T_UINT2_TY, &[T_UINT], I2(Intrinsic::RWByteAddressBufferLoad2)),
+                ("Load3", T_UINT3_TY, &[T_UINT], I2(Intrinsic::RWByteAddressBufferLoad3)),
+                ("Load4", T_UINT4_TY, &[T_UINT], I2(Intrinsic::RWByteAddressBufferLoad4)),
+                ("Store", T_VOID_TY, &[T_UINT, T_UINT], I3(Intrinsic::RWByteAddressBufferStore)),
+                ("Store2", T_VOID_TY, &[T_UINT, T_UINT2], I3(Intrinsic::RWByteAddressBufferStore2)),
+                ("Store3", T_VOID_TY, &[T_UINT, T_UINT3], I3(Intrinsic::RWByteAddressBufferStore3)),
+                ("Store4", T_VOID_TY, &[T_UINT, T_UINT4], I3(Intrinsic::RWByteAddressBufferStore4)),
+            ];
+            find_method_0(object, METHODS, name)
+        }
+        _ => Err(())
+    }
+}
+
+
+
 #[test]
 fn test_param_count() {
 
