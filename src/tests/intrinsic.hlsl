@@ -76,6 +76,14 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     GroupMemoryBarrier();
     GroupMemoryBarrierWithGroupSync();
     int i = 0;
+    int j;
+    j = i++;
+    j = ++i;
+    j = i--;
+    j = --i;
+    j = +i;
+    j = -i;
+    j = ~i;
     int1 i1;
     int2 i2;
     int3 i3;
@@ -90,6 +98,7 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     float2 f2;
     float3 f3;
     float4 f4;
+    bool b = !i;
     int asint_0 = asint(u);
     int1 asint_1 = asint(u1);
     int2 asint_2 = asint(u2);

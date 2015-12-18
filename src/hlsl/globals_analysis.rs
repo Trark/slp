@@ -132,7 +132,6 @@ fn search_expression(expression: &Expression, usage: &mut LocalFunctionGlobalUsa
         Expression::Literal(_) | Expression::Variable(_) => { },
         Expression::Global(ref id) => { usage.globals.insert(id.clone()); },
         Expression::ConstantVariable(ref id, _) => { usage.cbuffers.insert(id.clone()); },
-        Expression::UnaryOperation(_, ref expr) => search_expression(expr, usage),
         Expression::BinaryOperation(_, ref lhs, ref rhs) => {
             search_expression(lhs, usage);
             search_expression(rhs, usage);
@@ -167,6 +166,14 @@ fn search_intrinsic(intrinsic: &Intrinsic, usage: &mut LocalFunctionGlobalUsage)
         Intrinsic::GroupMemoryBarrier |
         Intrinsic::GroupMemoryBarrierWithGroupSync => { },
 
+        Intrinsic::PrefixIncrement(_, ref e1) |
+        Intrinsic::PrefixDecrement(_, ref e1) |
+        Intrinsic::PostfixIncrement(_, ref e1) |
+        Intrinsic::PostfixDecrement(_, ref e1) |
+        Intrinsic::Plus(_, ref e1) |
+        Intrinsic::Minus(_, ref e1) |
+        Intrinsic::LogicalNot(_, ref e1) |
+        Intrinsic::BitwiseNot(_, ref e1) |
         Intrinsic::AsIntU(ref e1) |
         Intrinsic::AsIntU1(ref e1) |
         Intrinsic::AsIntU2(ref e1) |

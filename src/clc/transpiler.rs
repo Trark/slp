@@ -669,19 +669,6 @@ fn transpile_localtype(local_type: &src::LocalType, context: &Context) -> Result
     }
 }
 
-fn transpile_unaryop(unaryop: &src::UnaryOp) -> Result<dst::UnaryOp, TranspileError> {
-    match *unaryop {
-        src::UnaryOp::PrefixIncrement => Ok(dst::UnaryOp::PrefixIncrement),
-        src::UnaryOp::PrefixDecrement => Ok(dst::UnaryOp::PrefixDecrement),
-        src::UnaryOp::PostfixIncrement => Ok(dst::UnaryOp::PostfixIncrement),
-        src::UnaryOp::PostfixDecrement => Ok(dst::UnaryOp::PostfixDecrement),
-        src::UnaryOp::Plus => Ok(dst::UnaryOp::Plus),
-        src::UnaryOp::Minus => Ok(dst::UnaryOp::Minus),
-        src::UnaryOp::LogicalNot => Ok(dst::UnaryOp::LogicalNot),
-        src::UnaryOp::BitwiseNot => Ok(dst::UnaryOp::BitwiseNot),
-    }
-}
-
 fn transpile_binop(binop: &src::BinOp) -> Result<dst::BinOp, TranspileError> {
     match *binop {
         src::BinOp::Add => Ok(dst::BinOp::Add),
@@ -714,6 +701,10 @@ fn transpile_literal(lit: &src::Literal) -> Result<dst::Literal, TranspileError>
     }
 }
 
+fn write_unary(op: dst::UnaryOp, expr: &src::Expression, context: &mut Context) -> Result<dst::Expression, TranspileError> {
+    Ok(dst::Expression::UnaryOperation(op, Box::new(try!(transpile_expression(expr, context)))))
+}
+
 fn write_func(name: &'static str, args: &[&src::Expression], context: &mut Context) -> Result<dst::Expression, TranspileError> {
     Ok(dst::Expression::UntypedIntrinsic(
         name.to_string(),
@@ -727,6 +718,14 @@ fn write_func(name: &'static str, args: &[&src::Expression], context: &mut Conte
 
 fn transpile_intrinsic(intrinsic: &src::Intrinsic, context: &mut Context) -> Result<dst::Expression, TranspileError> {
     match *intrinsic {
+        src::Intrinsic::PrefixIncrement(_, ref expr) => write_unary(dst::UnaryOp::PrefixIncrement, expr, context),
+        src::Intrinsic::PrefixDecrement(_, ref expr) => write_unary(dst::UnaryOp::PrefixDecrement, expr, context),
+        src::Intrinsic::PostfixIncrement(_, ref expr) => write_unary(dst::UnaryOp::PostfixIncrement, expr, context),
+        src::Intrinsic::PostfixDecrement(_, ref expr) => write_unary(dst::UnaryOp::PostfixDecrement, expr, context),
+        src::Intrinsic::Plus(_, ref expr) => write_unary(dst::UnaryOp::Plus, expr, context),
+        src::Intrinsic::Minus(_, ref expr) => write_unary(dst::UnaryOp::Minus, expr, context),
+        src::Intrinsic::LogicalNot(_, ref expr) => write_unary(dst::UnaryOp::LogicalNot, expr, context),
+        src::Intrinsic::BitwiseNot(_, ref expr) => write_unary(dst::UnaryOp::BitwiseNot, expr, context),
         src::Intrinsic::AllMemoryBarrier | src::Intrinsic::AllMemoryBarrierWithGroupSync => {
             Ok(dst::Expression::UntypedIntrinsic(
                 "barrier".to_string(),
@@ -783,6 +782,7 @@ fn transpile_intrinsic(intrinsic: &src::Intrinsic, context: &mut Context) -> Res
         src::Intrinsic::AsFloatF2(ref e) => write_func("as_float2", &[e], context),
         src::Intrinsic::AsFloatF3(ref e) => write_func("as_float3", &[e], context),
         src::Intrinsic::AsFloatF4(ref e) => write_func("as_float4", &[e], context),
+        src::Intrinsic::AsDouble(_, _) => Err(TranspileError::IntrinsicUnimplemented),
         src::Intrinsic::ClampI(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
         src::Intrinsic::ClampI1(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
         src::Intrinsic::ClampI2(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
@@ -814,6 +814,8 @@ fn transpile_intrinsic(intrinsic: &src::Intrinsic, context: &mut Context) -> Res
         src::Intrinsic::DotF2(ref x, ref y) => write_func("dot", &[x, y], context),
         src::Intrinsic::DotF3(ref x, ref y) => write_func("dot", &[x, y], context),
         src::Intrinsic::DotF4(ref x, ref y) => write_func("dot", &[x, y], context),
+        src::Intrinsic::Min(_, _) => Err(TranspileError::IntrinsicUnimplemented),
+        src::Intrinsic::Max(_, _) => Err(TranspileError::IntrinsicUnimplemented),
         src::Intrinsic::Float4(ref x, ref y, ref z, ref w) => {
             Ok(dst::Expression::Constructor(dst::Constructor::Float4(
                 Box::new(try!(transpile_expression(x, context))),
@@ -916,7 +918,6 @@ fn transpile_intrinsic(intrinsic: &src::Intrinsic, context: &mut Context) -> Res
                 cl_value
             ))
         },
-        _ => unimplemented!(),
     }
 }
 
@@ -926,11 +927,6 @@ fn transpile_expression(expression: &src::Expression, context: &mut Context) -> 
         &src::Expression::Variable(ref var_ref) => context.get_variable_ref(var_ref),
         &src::Expression::Global(ref id) => context.get_global_var(id),
         &src::Expression::ConstantVariable(ref id, ref name) => context.get_constant(id, name.clone()),
-        &src::Expression::UnaryOperation(ref unaryop, ref expr) => {
-            let cl_unaryop = try!(transpile_unaryop(unaryop));
-            let cl_expr = Box::new(try!(transpile_expression(expr, context)));
-            Ok(dst::Expression::UnaryOperation(cl_unaryop, cl_expr))
-        }
         &src::Expression::BinaryOperation(ref binop, ref lhs, ref rhs) => {
             let cl_binop = try!(transpile_binop(binop));
             let cl_lhs = Box::new(try!(transpile_expression(lhs, context)));

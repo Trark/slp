@@ -65,6 +65,14 @@ kernel void MyKernel(__global uint4* g_roBuffer, __global struct testStruct* g_r
 	barrier(CLK_LOCAL_MEM_FENCE);
 	barrier(CLK_LOCAL_MEM_FENCE);
 	int i = (int)0;
+	int j;
+	j = i++;
+	j = ++i;
+	j = i--;
+	j = --i;
+	j = +i;
+	j = -i;
+	j = ~i;
 	int i1;
 	int2 i2;
 	int3 i3;
@@ -79,6 +87,7 @@ kernel void MyKernel(__global uint4* g_roBuffer, __global struct testStruct* g_r
 	float2 f2;
 	float3 f3;
 	float4 f4;
+	bool b = !i;
 	int asint_0 = as_int(u);
 	int asint_1 = as_int(u1);
 	int2 asint_2 = as_int2(u2);

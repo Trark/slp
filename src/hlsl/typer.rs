@@ -38,7 +38,7 @@ pub enum TyperError {
     FunctionPassedToAnotherFunction(ErrorType, ErrorType),
     FunctionArgumentTypeMismatch(Vec<FunctionOverload>, Vec<ExpressionType>),
 
-    UnaryOperationWrongTypes(ir::UnaryOp, ErrorType),
+    UnaryOperationWrongTypes(ast::UnaryOp, ErrorType),
     BinaryOperationWrongTypes(ir::BinOp, ErrorType, ErrorType),
     TernaryConditionRequiresBoolean(ErrorType),
     TernaryArmsMustHaveSameType(ErrorType, ErrorType),
@@ -1080,6 +1080,61 @@ fn parse_literal(ast: &ast::Literal) -> Result<TypedExpression, TyperError> {
     }
 }
 
+fn parse_expr_unaryop(op: &ast::UnaryOp, expr: &ast::Expression, context: &ExpressionContext) -> Result<TypedExpression, TyperError> {
+    match try!(parse_expr(expr, context)) {
+        TypedExpression::Value(expr_ir, expr_ty) => {
+            fn enforce_increment_type(ety: &ExpressionType, op: &ast::UnaryOp) -> Result<(), TyperError> {
+                match *ety {
+                    ir::ExpressionType(_, ir::ValueType::Rvalue) => Err(TyperError::UnaryOperationWrongTypes(op.clone(), ErrorType::Unknown)),
+                    ir::ExpressionType(ir::Type(ir::TypeLayout::Scalar(ir::ScalarType::Bool), _), _) => Err(TyperError::UnaryOperationWrongTypes(op.clone(), ErrorType::Unknown)),
+                    ir::ExpressionType(ir::Type(ir::TypeLayout::Vector(ir::ScalarType::Bool, _), _), _) => Err(TyperError::UnaryOperationWrongTypes(op.clone(), ErrorType::Unknown)),
+                    ir::ExpressionType(ir::Type(ir::TypeLayout::Matrix(ir::ScalarType::Bool, _, _), _), _) => Err(TyperError::UnaryOperationWrongTypes(op.clone(), ErrorType::Unknown)),
+                    _ => Ok(()),
+                }
+            }
+            let (intrinsic, ety) = match *op {
+                ast::UnaryOp::PrefixIncrement => {
+                    try!(enforce_increment_type(&expr_ty, op));
+                    (ir::Intrinsic::PrefixIncrement(expr_ty.0.clone(), expr_ir), expr_ty)
+                },
+                ast::UnaryOp::PrefixDecrement => {
+                    try!(enforce_increment_type(&expr_ty, op));
+                    (ir::Intrinsic::PrefixDecrement(expr_ty.0.clone(), expr_ir), expr_ty)
+                },
+                ast::UnaryOp::PostfixIncrement => {
+                    try!(enforce_increment_type(&expr_ty, op));
+                    (ir::Intrinsic::PostfixIncrement(expr_ty.0.clone(), expr_ir), expr_ty)
+                },
+                ast::UnaryOp::PostfixDecrement => {
+                    try!(enforce_increment_type(&expr_ty, op));
+                    (ir::Intrinsic::PostfixDecrement(expr_ty.0.clone(), expr_ir), expr_ty)
+                },
+                ast::UnaryOp::Plus => (ir::Intrinsic::Plus(expr_ty.0.clone(), expr_ir), expr_ty),
+                ast::UnaryOp::Minus => (ir::Intrinsic::Minus(expr_ty.0.clone(), expr_ir), expr_ty),
+                ast::UnaryOp::LogicalNot => {
+                    let ty = match expr_ty.0 {
+                        ir::Type(ir::TypeLayout::Scalar(_), _) => ir::Type::from_layout(ir::TypeLayout::Scalar(ir::ScalarType::Bool)),
+                        ir::Type(ir::TypeLayout::Vector(_, x), _) => ir::Type::from_layout(ir::TypeLayout::Vector(ir::ScalarType::Bool, x)),
+                        ir::Type(ir::TypeLayout::Matrix(_, x, y), _) => ir::Type::from_layout(ir::TypeLayout::Matrix(ir::ScalarType::Bool, x, y)),
+                        _ => return Err(TyperError::UnaryOperationWrongTypes(op.clone(), ErrorType::Unknown)),
+                    };
+                    let ety = ty.clone().to_rvalue();
+                    (ir::Intrinsic::LogicalNot(ty, expr_ir), ety)
+                },
+                ast::UnaryOp::BitwiseNot => match (expr_ty.0).0 {
+                    ir::TypeLayout::Scalar(ir::ScalarType::Int) |
+                    ir::TypeLayout::Scalar(ir::ScalarType::UInt) => {
+                        (ir::Intrinsic::BitwiseNot(expr_ty.0.clone(), expr_ir), expr_ty)
+                    },
+                    _ => return Err(TyperError::UnaryOperationWrongTypes(op.clone(), ErrorType::Unknown)),
+                },
+            };
+            Ok(TypedExpression::Value(ir::Expression::Intrinsic(Box::new(intrinsic)), ety))
+        },
+        _ => Err(TyperError::UnaryOperationWrongTypes(op.clone(), ErrorType::Unknown)),
+    }
+}
+
 fn resolve_arithmetic_types(binop: &ir::BinOp, left: &ExpressionType, right: &ExpressionType, context: &ExpressionContext) -> Result<(ImplicitConversion, ImplicitConversion), TyperError> {
     use hlsl::ir::Type;
     use hlsl::ir::ScalarType;
@@ -1237,14 +1292,7 @@ fn parse_expr(ast: &ast::Expression, context: &ExpressionContext) -> Result<Type
     match ast {
         &ast::Expression::Literal(ref lit) => parse_literal(lit),
         &ast::Expression::Variable(ref s) => Ok(try!(context.find_variable(s))),
-        &ast::Expression::UnaryOperation(ref op, ref expr) => {
-            match try!(parse_expr(expr, context)) {
-                TypedExpression::Value(expr_ir, expr_ty) => {
-                    Ok(TypedExpression::Value(ir::Expression::UnaryOperation(op.clone(), Box::new(expr_ir)), expr_ty))
-                },
-                _ => Err(TyperError::UnaryOperationWrongTypes(op.clone(), ErrorType::Unknown)),
-            }
-        },
+        &ast::Expression::UnaryOperation(ref op, ref expr) => parse_expr_unaryop(op, expr, context),
         &ast::Expression::BinaryOperation(ref op, ref lhs, ref rhs) => parse_expr_binop(op, lhs, rhs, context),
         &ast::Expression::TernaryConditional(ref cond, ref lhs, ref rhs) => parse_expr_ternary(cond, lhs, rhs, context),
         &ast::Expression::ArraySubscript(ref array, ref subscript) => {

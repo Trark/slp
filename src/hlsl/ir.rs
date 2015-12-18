@@ -142,6 +142,8 @@ impl TypeModifier {
     }
 
     pub fn const_only() -> TypeModifier { TypeModifier { is_const: true, .. TypeModifier::default() } }
+
+    pub fn keep_precise(&self) -> TypeModifier { TypeModifier { precise: self.precise, .. TypeModifier::default() } }
 }
 
 impl Default for TypeModifier {
@@ -316,10 +318,19 @@ impl From<Type> for LocalType {
 }
 
 pub use super::ast::BinOp as BinOp;
-pub use super::ast::UnaryOp as UnaryOp;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Intrinsic {
+
+    // Unary operations
+    PrefixIncrement(Type, Expression),
+    PrefixDecrement(Type, Expression),
+    PostfixIncrement(Type, Expression),
+    PostfixDecrement(Type, Expression),
+    Plus(Type, Expression),
+    Minus(Type, Expression),
+    LogicalNot(Type, Expression),
+    BitwiseNot(Type, Expression),
 
     AllMemoryBarrier,
     AllMemoryBarrierWithGroupSync,
@@ -469,7 +480,6 @@ pub enum Expression {
     Variable(VariableRef),
     Global(GlobalId),
     ConstantVariable(ConstantBufferId, String),
-    UnaryOperation(UnaryOp, Box<Expression>),
     BinaryOperation(BinOp, Box<Expression>, Box<Expression>),
     TernaryConditional(Box<Expression>, Box<Expression>, Box<Expression>),
     ArraySubscript(Box<Expression>, Box<Expression>),
@@ -774,7 +784,6 @@ impl TypeContext {
                     None => Err(()),
                 }
             },
-            Expression::UnaryOperation(_, _) => unimplemented!(),
             Expression::BinaryOperation(_, _, _) => unimplemented!(),
             Expression::TernaryConditional(_, ref expr_left, ref expr_right) => {
                 assert_eq!(self.get_expression_type(expr_left), self.get_expression_type(expr_right));
