@@ -23,6 +23,22 @@ void testBoolOrFloat(float x)
 {
 }
 
+void testIntOrUInt1(int x)
+{
+}
+
+void testIntOrUInt1(uint1 x)
+{
+}
+
+void testIntOrUInt4(int x)
+{
+}
+
+void testIntOrUInt4(uint4 x)
+{
+}
+
 [numthreads(8, 8, 1)]
 void CSMAIN(uint3 dtid : SV_DispatchThreadID)
 {
@@ -37,4 +53,14 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     testBoolOrFloat((bool)0);
     testBoolOrFloat(0.0);
     testBoolOrFloat(0);
+
+    testIntOrUInt1((int)0);
+    testIntOrUInt1((uint)0);
+    testIntOrUInt1(0u);
+    testIntOrUInt1((uint4)0u);
+    testIntOrUInt1((uint4)0);
+    testIntOrUInt4((int)0);
+    testIntOrUInt4((uint)0);
+    testIntOrUInt4((uint1)0);
+    testIntOrUInt4((uint4)0);
 }

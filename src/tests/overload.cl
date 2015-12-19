@@ -1,4 +1,24 @@
 
+uint4 cast_int_to_uint4(int from)
+{
+	uint4 to;
+	to[0] = from;
+	to[1] = from;
+	to[2] = from;
+	to[3] = from;
+	return to;
+}
+
+uint4 cast_uint_to_uint4(uint from)
+{
+	uint4 to;
+	to[0] = from;
+	to[1] = from;
+	to[2] = from;
+	to[3] = from;
+	return to;
+}
+
 void testIntOrUInt_0(int x)
 {
 }
@@ -23,6 +43,22 @@ void testBoolOrFloat_1(float x)
 {
 }
 
+void testIntOrUInt1_0(int x)
+{
+}
+
+void testIntOrUInt1_1(uint x)
+{
+}
+
+void testIntOrUInt4_0(int x)
+{
+}
+
+void testIntOrUInt4_1(uint4 x)
+{
+}
+
 __attribute__((reqd_work_group_size(8, 8, 1)))
 kernel void MyKernel()
 {
@@ -36,4 +72,13 @@ kernel void MyKernel()
 	testBoolOrFloat_0((bool)0);
 	testBoolOrFloat_1(0.0f);
 	testBoolOrFloat_0((bool)0);
+	testIntOrUInt1_0((int)0);
+	testIntOrUInt1_1((uint)0);
+	testIntOrUInt1_1(0u);
+	testIntOrUInt1_1(cast_uint_to_uint4(0u).x);
+	testIntOrUInt1_1(cast_int_to_uint4(0).x);
+	testIntOrUInt4_0((int)0);
+	testIntOrUInt4_1(cast_uint_to_uint4((uint)0));
+	testIntOrUInt4_1(cast_uint_to_uint4((uint)0));
+	testIntOrUInt4_1(cast_int_to_uint4(0));
 }

@@ -340,39 +340,32 @@ pub enum Intrinsic {
     GroupMemoryBarrierWithGroupSync,
 
     AsIntU(Expression),
-    AsIntU1(Expression),
     AsIntU2(Expression),
     AsIntU3(Expression),
     AsIntU4(Expression),
     AsIntF(Expression),
-    AsIntF1(Expression),
     AsIntF2(Expression),
     AsIntF3(Expression),
     AsIntF4(Expression),
 
     AsUIntI(Expression),
-    AsUIntI1(Expression),
     AsUIntI2(Expression),
     AsUIntI3(Expression),
     AsUIntI4(Expression),
     AsUIntF(Expression),
-    AsUIntF1(Expression),
     AsUIntF2(Expression),
     AsUIntF3(Expression),
     AsUIntF4(Expression),
 
     AsFloatI(Expression),
-    AsFloatI1(Expression),
     AsFloatI2(Expression),
     AsFloatI3(Expression),
     AsFloatI4(Expression),
     AsFloatU(Expression),
-    AsFloatU1(Expression),
     AsFloatU2(Expression),
     AsFloatU3(Expression),
     AsFloatU4(Expression),
     AsFloatF(Expression),
-    AsFloatF1(Expression),
     AsFloatF2(Expression),
     AsFloatF3(Expression),
     AsFloatF4(Expression),
@@ -380,12 +373,10 @@ pub enum Intrinsic {
     AsDouble(Expression, Expression),
 
     ClampI(Expression, Expression, Expression),
-    ClampI1(Expression, Expression, Expression),
     ClampI2(Expression, Expression, Expression),
     ClampI3(Expression, Expression, Expression),
     ClampI4(Expression, Expression, Expression),
     ClampF(Expression, Expression, Expression),
-    ClampF1(Expression, Expression, Expression),
     ClampF2(Expression, Expression, Expression),
     ClampF3(Expression, Expression, Expression),
     ClampF4(Expression, Expression, Expression),
@@ -462,7 +453,7 @@ pub struct VariableRef(pub VariableId, pub ScopeRef);
 /// Map of declarations in the current scope
 #[derive(PartialEq, Debug, Clone)]
 pub struct ScopedDeclarations {
-    pub variables: HashMap<VariableId, String>,
+    pub variables: HashMap<VariableId, (String, Type)>,
 }
 
 /// Map of declarations in the global scope
@@ -729,15 +720,10 @@ impl TypeContext {
 
     pub fn push_scope(&mut self, scope_block: &ScopeBlock) {
         let mut scope = HashMap::new();
-        for statement in &scope_block.0 {
-            match *statement {
-                Statement::Var(ref vd) => {
-                    match scope.insert(vd.id.clone(), vd.local_type.0.clone()) {
-                        None => { },
-                        Some(_) => panic!("Multiple locals in block with same id"),
-                    }
-                },
-                _ => { },
+        for (var_id, &(_, ref ty)) in &scope_block.1.variables {
+            match scope.insert(var_id.clone(), ty.clone()) {
+                None => { },
+                Some(_) => panic!("Multiple locals in block with same id"),
             }
         };
         self.locals.push(scope);
@@ -751,7 +737,7 @@ impl TypeContext {
     fn get_literal_type(literal: &Literal) -> ExpressionType {
         (match *literal {
             Literal::Bool(_) => Type::bool(),
-            Literal::UntypedInt(_) => panic!("untyped ints should be cast in a correct ir tree"),
+            Literal::UntypedInt(_) => Type::from_scalar(ScalarType::UntypedInt),
             Literal::Int(_) => Type::int(),
             Literal::UInt(_) => Type::uint(),
             Literal::Long(_) => unimplemented!(),
@@ -793,12 +779,52 @@ impl TypeContext {
                     None => Err(()),
                 }
             },
-            Expression::BinaryOperation(_, _, _) => unimplemented!(),
+            Expression::BinaryOperation(ref op, ref expr, _) => {
+                match *op {
+                    BinOp::Add |
+                    BinOp::Subtract |
+                    BinOp::Multiply |
+                    BinOp::Divide |
+                    BinOp::Modulus |
+                    BinOp::LeftShift |
+                    BinOp::RightShift |
+                    BinOp::Assignment => {
+                        self.get_expression_type(expr)
+                    }
+
+                    BinOp::LessThan |
+                    BinOp::LessEqual |
+                    BinOp::GreaterThan |
+                    BinOp::GreaterEqual |
+                    BinOp::Equality |
+                    BinOp::Inequality => {
+                        let ExpressionType(Type(ref tyl, _), _) = try!(self.get_expression_type(expr));
+                        Ok(ExpressionType(Type(match *tyl {
+                            TypeLayout::Scalar(_) => TypeLayout::Scalar(ScalarType::Bool),
+                            TypeLayout::Vector(_, ref x) => TypeLayout::Vector(ScalarType::Bool, *x),
+                            _ => return Err(()),
+                        }, TypeModifier::default()), ValueType::Rvalue))
+                    }
+                }
+            },
             Expression::TernaryConditional(_, ref expr_left, ref expr_right) => {
                 assert_eq!(self.get_expression_type(expr_left), self.get_expression_type(expr_right));
                 self.get_expression_type(expr_left)
             },
-            Expression::Swizzle(_, _) => unimplemented!(),
+            Expression::Swizzle(ref vec, ref swizzle) => {
+                let ExpressionType(Type(vec_tyl, vec_mod), vec_vt) = try!(self.get_expression_type(vec));
+                let tyl = match vec_tyl {
+                    TypeLayout::Vector(ref scalar, _) => {
+                        if swizzle.len() == 1 {
+                            TypeLayout::Scalar(scalar.clone())
+                        } else {
+                            TypeLayout::Vector(scalar.clone(), swizzle.len() as u32)
+                        }
+                    }
+                    _ => return Err(()), // Internal error: badly typed tree
+                };
+                Ok(ExpressionType(Type(tyl, vec_mod), vec_vt))
+            },
             Expression::ArraySubscript(_, _) => unimplemented!(),
             Expression::Member(ref expr, ref name)  => {
                 let expr_type = try!(self.get_expression_type(&expr));
@@ -823,8 +849,97 @@ impl TypeContext {
                 }
             },
             Expression::Cast(ref ty, _) => Ok(ty.to_rvalue()),
-            Expression::Intrinsic(_) => unimplemented!(),
+            Expression::Intrinsic(ref intrinsic) => self.get_intrinsic_type(intrinsic),
         }
+    }
+
+    pub fn get_intrinsic_type(&self, intrinsic: &Intrinsic) -> Result<ExpressionType, ()> {
+        Ok(match *intrinsic {
+            Intrinsic::PrefixIncrement(ref ty, _) => ty.to_rvalue(),
+            Intrinsic::PrefixDecrement(ref ty, _) => ty.to_rvalue(),
+            Intrinsic::PostfixIncrement(ref ty, _) => ty.to_rvalue(),
+            Intrinsic::PostfixDecrement(ref ty, _) => ty.to_rvalue(),
+            Intrinsic::Plus(ref ty, _) => ty.to_rvalue(),
+            Intrinsic::Minus(ref ty, _) => ty.to_rvalue(),
+            Intrinsic::LogicalNot(_, _) => unimplemented!(),
+            Intrinsic::BitwiseNot(ref ty, _) => ty.to_rvalue(),
+            Intrinsic::AllMemoryBarrier => Type::void().to_rvalue(),
+            Intrinsic::AllMemoryBarrierWithGroupSync => Type::void().to_rvalue(),
+            Intrinsic::DeviceMemoryBarrier => Type::void().to_rvalue(),
+            Intrinsic::DeviceMemoryBarrierWithGroupSync => Type::void().to_rvalue(),
+            Intrinsic::GroupMemoryBarrier => Type::void().to_rvalue(),
+            Intrinsic::GroupMemoryBarrierWithGroupSync => Type::void().to_rvalue(),
+            Intrinsic::AsIntU(_) => Type::int().to_rvalue(),
+            Intrinsic::AsIntU2(_) => Type::intn(2).to_rvalue(),
+            Intrinsic::AsIntU3(_) => Type::intn(3).to_rvalue(),
+            Intrinsic::AsIntU4(_) => Type::intn(4).to_rvalue(),
+            Intrinsic::AsIntF(_) => Type::int().to_rvalue(),
+            Intrinsic::AsIntF2(_) => Type::intn(2).to_rvalue(),
+            Intrinsic::AsIntF3(_) => Type::intn(3).to_rvalue(),
+            Intrinsic::AsIntF4(_) => Type::intn(4).to_rvalue(),
+            Intrinsic::AsUIntI(_) => Type::uint().to_rvalue(),
+            Intrinsic::AsUIntI2(_) => Type::uintn(2).to_rvalue(),
+            Intrinsic::AsUIntI3(_) => Type::uintn(3).to_rvalue(),
+            Intrinsic::AsUIntI4(_) => Type::uintn(4).to_rvalue(),
+            Intrinsic::AsUIntF(_) => Type::uint().to_rvalue(),
+            Intrinsic::AsUIntF2(_) => Type::uintn(2).to_rvalue(),
+            Intrinsic::AsUIntF3(_) => Type::uintn(3).to_rvalue(),
+            Intrinsic::AsUIntF4(_) => Type::uintn(4).to_rvalue(),
+            Intrinsic::AsFloatI(_) => Type::float().to_rvalue(),
+            Intrinsic::AsFloatI2(_) => Type::floatn(2).to_rvalue(),
+            Intrinsic::AsFloatI3(_) => Type::floatn(3).to_rvalue(),
+            Intrinsic::AsFloatI4(_) => Type::floatn(4).to_rvalue(),
+            Intrinsic::AsFloatU(_) => Type::float().to_rvalue(),
+            Intrinsic::AsFloatU2(_) => Type::floatn(2).to_rvalue(),
+            Intrinsic::AsFloatU3(_) => Type::floatn(3).to_rvalue(),
+            Intrinsic::AsFloatU4(_) => Type::floatn(4).to_rvalue(),
+            Intrinsic::AsFloatF(_) => Type::float().to_rvalue(),
+            Intrinsic::AsFloatF2(_) => Type::floatn(2).to_rvalue(),
+            Intrinsic::AsFloatF3(_) => Type::floatn(3).to_rvalue(),
+            Intrinsic::AsFloatF4(_) => Type::floatn(4).to_rvalue(),
+            Intrinsic::AsDouble(_, _) => Type::double().to_rvalue(),
+            Intrinsic::ClampI(_, _, _) => Type::int().to_rvalue(),
+            Intrinsic::ClampI2(_, _, _) => Type::intn(2).to_rvalue(),
+            Intrinsic::ClampI3(_, _, _) => Type::intn(3).to_rvalue(),
+            Intrinsic::ClampI4(_, _, _) => Type::intn(4).to_rvalue(),
+            Intrinsic::ClampF(_, _, _) => Type::float().to_rvalue(),
+            Intrinsic::ClampF2(_, _, _) => Type::floatn(2).to_rvalue(),
+            Intrinsic::ClampF3(_, _, _) => Type::floatn(3).to_rvalue(),
+            Intrinsic::ClampF4(_, _, _) => Type::floatn(4).to_rvalue(),
+            Intrinsic::Cross(_, _) => Type::floatn(3).to_rvalue(),
+            Intrinsic::Distance1(_, _) => Type::float().to_rvalue(),
+            Intrinsic::Distance2(_, _) => Type::float().to_rvalue(),
+            Intrinsic::Distance3(_, _) => Type::float().to_rvalue(),
+            Intrinsic::Distance4(_, _) => Type::float().to_rvalue(),
+            Intrinsic::DotI1(_, _) => Type::intn(1).to_rvalue(),
+            Intrinsic::DotI2(_, _) => Type::intn(2).to_rvalue(),
+            Intrinsic::DotI3(_, _) => Type::intn(3).to_rvalue(),
+            Intrinsic::DotI4(_, _) => Type::intn(4).to_rvalue(),
+            Intrinsic::DotF1(_, _) => Type::floatn(1).to_rvalue(),
+            Intrinsic::DotF2(_, _) => Type::floatn(2).to_rvalue(),
+            Intrinsic::DotF3(_, _) => Type::floatn(3).to_rvalue(),
+            Intrinsic::DotF4(_, _) => Type::floatn(4).to_rvalue(),
+            Intrinsic::Min(_, _) => unimplemented!(),
+            Intrinsic::Max(_, _) => unimplemented!(),
+            Intrinsic::Float4(_, _, _, _) => Type::floatn(4).to_rvalue(),
+            Intrinsic::BufferLoad(_, _) => unimplemented!(),
+            Intrinsic::RWBufferLoad(_, _) => unimplemented!(),
+            Intrinsic::StructuredBufferLoad(_, _) => unimplemented!(),
+            Intrinsic::RWStructuredBufferLoad(_, _) => unimplemented!(),
+            Intrinsic::RWTexture2DLoad(_, _) => unimplemented!(),
+            Intrinsic::ByteAddressBufferLoad(_, _) => unimplemented!(),
+            Intrinsic::ByteAddressBufferLoad2(_, _) => unimplemented!(),
+            Intrinsic::ByteAddressBufferLoad3(_, _) => unimplemented!(),
+            Intrinsic::ByteAddressBufferLoad4(_, _) => unimplemented!(),
+            Intrinsic::RWByteAddressBufferLoad(_, _) => unimplemented!(),
+            Intrinsic::RWByteAddressBufferLoad2(_, _) => unimplemented!(),
+            Intrinsic::RWByteAddressBufferLoad3(_, _) => unimplemented!(),
+            Intrinsic::RWByteAddressBufferLoad4(_, _) => unimplemented!(),
+            Intrinsic::RWByteAddressBufferStore(_, _, _) => unimplemented!(),
+            Intrinsic::RWByteAddressBufferStore2(_, _, _) => unimplemented!(),
+            Intrinsic::RWByteAddressBufferStore3(_, _, _) => unimplemented!(),
+            Intrinsic::RWByteAddressBufferStore4(_, _, _) => unimplemented!(),
+        })
     }
 }
 

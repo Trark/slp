@@ -6,17 +6,20 @@ use super::cst::*;
 /// detected and emitted at the top of the module.
 #[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone)]
 pub enum Fragment {
-    VectorCast(Scalar, Scalar, VectorDimension),
+    VectorCast(Scalar, Scalar, VectorDimension, VectorDimension),
+    ScalarToVectorCast(Scalar, Scalar, VectorDimension),
 }
 
 impl Fragment {
     pub fn generate(&self, name: &str) -> FunctionDefinition {
         match *self {
-            Fragment::VectorCast(ref from, ref to, ref dim) => {
+            Fragment::VectorCast(ref from, ref to, ref dim_from, ref dim_to) => {
+                let dim_to_u32 = dim_to.as_u32();
+                assert!(dim_to_u32 <= dim_from.as_u32(), "{} <= {}", dim_to_u32, dim_from.as_u32());
                 let from_param = "from".to_string();
                 let to_local = "to".to_string();
-                let mut body = vec![Statement::Var(VarDef { name: to_local.clone(), typename: Type::Vector(to.clone(), dim.clone()), assignment: None } )];
-                for i in 0..(dim.as_u32()) {
+                let mut body = vec![Statement::Var(VarDef { name: to_local.clone(), typename: Type::Vector(to.clone(), dim_to.clone()), assignment: None } )];
+                for i in 0..dim_to_u32 {
                     let index = i as u64;
                     body.push(Statement::Expression(Expression::BinaryOperation(BinOp::Assignment,
                         Box::new(Expression::ArraySubscript(Box::new(Expression::Variable(to_local.clone())), Box::new(Expression::Literal(Literal::Int(index))))),
@@ -26,8 +29,27 @@ impl Fragment {
                 body.push(Statement::Return(Expression::Variable(to_local.clone())));
                 FunctionDefinition {
                     name: name.to_string(),
-                    returntype: Type::Vector(to.clone(), dim.clone()),
-                    params: vec![FunctionParam { name: from_param, typename: Type::Vector(from.clone(), dim.clone()) }],
+                    returntype: Type::Vector(to.clone(), dim_to.clone()),
+                    params: vec![FunctionParam { name: from_param, typename: Type::Vector(from.clone(), dim_from.clone()) }],
+                    body: body,
+                }
+            }
+            Fragment::ScalarToVectorCast(ref from, ref to, ref dim_to) => {
+                let from_param = "from".to_string();
+                let to_local = "to".to_string();
+                let mut body = vec![Statement::Var(VarDef { name: to_local.clone(), typename: Type::Vector(to.clone(), dim_to.clone()), assignment: None } )];
+                for i in 0..(dim_to.as_u32()) {
+                    let index = i as u64;
+                    body.push(Statement::Expression(Expression::BinaryOperation(BinOp::Assignment,
+                        Box::new(Expression::ArraySubscript(Box::new(Expression::Variable(to_local.clone())), Box::new(Expression::Literal(Literal::Int(index))))),
+                        Box::new(Expression::Variable(from_param.clone())),
+                    )));
+                }
+                body.push(Statement::Return(Expression::Variable(to_local.clone())));
+                FunctionDefinition {
+                    name: name.to_string(),
+                    returntype: Type::Vector(to.clone(), dim_to.clone()),
+                    params: vec![FunctionParam { name: from_param, typename: Type::Scalar(from.clone()) }],
                     body: body,
                 }
             }
@@ -62,11 +84,18 @@ impl Fragment {
 
     pub fn get_candidate_name(&self) -> String {
         match *self {
-            Fragment::VectorCast(ref from, ref to, ref dim) => {
+            Fragment::VectorCast(ref from, ref to, ref dim_from, ref dim_to) => {
                 let from_str = Fragment::get_type_candidate_name(from);
                 let to_str = Fragment::get_type_candidate_name(to);
-                let dim_str = Fragment::get_dimension_candidate_name(dim);
-                format!("cast_{}_to_{}_{}", from_str, to_str, dim_str)
+                let dim_from_str = Fragment::get_dimension_candidate_name(dim_from);
+                let dim_to_str = Fragment::get_dimension_candidate_name(dim_to);
+                format!("cast_{}{}_to_{}{}", from_str, dim_from_str, to_str, dim_to_str)
+            }
+            Fragment::ScalarToVectorCast(ref from, ref to, ref dim_to) => {
+                let from_str = Fragment::get_type_candidate_name(from);
+                let to_str = Fragment::get_type_candidate_name(to);
+                let dim_to_str = Fragment::get_dimension_candidate_name(dim_to);
+                format!("cast_{}_to_{}{}", from_str, to_str, dim_to_str)
             }
         }
     }

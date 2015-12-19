@@ -387,8 +387,10 @@ pub fn untype_module(module: &src::Module) -> Result<dst::Module, UntyperError> 
     let mut context = try!(Context::from_globals(&module.global_declarations));
 
     let mut final_defs = vec![];
-    // Todo: consistent order
-    for (ref fragment, ref id) in &module.fragments {
+    let mut fragment_list = module.fragments.keys().collect::<Vec<_>>();
+    fragment_list.sort();
+    for fragment in fragment_list {
+        let id = module.fragments.get(fragment).expect("bad fragment key");
         let name = try!(context.get_function_name(id));
         let gen = fragment.generate(&name);
         final_defs.push(dst::RootDefinition::Function(gen));

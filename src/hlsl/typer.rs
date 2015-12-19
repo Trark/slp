@@ -260,10 +260,10 @@ impl VariableBlock {
         }
     }
 
-    fn destruct(self) -> HashMap<ir::VariableId, String> {
+    fn destruct(self) -> HashMap<ir::VariableId, (String, ir::Type)> {
         self.variables.iter().fold(HashMap::new(),
-            |mut map, (name, &(_, ref id))| {
-                map.insert(id.clone(), name.clone());
+            |mut map, (name, &(ref ty, ref id))| {
+                map.insert(id.clone(), (name.clone(), ty.clone()));
                 map
             }
         )

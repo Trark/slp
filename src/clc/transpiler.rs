@@ -26,6 +26,7 @@ pub enum TranspileError {
     UnknownVariableId,
 
     BoolVectorsNotSupported,
+    IntsMustBeTyped,
 
     IntrinsicUnimplemented,
 }
@@ -44,6 +45,7 @@ impl error::Error for TranspileError {
             TranspileError::InvalidVariableRef => "invalid variable ref",
             TranspileError::UnknownVariableId => "unknown variable id",
             TranspileError::BoolVectorsNotSupported => "bool vectors not supported",
+            TranspileError::IntsMustBeTyped => "internal error: untyped int ended up in tree",
             TranspileError::IntrinsicUnimplemented => "intrinsic function is not implemented",
         }
     }
@@ -512,7 +514,7 @@ impl Context {
 
     fn push_scope_with_pointer_overrides(&mut self, scope_block: &src::ScopeBlock, pointers: &[src::VariableId]) {
         self.variable_scopes.push(HashMap::new());
-        for (var_id, var_name) in &scope_block.1.variables {
+        for (var_id, &(ref var_name, _)) in &scope_block.1.variables {
             let identifier = self.make_identifier();
             let map = self.variable_scopes.last_mut().expect("no scopes after pushing scope");
             map.insert(var_id.clone(), VariableDecl(identifier, if pointers.iter().any(|pp| pp == var_id) { ParamType::Pointer } else { ParamType::Normal }));
@@ -619,7 +621,7 @@ fn transpile_scalartype(scalartype: &src::ScalarType) -> Result<dst::Scalar, Tra
         &src::ScalarType::Half => Ok(dst::Scalar::Half),
         &src::ScalarType::Float => Ok(dst::Scalar::Float),
         &src::ScalarType::Double => Ok(dst::Scalar::Double),
-        &src::ScalarType::UntypedInt => panic!(),
+        &src::ScalarType::UntypedInt => Err(TranspileError::IntsMustBeTyped),
     }
 }
 
@@ -748,48 +750,39 @@ fn transpile_intrinsic(intrinsic: &src::Intrinsic, context: &mut Context) -> Res
             ))
         },
         src::Intrinsic::AsIntU(ref e) => write_func("as_int", &[e], context),
-        src::Intrinsic::AsIntU1(ref e) => write_func("as_int", &[e], context),
         src::Intrinsic::AsIntU2(ref e) => write_func("as_int2", &[e], context),
         src::Intrinsic::AsIntU3(ref e) => write_func("as_int3", &[e], context),
         src::Intrinsic::AsIntU4(ref e) => write_func("as_int4", &[e], context),
         src::Intrinsic::AsIntF(ref e) => write_func("as_int", &[e], context),
-        src::Intrinsic::AsIntF1(ref e) => write_func("as_int", &[e], context),
         src::Intrinsic::AsIntF2(ref e) => write_func("as_int2", &[e], context),
         src::Intrinsic::AsIntF3(ref e) => write_func("as_int3", &[e], context),
         src::Intrinsic::AsIntF4(ref e) => write_func("as_int4", &[e], context),
         src::Intrinsic::AsUIntI(ref e) => write_func("as_uint", &[e], context),
-        src::Intrinsic::AsUIntI1(ref e) => write_func("as_uint", &[e], context),
         src::Intrinsic::AsUIntI2(ref e) => write_func("as_uint2", &[e], context),
         src::Intrinsic::AsUIntI3(ref e) => write_func("as_uint3", &[e], context),
         src::Intrinsic::AsUIntI4(ref e) => write_func("as_uint4", &[e], context),
         src::Intrinsic::AsUIntF(ref e) => write_func("as_uint", &[e], context),
-        src::Intrinsic::AsUIntF1(ref e) => write_func("as_uint", &[e], context),
         src::Intrinsic::AsUIntF2(ref e) => write_func("as_uint2", &[e], context),
         src::Intrinsic::AsUIntF3(ref e) => write_func("as_uint3", &[e], context),
         src::Intrinsic::AsUIntF4(ref e) => write_func("as_uint4", &[e], context),
         src::Intrinsic::AsFloatI(ref e) => write_func("as_float", &[e], context),
-        src::Intrinsic::AsFloatI1(ref e) => write_func("as_float", &[e], context),
         src::Intrinsic::AsFloatI2(ref e) => write_func("as_float2", &[e], context),
         src::Intrinsic::AsFloatI3(ref e) => write_func("as_float3", &[e], context),
         src::Intrinsic::AsFloatI4(ref e) => write_func("as_float4", &[e], context),
         src::Intrinsic::AsFloatU(ref e) => write_func("as_float", &[e], context),
-        src::Intrinsic::AsFloatU1(ref e) => write_func("as_float", &[e], context),
         src::Intrinsic::AsFloatU2(ref e) => write_func("as_float2", &[e], context),
         src::Intrinsic::AsFloatU3(ref e) => write_func("as_float3", &[e], context),
         src::Intrinsic::AsFloatU4(ref e) => write_func("as_float4", &[e], context),
         src::Intrinsic::AsFloatF(ref e) => write_func("as_float", &[e], context),
-        src::Intrinsic::AsFloatF1(ref e) => write_func("as_float", &[e], context),
         src::Intrinsic::AsFloatF2(ref e) => write_func("as_float2", &[e], context),
         src::Intrinsic::AsFloatF3(ref e) => write_func("as_float3", &[e], context),
         src::Intrinsic::AsFloatF4(ref e) => write_func("as_float4", &[e], context),
         src::Intrinsic::AsDouble(_, _) => Err(TranspileError::IntrinsicUnimplemented),
         src::Intrinsic::ClampI(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
-        src::Intrinsic::ClampI1(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
         src::Intrinsic::ClampI2(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
         src::Intrinsic::ClampI3(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
         src::Intrinsic::ClampI4(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
         src::Intrinsic::ClampF(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
-        src::Intrinsic::ClampF1(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
         src::Intrinsic::ClampF2(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
         src::Intrinsic::ClampF3(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
         src::Intrinsic::ClampF4(ref x, ref min, ref max) => write_func("clamp", &[x, min, max], context),
@@ -982,27 +975,74 @@ fn transpile_expression(expression: &src::Expression, context: &mut Context) -> 
             Ok(dst::Expression::Call(func_expr, final_arguments))
         },
         &src::Expression::Cast(ref cast_type, ref expr) => {
-            let cl_type = try!(transpile_type(cast_type, context));
+            let dest_cl_type = try!(transpile_type(cast_type, context));
             let cl_expr = try!(transpile_expression(expr, context));
-            Ok(match cl_type {
-                dst::Type::Bool | dst::Type::Scalar(_) => dst::Expression::Cast(cl_type, Box::new(cl_expr)),
-                dst::Type::Vector(ref scalar, ref dim) => {
-                    let from_exp_type = match context.type_context.get_expression_type(expr) {
-                        Ok(ty) => ty,
-                        Err(()) => return Err(TranspileError::Internal("could not calculate type for cast source".to_string())),
-                    };
-                    let from_cl_type = try!(transpile_type(&from_exp_type.0, context));
-                    let (from_scalar_type, from_dim) = match from_cl_type {
-                        dst::Type::Vector(scalar, dim) => (scalar, dim),
-                        _ => return Err(TranspileError::Internal("source of vector cast is not a vector".to_string())),
-                    };
-                    if from_dim != *dim {
-                        return Err(TranspileError::Internal("vector cast between different dimensions".to_string()))
-                    };
-                    let cast_func_id = context.fetch_fragment(Fragment::VectorCast(from_scalar_type, scalar.clone(), from_dim));
-                    dst::Expression::Call(cast_func_id, vec![cl_expr])
+            let source_ir_type = match context.type_context.get_expression_type(expr) {
+                Ok(ty) => ty.0,
+                Err(()) => return Err(TranspileError::Internal("could not calculate type for cast source".to_string())),
+            };
+            let (source_cl_type, untyped) = match transpile_type(&source_ir_type, context) {
+                Ok(ty) => (ty, false),
+                Err(TranspileError::IntsMustBeTyped) => {
+                    // Force untyped int literals to be treated as normal ints
+                    (dst::Type::Scalar(dst::Scalar::Int), true)
                 },
-                _ => return Err(TranspileError::Internal(format!("don't know how to cast to this type ({:?})", cl_type))),
+                Err(err) => return Err(err),
+            };
+            if dest_cl_type == source_cl_type && !untyped {
+                // If the cast would cast to the same time, ignore it
+                return Ok(cl_expr);
+            }
+            Ok(match dest_cl_type {
+                dst::Type::Bool => {
+                    match source_cl_type {
+                        // Vector to bool cast
+                        dst::Type::Vector(_, _) => {
+                            dst::Expression::Cast(dest_cl_type.clone(), Box::new(dst::Expression::Swizzle(Box::new(cl_expr), vec![dst::SwizzleSlot::X])))
+                        },
+                        // Scalar to bool cast
+                        dst::Type::Bool | dst::Type::Scalar(_) => {
+                            dst::Expression::Cast(dest_cl_type, Box::new(cl_expr))
+                        },
+                        _ => return Err(TranspileError::Internal("source of bool cast is not a numeric type".to_string())),
+                    }
+                }
+                dst::Type::Scalar(ref to_scalar_type) => {
+                    match source_cl_type {
+                        // Vector to same type scalar cast, swizzle
+                        dst::Type::Vector(ref from_scalar_type, _) if *from_scalar_type == *to_scalar_type => {
+                            dst::Expression::Swizzle(Box::new(cl_expr), vec![dst::SwizzleSlot::X])
+                        },
+                        // Vector to scalar cast, swizzle + cast
+                        dst::Type::Vector(_, _) => {
+                            dst::Expression::Cast(dest_cl_type.clone(), Box::new(dst::Expression::Swizzle(Box::new(cl_expr), vec![dst::SwizzleSlot::X])))
+                        },
+                        // Scalar to scalar cast
+                        dst::Type::Bool | dst::Type::Scalar(_) => {
+                            dst::Expression::Cast(dest_cl_type.clone(), Box::new(cl_expr))
+                        },
+                        _ => return Err(TranspileError::Internal("source of scalar cast is not a numeric type".to_string())),
+                    }
+                }
+                dst::Type::Vector(ref scalar, ref to_dim) => {
+                    match source_cl_type {
+                        // Vector to vector cast, make a function to do the work
+                        dst::Type::Vector(from_scalar_type, from_dim) => {
+                            let cast_func_id = context.fetch_fragment(Fragment::VectorCast(from_scalar_type, scalar.clone(), from_dim, to_dim.clone()));
+                            dst::Expression::Call(cast_func_id, vec![cl_expr])
+                        },
+                        // Scalar to vector cast, make a function to do the work
+                        dst::Type::Scalar(from_scalar_type) => {
+                            let cast_func_id = context.fetch_fragment(Fragment::ScalarToVectorCast(from_scalar_type, scalar.clone(), to_dim.clone()));
+                            dst::Expression::Call(cast_func_id, vec![cl_expr])
+                        },
+                        dst::Type::Bool => {
+                            unimplemented!()
+                        },
+                        _ => return Err(TranspileError::Internal("source of vector cast is not a numeric type".to_string())),
+                    }
+                }
+                _ => return Err(TranspileError::Internal(format!("don't know how to cast to this type ({:?})", dest_cl_type))),
             })
         },
         &src::Expression::Intrinsic(ref intrinsic) => transpile_intrinsic(intrinsic, context),

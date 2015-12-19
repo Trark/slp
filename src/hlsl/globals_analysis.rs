@@ -178,37 +178,30 @@ fn search_intrinsic(intrinsic: &Intrinsic, usage: &mut LocalFunctionGlobalUsage)
         Intrinsic::LogicalNot(_, ref e1) |
         Intrinsic::BitwiseNot(_, ref e1) |
         Intrinsic::AsIntU(ref e1) |
-        Intrinsic::AsIntU1(ref e1) |
         Intrinsic::AsIntU2(ref e1) |
         Intrinsic::AsIntU3(ref e1) |
         Intrinsic::AsIntU4(ref e1) |
         Intrinsic::AsIntF(ref e1) |
-        Intrinsic::AsIntF1(ref e1) |
         Intrinsic::AsIntF2(ref e1) |
         Intrinsic::AsIntF3(ref e1) |
         Intrinsic::AsIntF4(ref e1) |
         Intrinsic::AsUIntI(ref e1) |
-        Intrinsic::AsUIntI1(ref e1) |
         Intrinsic::AsUIntI2(ref e1) |
         Intrinsic::AsUIntI3(ref e1) |
         Intrinsic::AsUIntI4(ref e1) |
         Intrinsic::AsUIntF(ref e1) |
-        Intrinsic::AsUIntF1(ref e1) |
         Intrinsic::AsUIntF2(ref e1) |
         Intrinsic::AsUIntF3(ref e1) |
         Intrinsic::AsUIntF4(ref e1) |
         Intrinsic::AsFloatI(ref e1) |
-        Intrinsic::AsFloatI1(ref e1) |
         Intrinsic::AsFloatI2(ref e1) |
         Intrinsic::AsFloatI3(ref e1) |
         Intrinsic::AsFloatI4(ref e1) |
         Intrinsic::AsFloatU(ref e1) |
-        Intrinsic::AsFloatU1(ref e1) |
         Intrinsic::AsFloatU2(ref e1) |
         Intrinsic::AsFloatU3(ref e1) |
         Intrinsic::AsFloatU4(ref e1) |
         Intrinsic::AsFloatF(ref e1) |
-        Intrinsic::AsFloatF1(ref e1) |
         Intrinsic::AsFloatF2(ref e1) |
         Intrinsic::AsFloatF3(ref e1) |
         Intrinsic::AsFloatF4(ref e1) => {
@@ -264,12 +257,10 @@ fn search_intrinsic(intrinsic: &Intrinsic, usage: &mut LocalFunctionGlobalUsage)
         }
 
         Intrinsic::ClampI(ref e1, ref e2, ref e3) |
-        Intrinsic::ClampI1(ref e1, ref e2, ref e3) |
         Intrinsic::ClampI2(ref e1, ref e2, ref e3) |
         Intrinsic::ClampI3(ref e1, ref e2, ref e3) |
         Intrinsic::ClampI4(ref e1, ref e2, ref e3) |
         Intrinsic::ClampF(ref e1, ref e2, ref e3) |
-        Intrinsic::ClampF1(ref e1, ref e2, ref e3) |
         Intrinsic::ClampF2(ref e1, ref e2, ref e3) |
         Intrinsic::ClampF3(ref e1, ref e2, ref e3) |
         Intrinsic::ClampF4(ref e1, ref e2, ref e3) |

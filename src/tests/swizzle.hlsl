@@ -8,6 +8,9 @@ void vector_int_2()
     int i_x = v.x;
     int i_y = v.y;
 
+    int1 i1_x = v.x;
+    int1 i1_y = v.y;
+
     int2 i2_xx = v.xx;
     int2 i2_xy = v.yx;
     int2 i2_yx = v.xy;

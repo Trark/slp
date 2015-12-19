@@ -1,5 +1,5 @@
 
-int2 cast_uint_to_int_2(uint2 from)
+int2 cast_uint2_to_int2(uint2 from)
 {
 	int2 to;
 	to[0] = from[0];
@@ -70,7 +70,7 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint
 		myFunc_0((uint)p);
 	}
 	int y = (int)10;
-	while (y > (int)g_myFour)
+	while (y > g_myFour)
 	{
 		y--;
 		myFunc_0((uint)y);
@@ -86,5 +86,5 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint
 	outTest_0(&vals[(int)2]);
 	myFunc_0((uint)g_myFour);
 	uint2 cast_from;
-	int2 cast_t0 = cast_uint_to_int_2(cast_from);
+	int2 cast_t0 = cast_uint2_to_int2(cast_from);
 }
