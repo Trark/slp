@@ -939,6 +939,17 @@ fn transpile_expression(expression: &src::Expression, context: &mut Context) -> 
             let cl_rhs = Box::new(try!(transpile_expression(rhs, context)));
             Ok(dst::Expression::TernaryConditional(cl_cond, cl_lhs, cl_rhs))
         }
+        &src::Expression::Swizzle(ref vec, ref swizzle) => {
+            Ok(dst::Expression::Swizzle(
+                Box::new(try!(transpile_expression(vec, context))),
+                swizzle.iter().map(|swizzle_slot| match *swizzle_slot {
+                    src::SwizzleSlot::X => dst::SwizzleSlot::X,
+                    src::SwizzleSlot::Y => dst::SwizzleSlot::Y,
+                    src::SwizzleSlot::Z => dst::SwizzleSlot::Z,
+                    src::SwizzleSlot::W => dst::SwizzleSlot::W,
+                }).collect::<Vec<_>>()
+            ))
+        },
         &src::Expression::ArraySubscript(ref expr, ref sub) => {
             let cl_expr = Box::new(try!(transpile_expression(expr, context)));
             let cl_sub = Box::new(try!(transpile_expression(sub, context)));

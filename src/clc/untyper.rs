@@ -246,6 +246,14 @@ fn untype_expression(expression: &src::Expression, context: &mut Context) -> Res
             Box::new(try!(untype_expression(e2, context))),
             Box::new(try!(untype_expression(e3, context)))
         ),
+        src::Expression::Swizzle(ref expr, ref swizzle) => dst::Expression::Swizzle(Box::new(try!(untype_expression(expr, context))),
+            swizzle.iter().map(|swizzle_slot| match *swizzle_slot {
+                src::SwizzleSlot::X => dst::SwizzleSlot::X,
+                src::SwizzleSlot::Y => dst::SwizzleSlot::Y,
+                src::SwizzleSlot::Z => dst::SwizzleSlot::Z,
+                src::SwizzleSlot::W => dst::SwizzleSlot::W,
+            }).collect::<Vec<_>>()
+        ),
         src::Expression::ArraySubscript(ref arr, ref ind) => dst::Expression::ArraySubscript(
             Box::new(try!(untype_expression(arr, context))),
             Box::new(try!(untype_expression(ind, context)))

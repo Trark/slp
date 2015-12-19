@@ -141,6 +141,9 @@ fn search_expression(expression: &Expression, usage: &mut LocalFunctionGlobalUsa
             search_expression(left, usage);
             search_expression(right, usage);
         },
+        Expression::Swizzle(ref vec, _) => {
+            search_expression(vec, usage);
+        },
         Expression::ArraySubscript(ref arr, ref index) => {
             search_expression(arr, usage);
             search_expression(index, usage);

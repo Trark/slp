@@ -29,6 +29,7 @@ pub enum TyperError {
 
     TypeDoesNotHaveMembers(ErrorType),
     UnknownTypeMember(ErrorType, String),
+    InvalidSwizzle(ErrorType, String),
 
     ArrayIndexingNonArrayType,
     ArraySubscriptIndexNotInteger,
@@ -110,6 +111,7 @@ impl error::Error for TyperError {
 
             TyperError::TypeDoesNotHaveMembers(_) => "unknown member (type has no members)",
             TyperError::UnknownTypeMember(_, _) => "unknown member",
+            TyperError::InvalidSwizzle(_, _) => "invalid swizzle",
 
             TyperError::ArrayIndexingNonArrayType => "array index applied to non-array type",
             TyperError::ArraySubscriptIndexNotInteger => "array subscripts must be integers",
@@ -1341,28 +1343,39 @@ fn parse_expr(ast: &ast::Expression, context: &ExpressionContext) -> Result<Type
                 TypedExpression::Value(composite_ir, composite_type) => (composite_ir, composite_type),
                 _ => return Err(TyperError::TypeDoesNotHaveMembers(composite_pt)),
             };
-            let ExpressionType(ir::Type(composite_tyl, _), _) = composite_ty;
-            let ety = match &composite_tyl {
+            let ExpressionType(ir::Type(composite_tyl, _), vt) = composite_ty;
+            match &composite_tyl {
                 &ir::TypeLayout::Struct(ref id) => {
                     match context.find_struct_member(id, member) {
-                        Ok(ty) => ty.to_lvalue(),
-                        Err(err) => return Err(err),
+                        Ok(ty) => Ok(TypedExpression::Value(ir::Expression::Member(Box::new(composite_ir), member.clone()), ty.to_lvalue())),
+                        Err(err) => Err(err),
                     }
                 }
                 &ir::TypeLayout::Vector(ref scalar, ref x) => {
-                    // Todo: Swizzling
-                    let exists = match &member[..] {
-                        "x" | "r" if *x >= 1 => true,
-                        "y" | "g" if *x >= 2 => true,
-                        "z" | "b" if *x >= 3 => true,
-                        "w" | "a" if *x >= 4 => true,
-                        _ => false,
+                    let mut swizzle_slots = Vec::with_capacity(member.len());
+                    for c in member.chars() {
+                        swizzle_slots.push(match c {
+                            'x' | 'r' if *x >= 1 => ir::SwizzleSlot::X,
+                            'y' | 'g' if *x >= 2 => ir::SwizzleSlot::Y,
+                            'z' | 'b' if *x >= 3 => ir::SwizzleSlot::Z,
+                            'w' | 'a' if *x >= 4 => ir::SwizzleSlot::W,
+                            _ => return Err(TyperError::InvalidSwizzle(composite_pt, member.clone())),
+                        });
                     };
-                    if exists {
-                        ir::Type::from_scalar(scalar.clone()).to_lvalue()
-                    } else {
-                        return Err(TyperError::UnknownTypeMember(composite_pt, member.clone()));
-                    }
+                    let ety = ir::ExpressionType(ir::Type::from_layout(
+                        // Lets say single element swizzles go to scalars
+                        // Technically they might be going to 1 element vectors
+                        // that then get downcasted
+                        // But it's hard to tell as scalars + single element vectors
+                        // have the same overload precedence
+                        if swizzle_slots.len() == 1 {
+                            ir::TypeLayout::Scalar(scalar.clone())
+                        }
+                        else {
+                            ir::TypeLayout::Vector(scalar.clone(), swizzle_slots.len() as u32)
+                        }
+                    ), vt);
+                    Ok(TypedExpression::Value(ir::Expression::Swizzle(Box::new(composite_ir), swizzle_slots), ety))
                 }
                 &ir::TypeLayout::Object(ref object_type) => {
                     match intrinsics::get_method(object_type, &member) {
@@ -1370,7 +1383,7 @@ fn parse_expr(ast: &ast::Expression, context: &ExpressionContext) -> Result<Type
                             let overloads = method_overloads.iter().map(|&(ref return_type, ref param_types, ref factory)| {
                                 FunctionOverload(FunctionName::Intrinsic(factory.clone()), return_type.clone(), param_types.clone())
                             }).collect::<Vec<_>>();
-                            return Ok(
+                            Ok(
                                 TypedExpression::Method(UnresolvedMethod(
                                     name,
                                     ir::Type::from_object(object_type),
@@ -1379,13 +1392,12 @@ fn parse_expr(ast: &ast::Expression, context: &ExpressionContext) -> Result<Type
                                 ))
                             )
                         },
-                        Err(()) => return Err(TyperError::UnknownTypeMember(composite_pt, member.clone())),
+                        Err(()) => Err(TyperError::UnknownTypeMember(composite_pt, member.clone())),
                     }
                 }
                 // Todo: Matrix components + Object members
                 _ => return Err(TyperError::TypeDoesNotHaveMembers(composite_pt)),
-            };
-            Ok(TypedExpression::Value(ir::Expression::Member(Box::new(composite_ir), member.clone()), ety))
+            }
         },
         &ast::Expression::Call(ref func, ref params) => {
             let func_texp = try!(parse_expr(func, context));

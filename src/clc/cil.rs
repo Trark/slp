@@ -75,6 +75,14 @@ pub enum Constructor {
 }
 
 #[derive(PartialEq, Debug, Clone)]
+pub enum SwizzleSlot {
+    X,
+    Y,
+    Z,
+    W,
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum Intrinsic {
     GetGlobalId(Box<Expression>),
 }
@@ -88,6 +96,7 @@ pub enum Expression {
     UnaryOperation(UnaryOp, Box<Expression>),
     BinaryOperation(BinOp, Box<Expression>, Box<Expression>),
     TernaryConditional(Box<Expression>, Box<Expression>, Box<Expression>),
+    Swizzle(Box<Expression>, Vec<SwizzleSlot>),
     ArraySubscript(Box<Expression>, Box<Expression>),
     Member(Box<Expression>, Identifier),
     Deref(Box<Expression>),

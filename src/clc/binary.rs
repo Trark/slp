@@ -296,6 +296,21 @@ fn print_expression_inner(expression: &Expression, last_precedence: u32, printer
             print_expression_inner(rhs, prec, printer);
             if last_precedence <= prec { printer.print(")") }
         },
+        &Expression::Swizzle(ref vec, ref swizzle) => {
+            let prec = 1;
+            if last_precedence <= prec { printer.print("(") }
+            print_expression_inner(vec, prec + 1, printer);
+            printer.print(".");
+            for swizzle_slot in swizzle {
+                match *swizzle_slot {
+                    SwizzleSlot::X => printer.print("x"),
+                    SwizzleSlot::Y => printer.print("y"),
+                    SwizzleSlot::Z => printer.print("z"),
+                    SwizzleSlot::W => printer.print("w"),
+                }
+            };
+            if last_precedence <= prec { printer.print(")") }
+        },
         &Expression::ArraySubscript(ref array, ref sub) => {
             let prec = 1;
             if last_precedence <= prec { printer.print("(") }

@@ -65,3 +65,10 @@ fn intrinsic_full() {
         sampler_map: HashMap::new(),
     });
 }
+
+#[test]
+fn swizzle_full() {
+    const HLSL: &'static [u8] = include_bytes!("swizzle.hlsl");
+    const CL: &'static str = include_str!("swizzle.cl");
+    run_full(HLSL, CL, BindMap::new());
+}

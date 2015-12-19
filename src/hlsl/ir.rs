@@ -475,6 +475,14 @@ pub struct GlobalDeclarations {
 }
 
 #[derive(PartialEq, Debug, Clone)]
+pub enum SwizzleSlot {
+    X, // x or r
+    Y, // y or g
+    Z, // z or b
+    W, // w or a
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
     Literal(Literal),
     Variable(VariableRef),
@@ -482,6 +490,7 @@ pub enum Expression {
     ConstantVariable(ConstantBufferId, String),
     BinaryOperation(BinOp, Box<Expression>, Box<Expression>),
     TernaryConditional(Box<Expression>, Box<Expression>, Box<Expression>),
+    Swizzle(Box<Expression>, Vec<SwizzleSlot>),
     ArraySubscript(Box<Expression>, Box<Expression>),
     Member(Box<Expression>, String),
     Call(FunctionId, Vec<Expression>),
@@ -789,6 +798,7 @@ impl TypeContext {
                 assert_eq!(self.get_expression_type(expr_left), self.get_expression_type(expr_right));
                 self.get_expression_type(expr_left)
             },
+            Expression::Swizzle(_, _) => unimplemented!(),
             Expression::ArraySubscript(_, _) => unimplemented!(),
             Expression::Member(ref expr, ref name)  => {
                 let expr_type = try!(self.get_expression_type(&expr));
