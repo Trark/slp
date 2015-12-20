@@ -5,7 +5,7 @@ use super::ast::*;
 use nom::{IResult,Needed,Err,ErrorKind};
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct ParseError(pub ParseErrorReason, pub Option<Vec<Token>>, pub Option<Box<ParseError>>);
+pub struct ParseError(pub ParseErrorReason, pub Option<Vec<LexToken>>, pub Option<Box<ParseError>>);
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum ParseErrorReason {
@@ -33,11 +33,12 @@ impl fmt::Display for ParseError {
 macro_rules! token (
     ($i:expr, $inp: pat) => (
         {
-            let res: IResult<&[Token], Token, ParseErrorReason> = if $i.len() == 0 {
+            let _: &[LexToken] = $i;
+            let res: IResult<&[LexToken], LexToken, ParseErrorReason> = if $i.len() == 0 {
                 IResult::Incomplete(Needed::Size(1))
             } else {
                 match $i[0] {
-                    $inp => IResult::Done(&$i[1..], $i[0].clone()),
+                    LexToken($inp, _) => IResult::Done(&$i[1..], $i[0].clone()),
                     _ => IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::WrongToken), $i))
                 } 
             };
@@ -46,6 +47,7 @@ macro_rules! token (
     );
     ($i:expr, $inp: pat => $res: expr) => (
         {
+            let _: &[LexToken] = $i;
             if $i.len() == 0 {
                 IResult::Incomplete(Needed::Size(1))
             } else {
@@ -58,15 +60,15 @@ macro_rules! token (
     );
 );
 
-fn parse_variablename(input: &[Token]) -> IResult<&[Token], String, ParseErrorReason> {
-    map!(input, token!(Token::Id(_)), |tok| { match tok { Token::Id(Identifier(name)) => name.clone(), _ => unreachable!() } })
+fn parse_variablename(input: &[LexToken]) -> IResult<&[LexToken], String, ParseErrorReason> {
+    map!(input, token!(Token::Id(_)), |tok| { match tok { LexToken(Token::Id(Identifier(name)), _) => name.clone(), _ => unreachable!() } })
 }
 
-fn parse_datalayout(input: &[Token]) -> IResult<&[Token], DataLayout, ParseErrorReason> {
+fn parse_datalayout(input: &[LexToken]) -> IResult<&[LexToken], DataLayout, ParseErrorReason> {
 
     // Parse a vector dimension as a token
-    fn parse_digit(input: &[Token]) -> IResult<&[Token], u32, ParseErrorReason> {
-        token!(input, Token::LiteralInt(i) => i as u32)
+    fn parse_digit(input: &[LexToken]) -> IResult<&[LexToken], u32, ParseErrorReason> {
+        token!(input, LexToken(Token::LiteralInt(i), _) => i as u32)
     }
 
     // Parse scalar type as part of a string
@@ -82,12 +84,12 @@ fn parse_datalayout(input: &[Token]) -> IResult<&[Token], DataLayout, ParseError
     }
 
     // Parse scalar type as a full token
-    fn parse_scalartype(input: &[Token]) -> IResult<&[Token], ScalarType, ParseErrorReason> {
+    fn parse_scalartype(input: &[LexToken]) -> IResult<&[LexToken], ScalarType, ParseErrorReason> {
         if input.len() == 0 {
             IResult::Incomplete(Needed::Size(1))
         } else {
             match &input[0] {
-                &Token::Id(Identifier(ref name)) => {
+                &LexToken(Token::Id(Identifier(ref name)), _) => {
                     match parse_scalartype_str(&name[..].as_bytes()) {
                         IResult::Done(rest, ty) => if rest.len() == 0 {
                             IResult::Done(&input[1..], ty)
@@ -157,7 +159,7 @@ fn parse_datalayout(input: &[Token]) -> IResult<&[Token], DataLayout, ParseError
         IResult::Incomplete(Needed::Size(1))
     } else {
         match &input[0] {
-            &Token::Id(Identifier(ref name)) => {
+            &LexToken(Token::Id(Identifier(ref name)), _) => {
                 match &name[..] {
                     "vector" => {
                         chain!(&input[1..],
@@ -192,7 +194,7 @@ fn parse_datalayout(input: &[Token]) -> IResult<&[Token], DataLayout, ParseError
     }
 }
 
-fn parse_datatype(input: &[Token]) -> IResult<&[Token], DataType, ParseErrorReason> {
+fn parse_datatype(input: &[LexToken]) -> IResult<&[LexToken], DataType, ParseErrorReason> {
     // Todo: Modifiers
     match parse_datalayout(input) {
         IResult::Done(rest, layout) => IResult::Done(rest, DataType(layout, Default::default())),
@@ -201,7 +203,7 @@ fn parse_datatype(input: &[Token]) -> IResult<&[Token], DataType, ParseErrorReas
     }
 }
 
-fn parse_structuredlayout(input: &[Token]) -> IResult<&[Token], StructuredLayout, ParseErrorReason> {
+fn parse_structuredlayout(input: &[LexToken]) -> IResult<&[LexToken], StructuredLayout, ParseErrorReason> {
     alt!(input,
         parse_datalayout => { |ty| { match ty {
                 DataLayout::Scalar(scalar) => StructuredLayout::Scalar(scalar),
@@ -209,11 +211,11 @@ fn parse_structuredlayout(input: &[Token]) -> IResult<&[Token], StructuredLayout
                 DataLayout::Matrix(scalar, x, y) => StructuredLayout::Matrix(scalar, x, y),
             }
         } } |
-        token!(Token::Id(Identifier(ref name)) => StructuredLayout::Custom(name.clone()))
+        token!(LexToken(Token::Id(Identifier(ref name)), _) => StructuredLayout::Custom(name.clone()))
     )
 }
 
-fn parse_structuredtype(input: &[Token]) -> IResult<&[Token], StructuredType, ParseErrorReason> {
+fn parse_structuredtype(input: &[LexToken]) -> IResult<&[LexToken], StructuredType, ParseErrorReason> {
     // Todo: Modifiers
     match parse_structuredlayout(input) {
         IResult::Done(rest, layout) => IResult::Done(rest, StructuredType(layout, Default::default())),
@@ -222,7 +224,7 @@ fn parse_structuredtype(input: &[Token]) -> IResult<&[Token], StructuredType, Pa
     }
 }
 
-fn parse_objecttype(input: &[Token]) -> IResult<&[Token], ObjectType, ParseErrorReason> {
+fn parse_objecttype(input: &[LexToken]) -> IResult<&[LexToken], ObjectType, ParseErrorReason> {
     if input.len() == 0 {
         return IResult::Incomplete(Needed::Size(1))
     }
@@ -259,7 +261,7 @@ fn parse_objecttype(input: &[Token]) -> IResult<&[Token], ObjectType, ParseError
     }
 
     let object_type = match &input[0] {
-        &Token::Id(Identifier(ref name)) => {
+        &LexToken(Token::Id(Identifier(ref name)), _) => {
             match &name[..] {
                 "Buffer" => ParseType::Buffer,
                 "RWBuffer" => ParseType::RWBuffer,
@@ -373,12 +375,12 @@ fn parse_objecttype(input: &[Token]) -> IResult<&[Token], ObjectType, ParseError
 
 }
 
-fn parse_voidtype(input: &[Token]) -> IResult<&[Token], TypeLayout, ParseErrorReason> {
+fn parse_voidtype(input: &[LexToken]) -> IResult<&[LexToken], TypeLayout, ParseErrorReason> {
     if input.len() == 0 {
         IResult::Incomplete(Needed::Size(1))
     } else {
         match &input[0] {
-            &Token::Id(Identifier(ref name)) => if name == "void" {
+            &LexToken(Token::Id(Identifier(ref name)), _) => if name == "void" {
                 IResult::Done(&input[1..], TypeLayout::Void)
             } else {
                 IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType), input))
@@ -388,17 +390,17 @@ fn parse_voidtype(input: &[Token]) -> IResult<&[Token], TypeLayout, ParseErrorRe
     }
 }
 
-fn parse_typelayout(input: &[Token]) -> IResult<&[Token], TypeLayout, ParseErrorReason> {
+fn parse_typelayout(input: &[LexToken]) -> IResult<&[LexToken], TypeLayout, ParseErrorReason> {
     alt!(input,
         parse_objecttype => { |ty| { TypeLayout::Object(ty) } } |
         parse_voidtype |
-        token!(Token::SamplerState => TypeLayout::SamplerState) |
+        token!(LexToken(Token::SamplerState, _) => TypeLayout::SamplerState) |
         // Structured types eat everything as user defined types so must come last
         parse_structuredlayout => { |ty| { TypeLayout::from(ty) } }
     )
 }
 
-fn parse_typename(input: &[Token]) -> IResult<&[Token], Type, ParseErrorReason> {
+fn parse_typename(input: &[LexToken]) -> IResult<&[LexToken], Type, ParseErrorReason> {
     // Todo: modifiers that aren't const
     chain!(input,
         is_const: opt!(token!(Token::Const)) ~
@@ -409,14 +411,14 @@ fn parse_typename(input: &[Token]) -> IResult<&[Token], Type, ParseErrorReason> 
     )
 }
 
-fn parse_globaltype(input: &[Token]) -> IResult<&[Token], GlobalType, ParseErrorReason> {
+fn parse_globaltype(input: &[LexToken]) -> IResult<&[LexToken], GlobalType, ParseErrorReason> {
     // Interpolation modifiers unimplemented
     // Non-standard combinations of storage classes unimplemented
     chain!(input,
         gs: opt!(alt!(
-            token!(Token::Static => GlobalStorage::Static) |
-            token!(Token::GroupShared => GlobalStorage::GroupShared) |
-            token!(Token::Extern => GlobalStorage::Extern)
+            token!(LexToken(Token::Static, _) => GlobalStorage::Static) |
+            token!(LexToken(Token::GroupShared, _) => GlobalStorage::GroupShared) |
+            token!(LexToken(Token::Extern, _) => GlobalStorage::Extern)
         )) ~
         ty: parse_typename,
         || {
@@ -425,7 +427,7 @@ fn parse_globaltype(input: &[Token]) -> IResult<&[Token], GlobalType, ParseError
     )
 }
 
-fn parse_inputmodifier(input: &[Token]) -> IResult<&[Token], InputModifier, ParseErrorReason> {
+fn parse_inputmodifier(input: &[LexToken]) -> IResult<&[LexToken], InputModifier, ParseErrorReason> {
     alt!(input,
         token!(Token::In) => { |_| InputModifier::In } |
         token!(Token::Out) => { |_| InputModifier::Out } |
@@ -433,7 +435,7 @@ fn parse_inputmodifier(input: &[Token]) -> IResult<&[Token], InputModifier, Pars
     )
 }
 
-fn parse_paramtype(input: &[Token]) -> IResult<&[Token], ParamType, ParseErrorReason> {
+fn parse_paramtype(input: &[LexToken]) -> IResult<&[LexToken], ParamType, ParseErrorReason> {
     let (input, it) = match parse_inputmodifier(input) {
         IResult::Done(rest, it) => (rest, it),
         IResult::Incomplete(i) => return IResult::Incomplete(i),
@@ -447,7 +449,7 @@ fn parse_paramtype(input: &[Token]) -> IResult<&[Token], ParamType, ParseErrorRe
     }
 }
 
-fn parse_localtype(input: &[Token]) -> IResult<&[Token], LocalType, ParseErrorReason> {
+fn parse_localtype(input: &[LexToken]) -> IResult<&[LexToken], LocalType, ParseErrorReason> {
     // Todo: input modifiers
     match parse_typename(input) {
         IResult::Done(rest, ty) => IResult::Done(rest, LocalType(ty, LocalStorage::default(), None)),
@@ -456,7 +458,7 @@ fn parse_localtype(input: &[Token]) -> IResult<&[Token], LocalType, ParseErrorRe
     }
 }
 
-fn parse_arraydim(input: &[Token]) -> IResult<&[Token], Box<Expression>, ParseErrorReason> {
+fn parse_arraydim(input: &[LexToken]) -> IResult<&[LexToken], Box<Expression>, ParseErrorReason> {
     chain!(input,
         token!(Token::LeftSquareBracket) ~
         constant_expression: expr ~
@@ -465,22 +467,22 @@ fn parse_arraydim(input: &[Token]) -> IResult<&[Token], Box<Expression>, ParseEr
     )
 }
 
-fn expr_paren(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
+fn expr_paren(input: &[LexToken]) -> IResult<&[LexToken], Expression, ParseErrorReason> {
     alt!(input,
         delimited!(token!(Token::LeftParen), expr, token!(Token::RightParen)) |
         parse_variablename => { |name| { Expression::Variable(name) } } |
-        token!(Token::LiteralInt(i) => Expression::Literal(Literal::UntypedInt(i))) |
-        token!(Token::LiteralUint(i) => Expression::Literal(Literal::UInt(i))) |
-        token!(Token::LiteralLong(i) => Expression::Literal(Literal::Long(i))) |
-        token!(Token::LiteralHalf(i) => Expression::Literal(Literal::Half(i))) |
-        token!(Token::LiteralFloat(i) => Expression::Literal(Literal::Float(i))) |
-        token!(Token::LiteralDouble(i) => Expression::Literal(Literal::Double(i))) |
-        token!(Token::True => Expression::Literal(Literal::Bool(true))) |
-        token!(Token::False => Expression::Literal(Literal::Bool(false)))
+        token!(LexToken(Token::LiteralInt(i), _) => Expression::Literal(Literal::UntypedInt(i))) |
+        token!(LexToken(Token::LiteralUint(i), _) => Expression::Literal(Literal::UInt(i))) |
+        token!(LexToken(Token::LiteralLong(i), _) => Expression::Literal(Literal::Long(i))) |
+        token!(LexToken(Token::LiteralHalf(i), _) => Expression::Literal(Literal::Half(i))) |
+        token!(LexToken(Token::LiteralFloat(i), _) => Expression::Literal(Literal::Float(i))) |
+        token!(LexToken(Token::LiteralDouble(i), _) => Expression::Literal(Literal::Double(i))) |
+        token!(LexToken(Token::True, _) => Expression::Literal(Literal::Bool(true))) |
+        token!(LexToken(Token::False, _) => Expression::Literal(Literal::Bool(false)))
     )
 }
 
-fn expr_p1(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
+fn expr_p1(input: &[LexToken]) -> IResult<&[LexToken], Expression, ParseErrorReason> {
 
     #[derive(Clone)]
     enum Precedence1Postfix {
@@ -491,7 +493,7 @@ fn expr_p1(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
         Member(String),
     }
 
-    fn expr_p1_right(input: &[Token]) -> IResult<&[Token], Precedence1Postfix, ParseErrorReason> {
+    fn expr_p1_right(input: &[LexToken]) -> IResult<&[LexToken], Precedence1Postfix, ParseErrorReason> {
         chain!(input,
             right: alt!(
                 chain!(token!(Token::Plus) ~ token!(Token::Plus), || { Precedence1Postfix::Increment }) |
@@ -548,7 +550,7 @@ fn expr_p1(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
     )
 }
 
-fn unaryop_prefix(input: &[Token]) -> IResult<&[Token], UnaryOp, ParseErrorReason> {
+fn unaryop_prefix(input: &[LexToken]) -> IResult<&[LexToken], UnaryOp, ParseErrorReason> {
     alt!(input,
         chain!(token!(Token::Plus) ~ token!(Token::Plus), || { UnaryOp::PrefixIncrement }) |
         chain!(token!(Token::Minus) ~ token!(Token::Minus), || { UnaryOp::PrefixDecrement }) |
@@ -559,7 +561,7 @@ fn unaryop_prefix(input: &[Token]) -> IResult<&[Token], UnaryOp, ParseErrorReaso
     )
 }
 
-fn expr_p2(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
+fn expr_p2(input: &[LexToken]) -> IResult<&[LexToken], Expression, ParseErrorReason> {
     alt!(input,
         chain!(unary: unaryop_prefix ~ expr: expr_p2, || { Expression::UnaryOperation(unary, Box::new(expr)) }) |
         chain!(token!(Token::LeftParen) ~ cast: parse_typename ~ token!(Token::RightParen) ~ expr: expr_p2, || { Expression::Cast(cast, Box::new(expr)) }) |
@@ -576,9 +578,9 @@ fn combine_rights(left: Expression, rights: Vec<(BinOp, Expression)>) -> Express
     final_expression
 }
 
-fn expr_p3(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
+fn expr_p3(input: &[LexToken]) -> IResult<&[LexToken], Expression, ParseErrorReason> {
 
-    fn binop_p3(input: &[Token]) -> IResult<&[Token], BinOp, ParseErrorReason> {
+    fn binop_p3(input: &[LexToken]) -> IResult<&[LexToken], BinOp, ParseErrorReason> {
         alt!(input,
             token!(Token::Asterix) => { |_| BinOp::Multiply } |
             token!(Token::ForwardSlash) => { |_| BinOp::Divide } |
@@ -586,7 +588,7 @@ fn expr_p3(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
         )
     }
 
-    fn expr_p3_right(input: &[Token]) -> IResult<&[Token], (BinOp, Expression), ParseErrorReason> {
+    fn expr_p3_right(input: &[LexToken]) -> IResult<&[LexToken], (BinOp, Expression), ParseErrorReason> {
         chain!(input,
             op: binop_p3 ~
             right: expr_p2,
@@ -601,16 +603,16 @@ fn expr_p3(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
     )
 }
 
-fn expr_p4(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
+fn expr_p4(input: &[LexToken]) -> IResult<&[LexToken], Expression, ParseErrorReason> {
 
-    fn binop_p4(input: &[Token]) -> IResult<&[Token], BinOp, ParseErrorReason> {
+    fn binop_p4(input: &[LexToken]) -> IResult<&[LexToken], BinOp, ParseErrorReason> {
         alt!(input,
             token!(Token::Plus) => { |_| BinOp::Add } |
             token!(Token::Minus) => { |_| BinOp::Subtract }
         )
     }
 
-    fn expr_p4_right(input: &[Token]) -> IResult<&[Token], (BinOp, Expression), ParseErrorReason> {
+    fn expr_p4_right(input: &[LexToken]) -> IResult<&[LexToken], (BinOp, Expression), ParseErrorReason> {
         chain!(input,
             op: binop_p4 ~
             right: expr_p3,
@@ -625,16 +627,16 @@ fn expr_p4(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
     )
 }
 
-fn expr_p5(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
+fn expr_p5(input: &[LexToken]) -> IResult<&[LexToken], Expression, ParseErrorReason> {
 
-    fn parse_op(input: &[Token]) -> IResult<&[Token], BinOp, ParseErrorReason> {
+    fn parse_op(input: &[LexToken]) -> IResult<&[LexToken], BinOp, ParseErrorReason> {
         alt!(input,
             chain!(token!(Token::LeftAngleBracket(FollowedBy::Token)) ~ token!(Token::LeftAngleBracket(_)), || { BinOp::LeftShift }) |
             chain!(token!(Token::RightAngleBracket(FollowedBy::Token)) ~ token!(Token::RightAngleBracket(_)), || { BinOp::RightShift })
         )
     }
 
-    fn parse_rights(input: &[Token]) -> IResult<&[Token], (BinOp, Expression), ParseErrorReason> {
+    fn parse_rights(input: &[LexToken]) -> IResult<&[LexToken], (BinOp, Expression), ParseErrorReason> {
         chain!(input,
             op: parse_op ~
             right: expr_p4,
@@ -649,9 +651,9 @@ fn expr_p5(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
     )
 }
 
-fn expr_p6(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
+fn expr_p6(input: &[LexToken]) -> IResult<&[LexToken], Expression, ParseErrorReason> {
 
-    fn parse_op(input: &[Token]) -> IResult<&[Token], BinOp, ParseErrorReason> {
+    fn parse_op(input: &[LexToken]) -> IResult<&[LexToken], BinOp, ParseErrorReason> {
         alt!(input,
             chain!(token!(Token::LeftAngleBracket(FollowedBy::Token)) ~ token!(Token::Equals), || { BinOp::LessEqual }) |
             chain!(token!(Token::RightAngleBracket(FollowedBy::Token)) ~ token!(Token::Equals), || { BinOp::GreaterEqual }) |
@@ -660,7 +662,7 @@ fn expr_p6(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
         )
     }
 
-    fn parse_rights(input: &[Token]) -> IResult<&[Token], (BinOp, Expression), ParseErrorReason> {
+    fn parse_rights(input: &[LexToken]) -> IResult<&[LexToken], (BinOp, Expression), ParseErrorReason> {
         chain!(input,
             op: parse_op ~
             right: expr_p5,
@@ -675,16 +677,16 @@ fn expr_p6(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
     )
 }
 
-fn expr_p7(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
+fn expr_p7(input: &[LexToken]) -> IResult<&[LexToken], Expression, ParseErrorReason> {
 
-    fn parse_op(input: &[Token]) -> IResult<&[Token], BinOp, ParseErrorReason> {
+    fn parse_op(input: &[LexToken]) -> IResult<&[LexToken], BinOp, ParseErrorReason> {
         alt!(input,
             token!(Token::DoubleEquals) => { |_| BinOp::Equality } |
             token!(Token::ExclamationEquals) => { |_| BinOp::Inequality }
         )
     }
 
-    fn parse_rights(input: &[Token]) -> IResult<&[Token], (BinOp, Expression), ParseErrorReason> {
+    fn parse_rights(input: &[LexToken]) -> IResult<&[LexToken], (BinOp, Expression), ParseErrorReason> {
         chain!(input,
             op: parse_op ~
             right: expr_p6,
@@ -699,7 +701,7 @@ fn expr_p7(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
     )
 }
 
-fn expr_p13(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
+fn expr_p13(input: &[LexToken]) -> IResult<&[LexToken], Expression, ParseErrorReason> {
     alt!(input,
         chain!(cond: expr_p7 ~ token!(Token::QuestionMark) ~ lhs: expr_p13 ~ token!(Token::Colon) ~ rhs: expr_p13, || {
             Expression::TernaryConditional(Box::new(cond), Box::new(lhs), Box::new(rhs))
@@ -708,18 +710,18 @@ fn expr_p13(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> 
     )
 }
 
-fn expr_p15(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
+fn expr_p15(input: &[LexToken]) -> IResult<&[LexToken], Expression, ParseErrorReason> {
     alt!(input,
         chain!(lhs: expr_p13 ~ token!(Token::Equals) ~ rhs: expr_p15, || { Expression::BinaryOperation(BinOp::Assignment, Box::new(lhs), Box::new(rhs)) }) |
         expr_p13
     )
 }
 
-fn expr(input: &[Token]) -> IResult<&[Token], Expression, ParseErrorReason> {
+fn expr(input: &[LexToken]) -> IResult<&[LexToken], Expression, ParseErrorReason> {
     expr_p15(input)
 }
 
-fn vardef(input: &[Token]) -> IResult<&[Token], VarDef, ParseErrorReason> {
+fn vardef(input: &[LexToken]) -> IResult<&[LexToken], VarDef, ParseErrorReason> {
     chain!(input,
         typename: parse_localtype ~
         varname: parse_variablename ~
@@ -746,14 +748,14 @@ fn vardef(input: &[Token]) -> IResult<&[Token], VarDef, ParseErrorReason> {
     )
 }
 
-fn condition(input: &[Token]) -> IResult<&[Token], Condition, ParseErrorReason> {
+fn condition(input: &[LexToken]) -> IResult<&[LexToken], Condition, ParseErrorReason> {
     alt!(input,
         vardef => { |variable_definition| Condition::Assignment(variable_definition) } |
         expr => { |expression| Condition::Expr(expression) }
     )
 }
 
-fn statement(input: &[Token]) -> IResult<&[Token], Statement, ParseErrorReason> {
+fn statement(input: &[LexToken]) -> IResult<&[LexToken], Statement, ParseErrorReason> {
     alt!(input,
         token!(Token::Semicolon) => { |_| { Statement::Empty } } |
         chain!(token!(Token::If) ~ token!(Token::LeftParen) ~ cond: expr ~ token!(Token::RightParen) ~ inner_statement: statement, || { Statement::If(cond, Box::new(inner_statement)) }) |
@@ -777,7 +779,7 @@ fn statement(input: &[Token]) -> IResult<&[Token], Statement, ParseErrorReason> 
     )
 }
 
-fn structmember(input: &[Token]) -> IResult<&[Token], StructMember, ParseErrorReason> {
+fn structmember(input: &[LexToken]) -> IResult<&[LexToken], StructMember, ParseErrorReason> {
     chain!(input,
         typename: parse_typename ~
         varname: parse_variablename ~
@@ -786,7 +788,7 @@ fn structmember(input: &[Token]) -> IResult<&[Token], StructMember, ParseErrorRe
     )
 }
 
-fn structdefinition(input: &[Token]) -> IResult<&[Token], StructDefinition, ParseErrorReason> {
+fn structdefinition(input: &[LexToken]) -> IResult<&[LexToken], StructDefinition, ParseErrorReason> {
     chain!(input,
         token!(Token::Struct) ~
         structname: parse_variablename ~
@@ -801,7 +803,7 @@ fn structdefinition(input: &[Token]) -> IResult<&[Token], StructDefinition, Pars
     )
 }
 
-fn constantvariable(input: &[Token]) -> IResult<&[Token], ConstantVariable, ParseErrorReason> {
+fn constantvariable(input: &[LexToken]) -> IResult<&[LexToken], ConstantVariable, ParseErrorReason> {
     chain!(input,
         typename: parse_typename ~
         varname: parse_variablename ~
@@ -810,17 +812,17 @@ fn constantvariable(input: &[Token]) -> IResult<&[Token], ConstantVariable, Pars
     )
 }
 
-fn cbuffer_register(input: &[Token]) -> IResult<&[Token], ConstantSlot, ParseErrorReason> {
+fn cbuffer_register(input: &[LexToken]) -> IResult<&[LexToken], ConstantSlot, ParseErrorReason> {
     map_res!(input, preceded!(token!(Token::Colon), token!(Token::Register(_))),
         |reg| { match reg {
-            Token::Register(RegisterSlot::B(slot)) => Ok(ConstantSlot(slot)) as Result<ConstantSlot, ParseErrorReason>,
-            Token::Register(_) => Err(ParseErrorReason::WrongSlotType),
+            LexToken(Token::Register(RegisterSlot::B(slot)), _) => Ok(ConstantSlot(slot)) as Result<ConstantSlot, ParseErrorReason>,
+            LexToken(Token::Register(_), _) => Err(ParseErrorReason::WrongSlotType),
             _ => unreachable!(),
         } }
     )
 }
 
-fn cbuffer(input: &[Token]) -> IResult<&[Token], ConstantBuffer, ParseErrorReason> {
+fn cbuffer(input: &[LexToken]) -> IResult<&[LexToken], ConstantBuffer, ParseErrorReason> {
     chain!(input,
         token!(Token::ConstantBuffer) ~
         name: parse_variablename ~
@@ -835,18 +837,18 @@ fn cbuffer(input: &[Token]) -> IResult<&[Token], ConstantBuffer, ParseErrorReaso
     )
 }
 
-fn globalvariable_register(input: &[Token]) -> IResult<&[Token], GlobalSlot, ParseErrorReason> {
+fn globalvariable_register(input: &[LexToken]) -> IResult<&[LexToken], GlobalSlot, ParseErrorReason> {
     map_res!(input, preceded!(token!(Token::Colon), token!(Token::Register(_))),
         |reg| { match reg {
-            Token::Register(RegisterSlot::T(slot)) => Ok(GlobalSlot::ReadSlot(slot)) as Result<GlobalSlot, ParseErrorReason>,
-            Token::Register(RegisterSlot::U(slot)) => Ok(GlobalSlot::ReadWriteSlot(slot)) as Result<GlobalSlot, ParseErrorReason>,
-            Token::Register(_) => Err(ParseErrorReason::WrongSlotType),
+            LexToken(Token::Register(RegisterSlot::T(slot)), _) => Ok(GlobalSlot::ReadSlot(slot)) as Result<GlobalSlot, ParseErrorReason>,
+            LexToken(Token::Register(RegisterSlot::U(slot)), _) => Ok(GlobalSlot::ReadWriteSlot(slot)) as Result<GlobalSlot, ParseErrorReason>,
+            LexToken(Token::Register(_), _) => Err(ParseErrorReason::WrongSlotType),
             _ => unreachable!(),
         } }
     )
 }
 
-fn globalvariable(input: &[Token]) -> IResult<&[Token], GlobalVariable, ParseErrorReason> {
+fn globalvariable(input: &[LexToken]) -> IResult<&[LexToken], GlobalVariable, ParseErrorReason> {
     chain!(input,
         typename: parse_globaltype ~
         name: parse_variablename ~
@@ -857,18 +859,27 @@ fn globalvariable(input: &[Token]) -> IResult<&[Token], GlobalVariable, ParseErr
     )
 }
 
-fn functionattribute(input: &[Token]) -> IResult<&[Token], FunctionAttribute, ParseErrorReason> {
+fn functionattribute(input: &[LexToken]) -> IResult<&[LexToken], FunctionAttribute, ParseErrorReason> {
     chain!(input,
         token!(Token::LeftSquareBracket) ~
         attr: alt!(
             chain!(
-                map_res!(token!(Token::Id(_)), |tok| { if let Token::Id(Identifier(name)) = tok { match &name[..] { "numthreads" => Ok(name.clone()), _ => Err(()) } } else { Err(()) } }) ~
+                map_res!(token!(Token::Id(_)), |tok| {
+                    if let LexToken(Token::Id(Identifier(name)), _) = tok {
+                        match &name[..] {
+                            "numthreads" => Ok(name.clone()),
+                            _ => Err(())
+                        }
+                    } else {
+                        Err(())
+                    }
+                }) ~
                 token!(Token::LeftParen) ~
-                x: token!(Token::LiteralInt(x) => x) ~
+                x: token!(LexToken(Token::LiteralInt(x), _) => x) ~
                 token!(Token::Comma) ~
-                y: token!(Token::LiteralInt(y) => y) ~
+                y: token!(LexToken(Token::LiteralInt(y), _) => y) ~
                 token!(Token::Comma) ~
-                z: token!(Token::LiteralInt(z) => z) ~
+                z: token!(LexToken(Token::LiteralInt(z), _) => z) ~
                 token!(Token::RightParen),
                 || { FunctionAttribute::NumThreads(x, y, z) }
             )
@@ -878,14 +889,14 @@ fn functionattribute(input: &[Token]) -> IResult<&[Token], FunctionAttribute, Pa
     )
 }
 
-fn functionparam(input: &[Token]) -> IResult<&[Token], FunctionParam, ParseErrorReason> {
+fn functionparam(input: &[LexToken]) -> IResult<&[LexToken], FunctionParam, ParseErrorReason> {
     chain!(input,
         ty: parse_paramtype ~
         param: parse_variablename ~
         semantic: opt!(chain!(
             token!(Token::Colon) ~
             tok: map_res!(token!(Token::Id(_)), |tok| {
-                if let Token::Id(Identifier(name)) = tok {
+                if let LexToken(Token::Id(Identifier(name)), _) = tok {
                     match &name[..] {
                         "SV_DispatchThreadID" => Ok(Semantic::DispatchThreadId),
                         _ => Err(())
@@ -900,7 +911,7 @@ fn functionparam(input: &[Token]) -> IResult<&[Token], FunctionParam, ParseError
     )
 }
 
-fn functiondefinition(input: &[Token]) -> IResult<&[Token], FunctionDefinition, ParseErrorReason> {
+fn functiondefinition(input: &[LexToken]) -> IResult<&[LexToken], FunctionDefinition, ParseErrorReason> {
     chain!(input,
         attributes: many0!(functionattribute) ~
         ret: parse_typename ~
@@ -919,7 +930,7 @@ fn functiondefinition(input: &[Token]) -> IResult<&[Token], FunctionDefinition, 
     )
 }
 
-fn rootdefinition(input: &[Token]) -> IResult<&[Token], RootDefinition, ParseErrorReason> {
+fn rootdefinition(input: &[LexToken]) -> IResult<&[LexToken], RootDefinition, ParseErrorReason> {
     alt!(input,
         structdefinition => { |structdef| { RootDefinition::Struct(structdef) } } |
         cbuffer => { |cbuffer| { RootDefinition::ConstantBuffer(cbuffer) } } |
@@ -928,7 +939,7 @@ fn rootdefinition(input: &[Token]) -> IResult<&[Token], RootDefinition, ParseErr
     )
 }
 
-pub fn module(input: &[Token]) -> IResult<&[Token], Vec<RootDefinition>, ParseErrorReason> {
+pub fn module(input: &[LexToken]) -> IResult<&[LexToken], Vec<RootDefinition>, ParseErrorReason> {
     chain!(input, roots: many0!(rootdefinition) ~ token!(Token::Eof), || { roots })
 }
 
@@ -939,7 +950,7 @@ fn errorkind_to_reason(errkind: ErrorKind<ParseErrorReason>) -> ParseErrorReason
     }
 }
 
-fn iresult_to_error(err: Err<&[Token], ParseErrorReason>) -> ParseError {
+fn iresult_to_error(err: Err<&[LexToken], ParseErrorReason>) -> ParseError {
     match err {
         Err::Code(error) => ParseError(errorkind_to_reason(error), None, None),
         Err::Node(error, inner_err) => ParseError(errorkind_to_reason(error), None, Some(Box::new(iresult_to_error(*inner_err)))),
@@ -948,7 +959,7 @@ fn iresult_to_error(err: Err<&[Token], ParseErrorReason>) -> ParseError {
     }
 }
 
-pub fn parse(entry_point: String, source: &[Token]) -> Result<Module, ParseError> {
+pub fn parse(entry_point: String, source: &[LexToken]) -> Result<Module, ParseError> {
     let parse_result = module(source);
     match parse_result {
         IResult::Done(rest, _) if rest.len() != 0 => Err(ParseError(ParseErrorReason::FailedToParse, Some(rest.to_vec()), None)),
@@ -965,7 +976,7 @@ fn exp_var(var_name: &'static str) -> Expression { Expression::Variable(var_name
 fn bexp_var(var_name: &'static str) -> Box<Expression> { Box::new(exp_var(var_name)) }
 
 #[cfg(test)]
-fn parse_result_from_str<T>(parse_func: Box<Fn(&[Token]) -> IResult<&[Token], T, ParseErrorReason>>) -> Box<Fn(&'static str) -> Result<T, ParseErrorReason>> where T: 'static {
+fn parse_result_from_str<T>(parse_func: Box<Fn(&[LexToken]) -> IResult<&[LexToken], T, ParseErrorReason>>) -> Box<Fn(&'static str) -> Result<T, ParseErrorReason>> where T: 'static {
     use super::preprocess::preprocess;
     Box::new(move |string: &'static str| {
         let modified_string = string.to_string() + "\n";
@@ -973,9 +984,10 @@ fn parse_result_from_str<T>(parse_func: Box<Fn(&[Token]) -> IResult<&[Token], T,
         let lex_result = super::lexer::lex(&preprocessed_text);
         match lex_result {
             Ok(tokens) => {
-                match parse_func(&tokens.get_nonstream_tokens()) {
+                let stream = &tokens.stream;
+                match parse_func(stream) {
                     IResult::Done(rem, exp) => {
-                        if rem == &[Token::Eof] {
+                        if rem.len() == 1 && rem[0].0 == Token::Eof {
                             Ok(exp)
                         } else {
                             Err(ParseErrorReason::FailedToParse)
@@ -991,7 +1003,7 @@ fn parse_result_from_str<T>(parse_func: Box<Fn(&[Token]) -> IResult<&[Token], T,
 }
 
 #[cfg(test)]
-fn parse_from_str<T>(parse_func: Box<Fn(&[Token]) -> IResult<&[Token], T, ParseErrorReason>>) -> Box<Fn(&'static str) -> T> where T: 'static {
+fn parse_from_str<T>(parse_func: Box<Fn(&[LexToken]) -> IResult<&[LexToken], T, ParseErrorReason>>) -> Box<Fn(&'static str) -> T> where T: 'static {
     use super::preprocess::preprocess;
     Box::new(move |string: &'static str| {
         let modified_string = string.to_string() + "\n";
@@ -999,10 +1011,10 @@ fn parse_from_str<T>(parse_func: Box<Fn(&[Token]) -> IResult<&[Token], T, ParseE
         let lex_result = super::lexer::lex(&preprocessed_text);
         match lex_result {
             Ok(tokens) => {
-                let stream = tokens.get_nonstream_tokens();
-                match parse_func(&stream) {
+                let stream = &tokens.stream;
+                match parse_func(stream) {
                     IResult::Done(rem, exp) => {
-                        if rem == &[Token::Eof] {
+                        if rem.len() == 1 && rem[0].0 == Token::Eof {
                             exp
                         } else {
                             panic!("Tokens remaining while parsing `{:?}`: {:?}", stream, rem)
@@ -1020,7 +1032,14 @@ fn parse_from_str<T>(parse_func: Box<Fn(&[Token]) -> IResult<&[Token], T, ParseE
 #[test]
 fn test_expr() {
 
-    assert_eq!(expr(&[Token::Id(Identifier("a".to_string())), Token::Asterix, Token::Id(Identifier("b".to_string())), Token::Eof][..]), IResult::Done(&[Token::Eof][..],
+    use {FileLocation,File,Line,Column};
+
+    assert_eq!(expr(&[
+            LexToken(Token::Id(Identifier("a".to_string())), FileLocation(File::Unknown, Line(1), Column(1))),
+            LexToken(Token::Asterix, FileLocation(File::Unknown, Line(1), Column(2))),
+            LexToken(Token::Id(Identifier("b".to_string())), FileLocation(File::Unknown, Line(1), Column(3))),
+            LexToken(Token::Eof, FileLocation(File::Unknown, Line(1), Column(4)))
+        ][..]), IResult::Done(&[LexToken(Token::Eof, FileLocation(File::Unknown, Line(1), Column(4)))][..],
         Expression::BinaryOperation(
             BinOp::Multiply,
             Box::new(Expression::Variable("a".to_string())),

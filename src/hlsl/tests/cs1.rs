@@ -162,14 +162,14 @@ fn cs1_lex() {
 #[test]
 fn cs1_parse() {
     let tokens = lex(&preprocess(CS1).unwrap()).unwrap();
-    let parse_result = parse("CSMain".to_string(), &tokens.get_nonstream_tokens());
+    let parse_result = parse("CSMain".to_string(), &tokens.stream);
     assert!(parse_result.is_ok(), "{:?}", parse_result);
 }
 
 #[test]
 fn cs1_typecheck() {
     let tokens = lex(&preprocess(CS1).unwrap()).unwrap();
-    let ast = parse("CSMain".to_string(), &tokens.get_nonstream_tokens()).unwrap();
+    let ast = parse("CSMain".to_string(), &tokens.stream).unwrap();
     let ir_result = typeparse(&ast);
     assert!(ir_result.is_ok(), "{:?}", ir_result);
 }

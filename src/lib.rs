@@ -82,7 +82,7 @@ pub fn hlsl_to_cl(hlsl_source: &str, entry_point: &'static str) -> Result<Output
 
     let tokens = try!(hlsl::lexer::lex(&preprocessed));
 
-    let ast = try!(hlsl::parser::parse(entry_point.to_string(), &tokens.get_nonstream_tokens()));
+    let ast = try!(hlsl::parser::parse(entry_point.to_string(), &tokens.stream));
 
     let ir = try!(hlsl::typer::typeparse(&ast));
 
