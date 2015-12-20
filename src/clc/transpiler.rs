@@ -837,27 +837,25 @@ fn transpile_intrinsic(intrinsic: &src::Intrinsic, context: &mut Context) -> Res
             let cl_tex = try!(transpile_expression(tex, context));
             let cl_loc = try!(transpile_expression(loc, context));
             let ty = try!(src::TypeParser::get_expression_type(tex, &context.type_context));
-            let func_name = match ty {
+            let (func_name, read_type, cast_type) = match ty {
                 src::ExpressionType(src::Type(src::TypeLayout::Object(src::ObjectType::RWTexture2D(ref data_type)), _), _) => {
-                    match data_type.0 {
+                    let (func_name, read_type) = match data_type.0 {
                         src::DataLayout::Scalar(ref scalar) | src::DataLayout::Vector(ref scalar, _) => {
                             match *scalar {
-                                src::ScalarType::Int => "read_imagei",
-                                src::ScalarType::UInt => "read_imageui",
-                                src::ScalarType::Float => "read_imagef",
+                                src::ScalarType::Int => ("read_imagei", dst::Type::Vector(dst::Scalar::Int, dst::VectorDimension::Four)),
+                                src::ScalarType::UInt => ("read_imageui", dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Four)),
+                                src::ScalarType::Float => ("read_imagef", dst::Type::Vector(dst::Scalar::Float, dst::VectorDimension::Four)),
                                 _ => return Err(TranspileError::Unknown),
                             }
                         },
                         src::DataLayout::Matrix(_, _, _) => return Err(TranspileError::Unknown),
-                    }
+                    };
+                    (func_name, read_type, try!(transpile_datatype(data_type, context)))
                 },
                 _ => return Err(TranspileError::Unknown),
             };
-            // Todo: Swizzle down
-            Ok(dst::Expression::UntypedIntrinsic(
-                func_name.to_string(),
-                vec![cl_tex, cl_loc]
-            ))
+            let expr = dst::Expression::UntypedIntrinsic(func_name.to_string(), vec![cl_tex, cl_loc]);
+            write_cast(read_type, cast_type, expr, false, context)
         },
         src::Intrinsic::ByteAddressBufferLoad(ref buffer, ref loc) |
         src::Intrinsic::RWByteAddressBufferLoad(ref buffer, ref loc) |
@@ -917,6 +915,75 @@ fn transpile_intrinsic(intrinsic: &src::Intrinsic, context: &mut Context) -> Res
             ))
         },
     }
+}
+
+fn write_cast(source_cl_type: dst::Type, dest_cl_type: dst::Type, cl_expr: dst::Expression, always_cast: bool, context: &mut Context) -> Result<dst::Expression, TranspileError> {
+    if dest_cl_type == source_cl_type && !always_cast {
+        // If the cast would cast to the same time, ignore it
+        return Ok(cl_expr);
+    }
+    Ok(match dest_cl_type {
+        dst::Type::Bool => {
+            match source_cl_type {
+                // Vector to bool cast
+                dst::Type::Vector(_, _) => {
+                    dst::Expression::Cast(dest_cl_type.clone(), Box::new(dst::Expression::Swizzle(Box::new(cl_expr), vec![dst::SwizzleSlot::X])))
+                },
+                // Scalar to bool cast
+                dst::Type::Bool | dst::Type::Scalar(_) => {
+                    dst::Expression::Cast(dest_cl_type, Box::new(cl_expr))
+                },
+                _ => return Err(TranspileError::Internal("source of bool cast is not a numeric type".to_string())),
+            }
+        }
+        dst::Type::Scalar(ref to_scalar_type) => {
+            match source_cl_type {
+                // Vector to same type scalar cast, swizzle
+                dst::Type::Vector(ref from_scalar_type, _) if *from_scalar_type == *to_scalar_type => {
+                    dst::Expression::Swizzle(Box::new(cl_expr), vec![dst::SwizzleSlot::X])
+                },
+                // Vector to scalar cast, swizzle + cast
+                dst::Type::Vector(_, _) => {
+                    dst::Expression::Cast(dest_cl_type.clone(), Box::new(dst::Expression::Swizzle(Box::new(cl_expr), vec![dst::SwizzleSlot::X])))
+                },
+                // Scalar to scalar cast
+                dst::Type::Bool | dst::Type::Scalar(_) => {
+                    dst::Expression::Cast(dest_cl_type.clone(), Box::new(cl_expr))
+                },
+                _ => return Err(TranspileError::Internal("source of scalar cast is not a numeric type".to_string())),
+            }
+        }
+        dst::Type::Vector(ref scalar, ref to_dim) => {
+            match source_cl_type {
+                // Vector to same type vector cast, swizzle
+                dst::Type::Vector(ref from_scalar_type, ref from_dim) if *from_scalar_type == *scalar => {
+                    assert!(to_dim.as_u32() <= from_dim.as_u32(), "{:?} <= {:?}", to_dim, from_dim);
+                    let swizzle = match *to_dim {
+                        dst::VectorDimension::Two => vec![dst::SwizzleSlot::X, dst::SwizzleSlot::Y],
+                        dst::VectorDimension::Three => vec![dst::SwizzleSlot::X, dst::SwizzleSlot::Y, dst::SwizzleSlot::Z],
+                        dst::VectorDimension::Four => panic!("4 element vectors can not be downcast from anything"),
+                        _ => panic!("casting from {:?} to {:?}", source_cl_type, dest_cl_type),
+                    };
+                    dst::Expression::Swizzle(Box::new(cl_expr), swizzle)
+                },
+                // Vector to different type vector cast, make a function to do the work
+                dst::Type::Vector(from_scalar_type, from_dim) => {
+                    let cast_func_id = context.fetch_fragment(Fragment::VectorCast(from_scalar_type, scalar.clone(), from_dim, to_dim.clone()));
+                    dst::Expression::Call(cast_func_id, vec![cl_expr])
+                },
+                // Scalar to vector cast, make a function to do the work
+                dst::Type::Scalar(from_scalar_type) => {
+                    let cast_func_id = context.fetch_fragment(Fragment::ScalarToVectorCast(from_scalar_type, scalar.clone(), to_dim.clone()));
+                    dst::Expression::Call(cast_func_id, vec![cl_expr])
+                },
+                dst::Type::Bool => {
+                    unimplemented!()
+                },
+                _ => return Err(TranspileError::Internal("source of vector cast is not a numeric type".to_string())),
+            }
+        }
+        _ => return Err(TranspileError::Internal(format!("don't know how to cast to this type ({:?})", dest_cl_type))),
+    })
 }
 
 fn transpile_expression(expression: &src::Expression, context: &mut Context) -> Result<dst::Expression, TranspileError> {
@@ -991,61 +1058,7 @@ fn transpile_expression(expression: &src::Expression, context: &mut Context) -> 
                 },
                 Err(err) => return Err(err),
             };
-            if dest_cl_type == source_cl_type && !untyped {
-                // If the cast would cast to the same time, ignore it
-                return Ok(cl_expr);
-            }
-            Ok(match dest_cl_type {
-                dst::Type::Bool => {
-                    match source_cl_type {
-                        // Vector to bool cast
-                        dst::Type::Vector(_, _) => {
-                            dst::Expression::Cast(dest_cl_type.clone(), Box::new(dst::Expression::Swizzle(Box::new(cl_expr), vec![dst::SwizzleSlot::X])))
-                        },
-                        // Scalar to bool cast
-                        dst::Type::Bool | dst::Type::Scalar(_) => {
-                            dst::Expression::Cast(dest_cl_type, Box::new(cl_expr))
-                        },
-                        _ => return Err(TranspileError::Internal("source of bool cast is not a numeric type".to_string())),
-                    }
-                }
-                dst::Type::Scalar(ref to_scalar_type) => {
-                    match source_cl_type {
-                        // Vector to same type scalar cast, swizzle
-                        dst::Type::Vector(ref from_scalar_type, _) if *from_scalar_type == *to_scalar_type => {
-                            dst::Expression::Swizzle(Box::new(cl_expr), vec![dst::SwizzleSlot::X])
-                        },
-                        // Vector to scalar cast, swizzle + cast
-                        dst::Type::Vector(_, _) => {
-                            dst::Expression::Cast(dest_cl_type.clone(), Box::new(dst::Expression::Swizzle(Box::new(cl_expr), vec![dst::SwizzleSlot::X])))
-                        },
-                        // Scalar to scalar cast
-                        dst::Type::Bool | dst::Type::Scalar(_) => {
-                            dst::Expression::Cast(dest_cl_type.clone(), Box::new(cl_expr))
-                        },
-                        _ => return Err(TranspileError::Internal("source of scalar cast is not a numeric type".to_string())),
-                    }
-                }
-                dst::Type::Vector(ref scalar, ref to_dim) => {
-                    match source_cl_type {
-                        // Vector to vector cast, make a function to do the work
-                        dst::Type::Vector(from_scalar_type, from_dim) => {
-                            let cast_func_id = context.fetch_fragment(Fragment::VectorCast(from_scalar_type, scalar.clone(), from_dim, to_dim.clone()));
-                            dst::Expression::Call(cast_func_id, vec![cl_expr])
-                        },
-                        // Scalar to vector cast, make a function to do the work
-                        dst::Type::Scalar(from_scalar_type) => {
-                            let cast_func_id = context.fetch_fragment(Fragment::ScalarToVectorCast(from_scalar_type, scalar.clone(), to_dim.clone()));
-                            dst::Expression::Call(cast_func_id, vec![cl_expr])
-                        },
-                        dst::Type::Bool => {
-                            unimplemented!()
-                        },
-                        _ => return Err(TranspileError::Internal("source of vector cast is not a numeric type".to_string())),
-                    }
-                }
-                _ => return Err(TranspileError::Internal(format!("don't know how to cast to this type ({:?})", dest_cl_type))),
-            })
+            write_cast(source_cl_type, dest_cl_type, cl_expr, untyped, context)
         },
         &src::Expression::Intrinsic(ref intrinsic) => transpile_intrinsic(intrinsic, context),
     }
