@@ -971,8 +971,8 @@ fn parse_result_from_str<T>(parse_func: Box<Fn(&[Token]) -> IResult<&[Token], T,
         let input = &modified_string[..].as_bytes();
         let lex_result = super::lexer::lex(input);
         match lex_result {
-            Ok(TokenStream(stream)) => {
-                match parse_func(&stream[..]) {
+            Ok(tokens) => {
+                match parse_func(&tokens.get_nonstream_tokens()) {
                     IResult::Done(rem, exp) => {
                         if rem == &[Token::Eof] {
                             Ok(exp)
@@ -996,8 +996,9 @@ fn parse_from_str<T>(parse_func: Box<Fn(&[Token]) -> IResult<&[Token], T, ParseE
         let input = &modified_string[..].as_bytes();
         let lex_result = super::lexer::lex(input);
         match lex_result {
-            Ok(TokenStream(stream)) => {
-                match parse_func(&stream[..]) {
+            Ok(tokens) => {
+                let stream = tokens.get_nonstream_tokens();
+                match parse_func(&stream) {
                     IResult::Done(rem, exp) => {
                         if rem == &[Token::Eof] {
                             exp

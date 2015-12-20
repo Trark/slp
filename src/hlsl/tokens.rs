@@ -126,4 +126,18 @@ pub enum Token {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct TokenStream(pub Vec<Token>);
+pub struct StreamLocation(pub u64);
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct StreamToken(pub Token, pub StreamLocation);
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct Tokens {
+    pub stream: Vec<StreamToken>,
+}
+
+impl Tokens {
+    pub fn get_nonstream_tokens(&self) -> Vec<Token> {
+        self.stream.iter().map(|stoken| stoken.0.clone()).collect::<Vec<_>>()
+    }
+}

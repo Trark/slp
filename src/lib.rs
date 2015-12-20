@@ -53,9 +53,9 @@ pub struct Output {
 
 pub fn hlsl_to_cl(hlsl_source: &[u8], entry_point: &'static str) -> Result<Output, CompileError> {
 
-    let hlsl::tokens::TokenStream(tokens) = try!(hlsl::lexer::lex(hlsl_source));
+    let tokens = try!(hlsl::lexer::lex(hlsl_source));
 
-    let ast = try!(hlsl::parser::parse(entry_point.to_string(), &tokens[..]));
+    let ast = try!(hlsl::parser::parse(entry_point.to_string(), &tokens.get_nonstream_tokens()));
 
     let ir = try!(hlsl::typer::typeparse(&ast));
 
