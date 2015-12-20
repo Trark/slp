@@ -1,4 +1,6 @@
 
+use std::error;
+use std::fmt;
 use std::collections::HashMap;
 
 /// Basic scalar types
@@ -654,7 +656,83 @@ impl GlobalTable {
     }
 }
 
-pub struct TypeContext {
+/// Error in parsing the type of an expression
+/// These will all be internal errors as they represent eeither incorrectly
+/// generated ir trees or incorrectly tracking the ids in a tree
+#[derive(PartialEq, Debug, Clone)]
+pub enum TypeError {
+    InvalidLocal,
+    LocalScopeInvalid, // Same as LocalDoesNotExist but when ref is hard to calculate
+    LocalDoesNotExist(VariableRef),
+    GlobalDoesNotExist(GlobalId),
+    ConstantBufferDoesNotExist(ConstantBufferId),
+    ConstantDoesNotExist(ConstantBufferId, String),
+    StructDoesNotExist(StructId),
+    StructMemberDoesNotExist(StructId, String),
+    FunctionDoesNotExist(FunctionId),
+
+    InvalidTypeInEqualityOperation(TypeLayout),
+    InvalidTypeForSwizzle(TypeLayout),
+    MemberNodeMustBeUsedOnStruct(TypeLayout, String),
+    ArrayIndexMustBeUsedOnArrayType(TypeLayout),
+
+    InvalidType(Type),
+
+    WrongObjectForBufferLoad(TypeLayout),
+    WrongObjectForRWBufferLoad(TypeLayout),
+    WrongObjectForStructuredBufferLoad(TypeLayout),
+    WrongObjectForRWStructuredBufferLoad(TypeLayout),
+    WrongObjectForRWTexture2DLoad(TypeLayout),
+}
+
+impl error::Error for TypeError {
+    fn description(&self) -> &str {
+        match *self {
+            TypeError::InvalidLocal => "invalid local variable",
+            TypeError::LocalScopeInvalid => "scope invalid",
+            TypeError::LocalDoesNotExist(_) => "local variable does not exist",
+            TypeError::GlobalDoesNotExist(_) => "global variable does not exist",
+            TypeError::ConstantBufferDoesNotExist(_) => "constant buffer does not exist",
+            TypeError::ConstantDoesNotExist(_, _) => "constant variable does not exist",
+            TypeError::StructDoesNotExist(_) => "struct does not exist",
+            TypeError::StructMemberDoesNotExist(_, _) => "struct member does not exist",
+            TypeError::FunctionDoesNotExist(_) => "function does not exist",
+            TypeError::InvalidTypeInEqualityOperation(_) => "invalid numeric type in equality operation",
+            TypeError::InvalidTypeForSwizzle(_) => "swizzle nodes must be used on vectors",
+            TypeError::MemberNodeMustBeUsedOnStruct(_, _) => "member used on non-struct type",
+            TypeError::ArrayIndexMustBeUsedOnArrayType(_) => "array index used on non-array type",
+
+            TypeError::InvalidType(_) => "invalid type in an intrinsic function",
+
+            TypeError::WrongObjectForBufferLoad(_) => "Buffer::Load must be called on a buffer",
+            TypeError::WrongObjectForRWBufferLoad(_) => "RWBuffer::Load must be called on a buffer",
+            TypeError::WrongObjectForStructuredBufferLoad(_) => "StructuredBuffer::Load must be called on a buffer",
+            TypeError::WrongObjectForRWStructuredBufferLoad(_) => "RWStructuredBuffer::Load must be called on a buffer",
+            TypeError::WrongObjectForRWTexture2DLoad(_) => "RWTexture2DLoad::Load must be called on a buffer",
+        }
+    }
+}
+
+impl fmt::Display for TypeError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", error::Error::description(self))
+    }
+}
+
+/// An object to hold all context of the type of definitions at a point in
+/// the program
+pub trait TypeContext {
+    fn get_local(&self, var_ref: &VariableRef) -> Result<ExpressionType, TypeError>;
+    fn get_global(&self, id: &GlobalId) -> Result<ExpressionType, TypeError>;
+    fn get_constant(&self, id: &ConstantBufferId, name: &str) -> Result<ExpressionType, TypeError>;
+    fn get_struct_member(&self, id: &StructId, name: &str) -> Result<ExpressionType, TypeError>;
+    fn get_function_return(&self, id: &FunctionId) -> Result<ExpressionType, TypeError>;
+}
+
+/// A block of state for parsing complete ir trees
+/// Implements TypeContext so types of defined nodes at a certain point in the
+/// program can be queried
+pub struct TypeState {
     globals: HashMap<GlobalId, Type>,
     constants: HashMap<ConstantBufferId, HashMap<String, Type>>,
     structs: HashMap<StructId, HashMap<String, Type>>,
@@ -662,9 +740,9 @@ pub struct TypeContext {
     locals: Vec<HashMap<VariableId, Type>>,
 }
 
-impl TypeContext {
-    pub fn from_roots(root_definitions: &[RootDefinition]) -> Result<TypeContext, ()> {
-        let mut context = TypeContext {
+impl TypeState {
+    pub fn from_roots(root_definitions: &[RootDefinition]) -> Result<TypeState, ()> {
+        let mut context = TypeState {
             globals: HashMap::new(),
             constants: HashMap::new(),
             structs: HashMap::new(),
@@ -733,6 +811,64 @@ impl TypeContext {
         assert!(self.locals.len() > 0);
         self.locals.pop();
     }
+}
+
+impl TypeContext for TypeState {
+    fn get_local(&self, var_ref: &VariableRef) -> Result<ExpressionType, TypeError> {
+        let up = (var_ref.1).0 as usize;
+        if self.locals.len() <= up {
+            return Err(TypeError::LocalScopeInvalid)
+        } else {
+            let level = self.locals.len() - up - 1;
+            match self.locals[level].get(&var_ref.0) {
+                Some(ref ty) => Ok(ty.to_lvalue()),
+                None => Err(TypeError::LocalDoesNotExist(var_ref.clone())),
+            }
+        }
+    }
+
+    fn get_global(&self, id: &GlobalId) -> Result<ExpressionType, TypeError> {
+        match self.globals.get(id) {
+            Some(ref ty) => Ok(ty.to_lvalue()),
+            None => Err(TypeError::GlobalDoesNotExist(id.clone())),
+        }
+    }
+
+    fn get_constant(&self, id: &ConstantBufferId, name: &str) -> Result<ExpressionType, TypeError> {
+        match self.constants.get(id) {
+            Some(ref cm) => {
+                match cm.get(name) {
+                    Some(ref ty) => Ok(ty.to_lvalue()),
+                    None => Err(TypeError::ConstantDoesNotExist(id.clone(), name.to_string())),
+                }
+            }
+            None => Err(TypeError::ConstantBufferDoesNotExist(id.clone())),
+        }
+    }
+
+    fn get_struct_member(&self, id: &StructId, name: &str) -> Result<ExpressionType, TypeError> {
+        match self.structs.get(&id) {
+            Some(ref cm) => {
+                match cm.get(name) {
+                    Some(ref ty) => Ok(ty.to_lvalue()),
+                    None => Err(TypeError::StructMemberDoesNotExist(id.clone(), name.to_string())),
+                }
+            }
+            None => Err(TypeError::StructDoesNotExist(id.clone())),
+        }
+    }
+
+    fn get_function_return(&self, id: &FunctionId) -> Result<ExpressionType, TypeError> {
+        match self.functions.get(id) {
+            Some(ref ty) => Ok(ty.to_rvalue()),
+            None => Err(TypeError::FunctionDoesNotExist(id.clone())),
+        }
+    }
+}
+
+pub struct TypeParser;
+
+impl TypeParser {
 
     fn get_literal_type(literal: &Literal) -> ExpressionType {
         (match *literal {
@@ -747,38 +883,12 @@ impl TypeContext {
         }).to_rvalue()
     }
 
-    pub fn get_expression_type(&self, expression: &Expression) -> Result<ExpressionType, ()> {
+    pub fn get_expression_type(expression: &Expression, context: &TypeContext) -> Result<ExpressionType, TypeError> {
         match *expression {
-            Expression::Literal(ref lit) => Ok(TypeContext::get_literal_type(lit)),
-            Expression::Variable(ref var_ref) => {
-                let up = (var_ref.1).0 as usize;
-                if self.locals.len() <= up {
-                    return Err(())
-                } else {
-                    let level = self.locals.len() - up - 1;
-                    match self.locals[level].get(&var_ref.0) {
-                        Some(ref ty) => Ok(ty.to_lvalue()),
-                        None => Err(()),
-                    }
-                }
-            },
-            Expression::Global(ref id) => {
-                match self.globals.get(id) {
-                    Some(ref ty) => Ok(ty.to_lvalue()),
-                    None => Err(()),
-                }
-            },
-            Expression::ConstantVariable(ref id, ref name) => {
-                match self.constants.get(id) {
-                    Some(ref cm) => {
-                        match cm.get(name) {
-                            Some(ref ty) => Ok(ty.to_lvalue()),
-                            None => Err(()),
-                        }
-                    }
-                    None => Err(()),
-                }
-            },
+            Expression::Literal(ref lit) => Ok(TypeParser::get_literal_type(lit)),
+            Expression::Variable(ref var_ref) => context.get_local(var_ref),
+            Expression::Global(ref id) => context.get_global(id),
+            Expression::ConstantVariable(ref id, ref name) => context.get_constant(id, name),
             Expression::BinaryOperation(ref op, ref expr, _) => {
                 match *op {
                     BinOp::Add |
@@ -787,9 +897,13 @@ impl TypeContext {
                     BinOp::Divide |
                     BinOp::Modulus |
                     BinOp::LeftShift |
-                    BinOp::RightShift |
+                    BinOp::RightShift => {
+                        let base_type = try!(TypeParser::get_expression_type(expr, context)).0;
+                        Ok(ExpressionType(base_type, ValueType::Rvalue))
+                    }
+
                     BinOp::Assignment => {
-                        self.get_expression_type(expr)
+                        TypeParser::get_expression_type(expr, context)
                     }
 
                     BinOp::LessThan |
@@ -798,21 +912,23 @@ impl TypeContext {
                     BinOp::GreaterEqual |
                     BinOp::Equality |
                     BinOp::Inequality => {
-                        let ExpressionType(Type(ref tyl, _), _) = try!(self.get_expression_type(expr));
+                        let ExpressionType(Type(ref tyl, _), _) = try!(TypeParser::get_expression_type(expr, context));
                         Ok(ExpressionType(Type(match *tyl {
                             TypeLayout::Scalar(_) => TypeLayout::Scalar(ScalarType::Bool),
                             TypeLayout::Vector(_, ref x) => TypeLayout::Vector(ScalarType::Bool, *x),
-                            _ => return Err(()),
+                            _ => return Err(TypeError::InvalidTypeInEqualityOperation(tyl.clone())),
                         }, TypeModifier::default()), ValueType::Rvalue))
                     }
                 }
             },
             Expression::TernaryConditional(_, ref expr_left, ref expr_right) => {
-                assert_eq!(self.get_expression_type(expr_left), self.get_expression_type(expr_right));
-                self.get_expression_type(expr_left)
+                // Ensure the layouts of each side are the same
+                // Value types + modifiers can be different
+                assert_eq!((try!(TypeParser::get_expression_type(expr_left, context)).0).0, (try!(TypeParser::get_expression_type(expr_right, context)).0).0);
+                TypeParser::get_expression_type(expr_left, context)
             },
             Expression::Swizzle(ref vec, ref swizzle) => {
-                let ExpressionType(Type(vec_tyl, vec_mod), vec_vt) = try!(self.get_expression_type(vec));
+                let ExpressionType(Type(vec_tyl, vec_mod), vec_vt) = try!(TypeParser::get_expression_type(vec, context));
                 let tyl = match vec_tyl {
                     TypeLayout::Vector(ref scalar, _) => {
                         if swizzle.len() == 1 {
@@ -821,47 +937,60 @@ impl TypeContext {
                             TypeLayout::Vector(scalar.clone(), swizzle.len() as u32)
                         }
                     }
-                    _ => return Err(()), // Internal error: badly typed tree
+                    _ => return Err(TypeError::InvalidTypeForSwizzle(vec_tyl.clone())),
                 };
                 Ok(ExpressionType(Type(tyl, vec_mod), vec_vt))
             },
-            Expression::ArraySubscript(_, _) => unimplemented!(),
+            Expression::ArraySubscript(ref array, _) => {
+                let array_ty = try!(TypeParser::get_expression_type(&array, context));
+                Ok(match (array_ty.0).0 {
+                    TypeLayout::Array(ref element, _) => {
+                        Type::from_layout(*element.clone()).to_lvalue()
+                    },
+                    TypeLayout::Object(ObjectType::Buffer(data_type)) => {
+                        Type::from_data(data_type).to_lvalue()
+                    },
+                    TypeLayout::Object(ObjectType::RWBuffer(data_type)) => {
+                        Type::from_data(data_type).to_lvalue()
+                    },
+                    TypeLayout::Object(ObjectType::StructuredBuffer(structured_type)) => {
+                        Type::from_structured(structured_type).to_lvalue()
+                    },
+                    TypeLayout::Object(ObjectType::RWStructuredBuffer(structured_type)) => {
+                        Type::from_structured(structured_type).to_lvalue()
+                    },
+                    tyl => return Err(TypeError::ArrayIndexMustBeUsedOnArrayType(tyl)),
+                })
+            }
             Expression::Member(ref expr, ref name)  => {
-                let expr_type = try!(self.get_expression_type(&expr));
+                let expr_type = try!(TypeParser::get_expression_type(&expr, context));
                 let id = match (expr_type.0).0 {
                     TypeLayout::Struct(id) => id,
-                    _ => return Err(())
+                    tyl => return Err(TypeError::MemberNodeMustBeUsedOnStruct(tyl.clone(), name.clone())),
                 };
-                match self.structs.get(&id) {
-                    Some(ref cm) => {
-                        match cm.get(name) {
-                            Some(ref ty) => Ok(ty.to_lvalue()),
-                            None => Err(()),
-                        }
-                    }
-                    None => Err(()),
-                }
+                context.get_struct_member(&id, name)
             },
-            Expression::Call(ref id, _) => {
-                match self.functions.get(id) {
-                    Some(ref ty) => Ok(ty.to_lvalue()),
-                    None => Err(()),
-                }
-            },
+            Expression::Call(ref id, _) => context.get_function_return(id),
             Expression::Cast(ref ty, _) => Ok(ty.to_rvalue()),
-            Expression::Intrinsic(ref intrinsic) => self.get_intrinsic_type(intrinsic),
+            Expression::Intrinsic(ref intrinsic) => TypeParser::get_intrinsic_type(intrinsic, context),
         }
     }
 
-    pub fn get_intrinsic_type(&self, intrinsic: &Intrinsic) -> Result<ExpressionType, ()> {
+    fn get_intrinsic_type(intrinsic: &Intrinsic, context: &TypeContext) -> Result<ExpressionType, TypeError> {
         Ok(match *intrinsic {
-            Intrinsic::PrefixIncrement(ref ty, _) => ty.to_rvalue(),
-            Intrinsic::PrefixDecrement(ref ty, _) => ty.to_rvalue(),
-            Intrinsic::PostfixIncrement(ref ty, _) => ty.to_rvalue(),
-            Intrinsic::PostfixDecrement(ref ty, _) => ty.to_rvalue(),
+            Intrinsic::PrefixIncrement(ref ty, _) => ty.to_lvalue(),
+            Intrinsic::PrefixDecrement(ref ty, _) => ty.to_lvalue(),
+            Intrinsic::PostfixIncrement(ref ty, _) => ty.to_lvalue(),
+            Intrinsic::PostfixDecrement(ref ty, _) => ty.to_lvalue(),
             Intrinsic::Plus(ref ty, _) => ty.to_rvalue(),
             Intrinsic::Minus(ref ty, _) => ty.to_rvalue(),
-            Intrinsic::LogicalNot(_, _) => unimplemented!(),
+            Intrinsic::LogicalNot(ref ty, _) => {
+                match ty.0 {
+                    TypeLayout::Scalar(_) => Type::bool().to_rvalue(),
+                    TypeLayout::Vector(_, x) => Type::booln(x).to_rvalue(),
+                    _ => return Err(TypeError::InvalidType(ty.clone())),
+                }
+            },
             Intrinsic::BitwiseNot(ref ty, _) => ty.to_rvalue(),
             Intrinsic::AllMemoryBarrier => Type::void().to_rvalue(),
             Intrinsic::AllMemoryBarrierWithGroupSync => Type::void().to_rvalue(),
@@ -911,35 +1040,64 @@ impl TypeContext {
             Intrinsic::Distance2(_, _) => Type::float().to_rvalue(),
             Intrinsic::Distance3(_, _) => Type::float().to_rvalue(),
             Intrinsic::Distance4(_, _) => Type::float().to_rvalue(),
-            Intrinsic::DotI1(_, _) => Type::intn(1).to_rvalue(),
-            Intrinsic::DotI2(_, _) => Type::intn(2).to_rvalue(),
-            Intrinsic::DotI3(_, _) => Type::intn(3).to_rvalue(),
-            Intrinsic::DotI4(_, _) => Type::intn(4).to_rvalue(),
-            Intrinsic::DotF1(_, _) => Type::floatn(1).to_rvalue(),
-            Intrinsic::DotF2(_, _) => Type::floatn(2).to_rvalue(),
-            Intrinsic::DotF3(_, _) => Type::floatn(3).to_rvalue(),
-            Intrinsic::DotF4(_, _) => Type::floatn(4).to_rvalue(),
+            Intrinsic::DotI1(_, _) => Type::int().to_rvalue(),
+            Intrinsic::DotI2(_, _) => Type::int().to_rvalue(),
+            Intrinsic::DotI3(_, _) => Type::int().to_rvalue(),
+            Intrinsic::DotI4(_, _) => Type::int().to_rvalue(),
+            Intrinsic::DotF1(_, _) => Type::float().to_rvalue(),
+            Intrinsic::DotF2(_, _) => Type::float().to_rvalue(),
+            Intrinsic::DotF3(_, _) => Type::float().to_rvalue(),
+            Intrinsic::DotF4(_, _) => Type::float().to_rvalue(),
             Intrinsic::Min(_, _) => unimplemented!(),
             Intrinsic::Max(_, _) => unimplemented!(),
             Intrinsic::Float4(_, _, _, _) => Type::floatn(4).to_rvalue(),
-            Intrinsic::BufferLoad(_, _) => unimplemented!(),
-            Intrinsic::RWBufferLoad(_, _) => unimplemented!(),
-            Intrinsic::StructuredBufferLoad(_, _) => unimplemented!(),
-            Intrinsic::RWStructuredBufferLoad(_, _) => unimplemented!(),
-            Intrinsic::RWTexture2DLoad(_, _) => unimplemented!(),
-            Intrinsic::ByteAddressBufferLoad(_, _) => unimplemented!(),
-            Intrinsic::ByteAddressBufferLoad2(_, _) => unimplemented!(),
-            Intrinsic::ByteAddressBufferLoad3(_, _) => unimplemented!(),
-            Intrinsic::ByteAddressBufferLoad4(_, _) => unimplemented!(),
-            Intrinsic::RWByteAddressBufferLoad(_, _) => unimplemented!(),
-            Intrinsic::RWByteAddressBufferLoad2(_, _) => unimplemented!(),
-            Intrinsic::RWByteAddressBufferLoad3(_, _) => unimplemented!(),
-            Intrinsic::RWByteAddressBufferLoad4(_, _) => unimplemented!(),
-            Intrinsic::RWByteAddressBufferStore(_, _, _) => unimplemented!(),
-            Intrinsic::RWByteAddressBufferStore2(_, _, _) => unimplemented!(),
-            Intrinsic::RWByteAddressBufferStore3(_, _, _) => unimplemented!(),
-            Intrinsic::RWByteAddressBufferStore4(_, _, _) => unimplemented!(),
+            Intrinsic::BufferLoad(ref buffer, _) => {
+                let buffer_ety = try!(TypeParser::get_expression_type(buffer, context));
+                match (buffer_ety.0).0 {
+                    TypeLayout::Object(ObjectType::Buffer(data_type)) => Type::from_data(data_type).to_rvalue(),
+                    tyl => return Err(TypeError::WrongObjectForBufferLoad(tyl)),
+                }
+            },
+            Intrinsic::RWBufferLoad(ref buffer, _) => {
+                let buffer_ety = try!(TypeParser::get_expression_type(buffer, context));
+                match (buffer_ety.0).0 {
+                    TypeLayout::Object(ObjectType::RWBuffer(data_type)) => Type::from_data(data_type).to_rvalue(),
+                    tyl => return Err(TypeError::WrongObjectForRWBufferLoad(tyl)),
+                }
+            },
+            Intrinsic::StructuredBufferLoad(ref buffer, _) => {
+                let buffer_ety = try!(TypeParser::get_expression_type(buffer, context));
+                match (buffer_ety.0).0 {
+                    TypeLayout::Object(ObjectType::StructuredBuffer(structured_type)) => Type::from_structured(structured_type).to_rvalue(),
+                    tyl => return Err(TypeError::WrongObjectForStructuredBufferLoad(tyl)),
+                }
+            },
+            Intrinsic::RWStructuredBufferLoad(ref buffer, _) => {
+                let buffer_ety = try!(TypeParser::get_expression_type(buffer, context));
+                match (buffer_ety.0).0 {
+                    TypeLayout::Object(ObjectType::RWStructuredBuffer(structured_type)) => Type::from_structured(structured_type).to_rvalue(),
+                    tyl => return Err(TypeError::WrongObjectForRWStructuredBufferLoad(tyl)),
+                }
+            },
+            Intrinsic::RWTexture2DLoad(ref texture, _) => {
+                let texture_ety = try!(TypeParser::get_expression_type(texture, context));
+                match (texture_ety.0).0 {
+                    TypeLayout::Object(ObjectType::RWTexture2D(data_type)) => Type::from_data(data_type).to_rvalue(),
+                    tyl => return Err(TypeError::WrongObjectForRWTexture2DLoad(tyl)),
+                }
+            },
+            Intrinsic::ByteAddressBufferLoad(_, _) => Type::uint().to_rvalue(),
+            Intrinsic::ByteAddressBufferLoad2(_, _) => Type::uintn(2).to_rvalue(),
+            Intrinsic::ByteAddressBufferLoad3(_, _) => Type::uintn(3).to_rvalue(),
+            Intrinsic::ByteAddressBufferLoad4(_, _) => Type::uintn(4).to_rvalue(),
+            Intrinsic::RWByteAddressBufferLoad(_, _) => Type::uint().to_rvalue(),
+            Intrinsic::RWByteAddressBufferLoad2(_, _) => Type::uintn(2).to_rvalue(),
+            Intrinsic::RWByteAddressBufferLoad3(_, _) => Type::uintn(3).to_rvalue(),
+            Intrinsic::RWByteAddressBufferLoad4(_, _) => Type::uintn(4).to_rvalue(),
+            Intrinsic::RWByteAddressBufferStore(_, _, _) => Type::void().to_rvalue(),
+            Intrinsic::RWByteAddressBufferStore2(_, _, _) => Type::void().to_rvalue(),
+            Intrinsic::RWByteAddressBufferStore3(_, _, _) => Type::void().to_rvalue(),
+            Intrinsic::RWByteAddressBufferStore4(_, _, _) => Type::void().to_rvalue(),
         })
     }
 }
-

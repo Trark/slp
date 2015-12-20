@@ -201,11 +201,12 @@ enum Context {
     Scope(ScopeContext),
 }
 
-trait ExpressionContext : StructIdFinder + ErrorTypeContext {
+trait ExpressionContext : StructIdFinder + ErrorTypeContext + ir::TypeContext {
     fn find_variable(&self, name: &String) -> Result<TypedExpression, TyperError>;
     fn find_struct_member(&self, id: &ir::StructId, member_name: &String) -> Result<ir::Type, TyperError>;
 
     fn as_struct_id_finder(&self) -> &StructIdFinder;
+    fn as_type_context(&self) -> &ir::TypeContext;
 }
 
 trait StructIdFinder {
@@ -634,6 +635,59 @@ impl ExpressionContext for GlobalContext {
     fn as_struct_id_finder(&self) -> &StructIdFinder {
         self
     }
+
+    fn as_type_context(&self) -> &ir::TypeContext {
+        self
+    }
+}
+
+impl ir::TypeContext for GlobalContext {
+    fn get_local(&self, _: &ir::VariableRef) -> Result<ExpressionType, ir::TypeError> { Err(ir::TypeError::InvalidLocal) }
+    fn get_global(&self, id: &ir::GlobalId) -> Result<ExpressionType, ir::TypeError> {
+        for &(ref global_ty, ref global_id) in self.globals.values() {
+            if id == global_id {
+                return Ok(global_ty.to_lvalue());
+            }
+        };
+        Err(ir::TypeError::GlobalDoesNotExist(id.clone()))
+    }
+    fn get_constant(&self, id: &ir::ConstantBufferId, name: &str) -> Result<ExpressionType, ir::TypeError> {
+        match self.types.cbuffer_definitions.get(id) {
+            Some(ref cm) => {
+                match cm.get(name) {
+                    Some(ref ty) => Ok(ty.to_lvalue()),
+                    None => Err(ir::TypeError::ConstantDoesNotExist(id.clone(), name.to_string())),
+                }
+            }
+            None => Err(ir::TypeError::ConstantBufferDoesNotExist(id.clone())),
+        }
+    }
+    fn get_struct_member(&self, id: &ir::StructId, name: &str) -> Result<ExpressionType, ir::TypeError> {
+        match self.types.struct_definitions.get(&id) {
+            Some(ref cm) => {
+                match cm.get(name) {
+                    Some(ref ty) => Ok(ty.to_lvalue()),
+                    None => Err(ir::TypeError::StructMemberDoesNotExist(id.clone(), name.to_string())),
+                }
+            }
+            None => Err(ir::TypeError::StructDoesNotExist(id.clone())),
+        }
+    }
+    fn get_function_return(&self, id: &ir::FunctionId) -> Result<ExpressionType, ir::TypeError> {
+        for unresolved in self.functions.values() {
+            for overload in &unresolved.1 {
+                match overload.0 {
+                    FunctionName::Intrinsic(_) => { },
+                    FunctionName::User(ref func_id) => {
+                        if func_id == id {
+                            return Ok(overload.1.clone().to_rvalue());
+                        }
+                    }
+                }
+            }
+        };
+        Err(ir::TypeError::FunctionDoesNotExist(id.clone()))
+    }
 }
 
 impl StructIdFinder for GlobalContext {
@@ -696,6 +750,39 @@ impl ExpressionContext for ScopeContext {
 
     fn as_struct_id_finder(&self) -> &StructIdFinder {
         self
+    }
+
+    fn as_type_context(&self) -> &ir::TypeContext {
+        self
+    }
+}
+
+impl ir::TypeContext for ScopeContext {
+    fn get_local(&self, var_ref: &ir::VariableRef) -> Result<ExpressionType, ir::TypeError> {
+        let &ir::VariableRef(ref id, ref scope) = var_ref;
+        match scope.0 {
+            0 => {
+                for &(ref var_ty, ref var_id) in self.variables.variables.values() {
+                    if id == var_id {
+                        return Ok(var_ty.to_lvalue());
+                    }
+                };
+                Err(ir::TypeError::InvalidLocal)
+            }
+            up => self.parent.get_local(&ir::VariableRef(id.clone(), ir::ScopeRef(up - 1))),
+        }
+    }
+    fn get_global(&self, id: &ir::GlobalId) -> Result<ExpressionType, ir::TypeError> {
+        self.parent.get_global(id)
+    }
+    fn get_constant(&self, id: &ir::ConstantBufferId, name: &str) -> Result<ExpressionType, ir::TypeError> {
+        self.parent.get_constant(id, name)
+    }
+    fn get_struct_member(&self, id: &ir::StructId, name: &str) -> Result<ExpressionType, ir::TypeError> {
+        self.parent.get_struct_member(id, name)
+    }
+    fn get_function_return(&self, id: &ir::FunctionId) -> Result<ExpressionType, ir::TypeError> {
+        self.parent.get_function_return(id)
     }
 }
 
@@ -765,6 +852,39 @@ impl ErrorTypeContext for Context {
         match *self {
             Context::Global(ref global) => global.typed_expression_to_error_type(texp),
             Context::Scope(ref scope) => scope.typed_expression_to_error_type(texp),
+        }
+    }
+}
+
+impl ir::TypeContext for Context {
+    fn get_local(&self, var_ref: &ir::VariableRef) -> Result<ExpressionType, ir::TypeError> {
+        match *self {
+            Context::Global(ref global) => global.get_local(var_ref),
+            Context::Scope(ref scope) => scope.get_local(var_ref),
+        }
+    }
+    fn get_global(&self, id: &ir::GlobalId) -> Result<ExpressionType, ir::TypeError> {
+        match *self {
+            Context::Global(ref global) => global.get_global(id),
+            Context::Scope(ref scope) => scope.get_global(id),
+        }
+    }
+    fn get_constant(&self, id: &ir::ConstantBufferId, name: &str) -> Result<ExpressionType, ir::TypeError> {
+        match *self {
+            Context::Global(ref global) => global.get_constant(id, name),
+            Context::Scope(ref scope) => scope.get_constant(id, name),
+        }
+    }
+    fn get_struct_member(&self, id: &ir::StructId, name: &str) -> Result<ExpressionType, ir::TypeError> {
+        match *self {
+            Context::Global(ref global) => global.get_struct_member(id, name),
+            Context::Scope(ref scope) => scope.get_struct_member(id, name),
+        }
+    }
+    fn get_function_return(&self, id: &ir::FunctionId) -> Result<ExpressionType, ir::TypeError> {
+        match *self {
+            Context::Global(ref global) => global.get_function_return(id),
+            Context::Scope(ref scope) => scope.get_function_return(id),
         }
     }
 }
@@ -1111,8 +1231,8 @@ fn parse_expr_unaryop(op: &ast::UnaryOp, expr: &ast::Expression, context: &Expre
                     try!(enforce_increment_type(&expr_ty, op));
                     (ir::Intrinsic::PostfixDecrement(expr_ty.0.clone(), expr_ir), expr_ty)
                 },
-                ast::UnaryOp::Plus => (ir::Intrinsic::Plus(expr_ty.0.clone(), expr_ir), expr_ty),
-                ast::UnaryOp::Minus => (ir::Intrinsic::Minus(expr_ty.0.clone(), expr_ir), expr_ty),
+                ast::UnaryOp::Plus => (ir::Intrinsic::Plus(expr_ty.0.clone(), expr_ir), expr_ty.0.to_rvalue()),
+                ast::UnaryOp::Minus => (ir::Intrinsic::Minus(expr_ty.0.clone(), expr_ir), expr_ty.0.to_rvalue()),
                 ast::UnaryOp::LogicalNot => {
                     let ty = match expr_ty.0 {
                         ir::Type(ir::TypeLayout::Scalar(_), _) => ir::Type::from_layout(ir::TypeLayout::Scalar(ir::ScalarType::Bool)),
@@ -1126,7 +1246,7 @@ fn parse_expr_unaryop(op: &ast::UnaryOp, expr: &ast::Expression, context: &Expre
                 ast::UnaryOp::BitwiseNot => match (expr_ty.0).0 {
                     ir::TypeLayout::Scalar(ir::ScalarType::Int) |
                     ir::TypeLayout::Scalar(ir::ScalarType::UInt) => {
-                        (ir::Intrinsic::BitwiseNot(expr_ty.0.clone(), expr_ir), expr_ty)
+                        (ir::Intrinsic::BitwiseNot(expr_ty.0.clone(), expr_ir), expr_ty.0.to_rvalue())
                     },
                     _ => return Err(TyperError::UnaryOperationWrongTypes(op.clone(), ErrorType::Unknown)),
                 },
@@ -1290,7 +1410,7 @@ fn parse_expr_ternary(cond: &ast::Expression, lhs: &ast::Expression, rhs: &ast::
     Ok(TypedExpression::Value(ir::Expression::TernaryConditional(Box::new(cond), Box::new(lhs), Box::new(rhs)), final_type))
 }
 
-fn parse_expr(ast: &ast::Expression, context: &ExpressionContext) -> Result<TypedExpression, TyperError> {
+fn parse_expr_unchecked(ast: &ast::Expression, context: &ExpressionContext) -> Result<TypedExpression, TyperError> {
     match ast {
         &ast::Expression::Literal(ref lit) => parse_literal(lit),
         &ast::Expression::Variable(ref s) => Ok(try!(context.find_variable(s))),
@@ -1433,6 +1553,20 @@ fn parse_expr(ast: &ast::Expression, context: &ExpressionContext) -> Result<Type
             }
         },
     }
+}
+
+fn parse_expr(expr: &ast::Expression, context: &ExpressionContext) -> Result<TypedExpression, TyperError> {
+    let texp = try!(parse_expr_unchecked(expr, context));
+    match texp {
+        #[cfg(debug_assertions)]
+        TypedExpression::Value(ref expr, ref ty_expected) => {
+            let ty_res = ir::TypeParser::get_expression_type(&expr, context.as_type_context());
+            let ty = ty_res.expect("type unknown");
+            assert!(ty == *ty_expected, "{:?} == {:?}: {:?}", ty, *ty_expected, expr);
+        },
+        _ => { },
+    };
+    Ok(texp)
 }
 
 fn parse_expr_value_only(expr: &ast::Expression, context: &ExpressionContext) -> Result<ir::Expression, TyperError> {

@@ -13,6 +13,7 @@ use super::super::hlsl::globals_analysis;
 pub enum TranspileError {
     Unknown,
     Internal(String),
+    InternalTypeError(src::TypeError),
 
     TypeIsNotAllowedAsGlobal(src::GlobalType),
     CouldNotGetEquivalentType(src::TypeLayout),
@@ -36,6 +37,7 @@ impl error::Error for TranspileError {
         match *self {
             TranspileError::Unknown => "unknown transpiler error",
             TranspileError::Internal(_) => "unknown transpiler error",
+            TranspileError::InternalTypeError(_) => "internal type error",
             TranspileError::TypeIsNotAllowedAsGlobal(_) => "global variable has unsupported type",
             TranspileError::CouldNotGetEquivalentType(_) => "could not find equivalent clc type",
             TranspileError::GlobalFoundThatIsntInKernelParams(_) => "non-parameter global found",
@@ -54,6 +56,12 @@ impl error::Error for TranspileError {
 impl fmt::Display for TranspileError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", error::Error::description(self))
+    }
+}
+
+impl From<src::TypeError> for TranspileError {
+    fn from(err: src::TypeError) -> TranspileError {
+        TranspileError::InternalTypeError(err)
     }
 }
 
@@ -220,7 +228,7 @@ struct Context {
     lifted_arguments: Option<HashMap<GlobalArgument, dst::LocalId>>,
     next_local_id: Option<dst::LocalId>,
     local_names: Option<HashMap<dst::LocalId, String>>,
-    type_context: src::TypeContext,
+    type_context: src::TypeState,
     global_type_map: HashMap<src::GlobalId, dst::Type>,
     kernel_arguments: Vec<GlobalArgument>,
 }
@@ -250,7 +258,7 @@ impl Context {
             lifted_arguments: None,
             next_local_id: None,
             local_names: None,
-            type_context: match src::TypeContext::from_roots(root_defs) {
+            type_context: match src::TypeState::from_roots(root_defs) {
                 Ok(rt) => rt,
                 Err(()) => return Err(TranspileError::Unknown),
             },
@@ -710,7 +718,7 @@ fn write_unary(op: dst::UnaryOp, expr: &src::Expression, context: &mut Context) 
 fn write_func(name: &'static str, args: &[&src::Expression], context: &mut Context) -> Result<dst::Expression, TranspileError> {
     Ok(dst::Expression::UntypedIntrinsic(
         name.to_string(),
-        try!(args.iter().fold(Ok(vec![]), |result, exp| {
+        try!(args.iter().fold(Ok(vec![]), |result: Result<Vec<dst::Expression>, TranspileError>, exp| {
             let mut vec = try!(result);
             vec.push(try!(transpile_expression(exp, context)));
             Ok(vec)
@@ -828,10 +836,7 @@ fn transpile_intrinsic(intrinsic: &src::Intrinsic, context: &mut Context) -> Res
         src::Intrinsic::RWTexture2DLoad(ref tex, ref loc) => {
             let cl_tex = try!(transpile_expression(tex, context));
             let cl_loc = try!(transpile_expression(loc, context));
-            let ty = match context.type_context.get_expression_type(tex) {
-                Ok(ty) => ty,
-                Err(()) => return Err(TranspileError::Unknown),
-            };
+            let ty = try!(src::TypeParser::get_expression_type(tex, &context.type_context));
             let func_name = match ty {
                 src::ExpressionType(src::Type(src::TypeLayout::Object(src::ObjectType::RWTexture2D(ref data_type)), _), _) => {
                     match data_type.0 {
@@ -977,10 +982,7 @@ fn transpile_expression(expression: &src::Expression, context: &mut Context) -> 
         &src::Expression::Cast(ref cast_type, ref expr) => {
             let dest_cl_type = try!(transpile_type(cast_type, context));
             let cl_expr = try!(transpile_expression(expr, context));
-            let source_ir_type = match context.type_context.get_expression_type(expr) {
-                Ok(ty) => ty.0,
-                Err(()) => return Err(TranspileError::Internal("could not calculate type for cast source".to_string())),
-            };
+            let source_ir_type = try!(src::TypeParser::get_expression_type(expr, &context.type_context)).0;
             let (source_cl_type, untyped) = match transpile_type(&source_ir_type, context) {
                 Ok(ty) => (ty, false),
                 Err(TranspileError::IntsMustBeTyped) => {
@@ -1187,7 +1189,7 @@ fn transpile_structdefinition(structdefinition: &src::StructDefinition, context:
         id: try!(context.get_struct_name(&structdefinition.id)),
         members: try!(structdefinition.members.iter().fold(
             Ok(vec![]),
-            |result, member| {
+            |result: Result<Vec<dst::StructMember>, TranspileError>, member| {
                 let mut vec = try!(result);
                 let dst_member = dst::StructMember {
                     name: member.name.clone(),
