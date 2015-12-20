@@ -1,6 +1,8 @@
 use std::str;
 use std::error;
 use std::fmt;
+use StreamLocation;
+use super::preprocess::PreprocessedText;
 use super::tokens::*;
 use nom::{IResult,Needed,Err,ErrorKind};
 
@@ -32,6 +34,9 @@ struct IntermediateLocation(u64);
 
 #[derive(PartialEq, Debug, Clone)]
 struct IntermediateToken(Token, IntermediateLocation);
+
+#[derive(PartialEq, Debug, Clone)]
+struct StreamToken(pub Token, pub StreamLocation);
 
 named!(digit<u64>, alt!(
     tag!("0") => { |_| { 0 } } |
@@ -519,7 +524,7 @@ fn token_no_whitespace(input: &[u8]) -> IResult<&[u8], IntermediateToken> {
 
 named!(token<IntermediateToken>, delimited!(opt!(whitespace), alt!(token_no_whitespace), opt!(whitespace)));
 
-pub fn token_stream(input: &[u8]) -> IResult<&[u8], Vec<StreamToken>> {
+fn token_stream(input: &[u8]) -> IResult<&[u8], Vec<StreamToken>> {
     let total_length = input.len() as u64;
     match many0!(input, token) {
         IResult::Done(rest, itokens) => {
@@ -533,13 +538,22 @@ pub fn token_stream(input: &[u8]) -> IResult<&[u8], Vec<StreamToken>> {
     }
 }
 
-pub fn lex(input: &[u8]) -> Result<Tokens, LexError> {
-    let total_length = input.len() as u64;
-    match token_stream(input) {
+pub fn lex(preprocessed: &PreprocessedText) -> Result<Tokens, LexError> {
+    let code_bytes = preprocessed.as_bytes();
+    let total_length = code_bytes.len() as u64;
+    match token_stream(code_bytes) {
         IResult::Done(rest, mut stream) => {
             if rest == [] {
                 let stream = { stream.push(StreamToken(Token::Eof, StreamLocation(total_length))); stream };
-                Ok(Tokens { stream: stream })
+                let mut lex_tokens = Vec::with_capacity(stream.len());
+                for StreamToken(ref token, ref stream_location) in stream {
+                    let loc = match preprocessed.get_file_location(stream_location) {
+                        Ok(file_location) => file_location,
+                        Err(()) => return Err(LexError::Unknown),
+                    };
+                    lex_tokens.push(LexToken(token.clone(), loc));
+                }
+                Ok(Tokens { stream: lex_tokens })
             } else {
                 Err(LexError::FailedToParse(rest.to_vec()))
             }

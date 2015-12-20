@@ -9,14 +9,39 @@ pub mod clc;
 use std::error;
 use std::fmt;
 use std::collections::HashMap;
+use hlsl::preprocess::PreprocessError;
 use hlsl::lexer::LexError;
 use hlsl::parser::ParseError;
 use hlsl::typer::TyperError;
 use clc::transpiler::TranspileError;
 use clc::untyper::UntyperError;
 
+/// A file used as an input
+#[derive(PartialEq, Debug, Clone)]
+pub enum File {
+    Unknown,
+    Name(String),
+}
+
+/// A line number in a file
+#[derive(PartialEq, Debug, Clone)]
+pub struct Line(pub u64);
+
+// The column index in a line
+#[derive(PartialEq, Debug, Clone)]
+pub struct Column(pub u64);
+
+/// Fully qualified location
+#[derive(PartialEq, Debug, Clone)]
+pub struct FileLocation(pub File, pub Line, pub Column);
+
+// The raw number of bytes from the start of a stream
+#[derive(PartialEq, Debug, Clone)]
+pub struct StreamLocation(pub u64);
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum CompileError {
+    PreprocessError(PreprocessError),
     LexError(LexError),
     ParseError(ParseError),
     TyperError(TyperError),
@@ -51,9 +76,11 @@ pub struct Output {
     pub binds: BindMap,
 }
 
-pub fn hlsl_to_cl(hlsl_source: &[u8], entry_point: &'static str) -> Result<Output, CompileError> {
+pub fn hlsl_to_cl(hlsl_source: &str, entry_point: &'static str) -> Result<Output, CompileError> {
 
-    let tokens = try!(hlsl::lexer::lex(hlsl_source));
+    let preprocessed = try!(hlsl::preprocess::preprocess(hlsl_source));
+
+    let tokens = try!(hlsl::lexer::lex(&preprocessed));
 
     let ast = try!(hlsl::parser::parse(entry_point.to_string(), &tokens.get_nonstream_tokens()));
 
@@ -71,6 +98,7 @@ pub fn hlsl_to_cl(hlsl_source: &[u8], entry_point: &'static str) -> Result<Outpu
 impl error::Error for CompileError {
     fn description(&self) -> &str {
         match *self {
+            CompileError::PreprocessError(ref preprocess_error) => error::Error::description(preprocess_error),
             CompileError::LexError(ref lexer_error) => error::Error::description(lexer_error),
             CompileError::ParseError(ref parser_error) => error::Error::description(parser_error),
             CompileError::TyperError(ref typer_error) => error::Error::description(typer_error),
@@ -83,6 +111,12 @@ impl error::Error for CompileError {
 impl fmt::Display for CompileError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", error::Error::description(self))
+    }
+}
+
+impl From<PreprocessError> for CompileError {
+    fn from(err: hlsl::preprocess::PreprocessError) -> CompileError {
+        CompileError::PreprocessError(err)
     }
 }
 

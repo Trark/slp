@@ -1,4 +1,6 @@
 
+pub mod preprocess;
+
 pub mod tokens;
 pub mod lexer;
 

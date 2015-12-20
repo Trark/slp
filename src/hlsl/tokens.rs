@@ -1,4 +1,6 @@
 
+use FileLocation;
+
 #[derive(PartialEq, Debug, Clone)]
 pub struct Identifier(pub String);
 
@@ -126,14 +128,11 @@ pub enum Token {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct StreamLocation(pub u64);
-
-#[derive(PartialEq, Debug, Clone)]
-pub struct StreamToken(pub Token, pub StreamLocation);
+pub struct LexToken(pub Token, pub FileLocation);
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Tokens {
-    pub stream: Vec<StreamToken>,
+    pub stream: Vec<LexToken>,
 }
 
 impl Tokens {

@@ -966,10 +966,11 @@ fn bexp_var(var_name: &'static str) -> Box<Expression> { Box::new(exp_var(var_na
 
 #[cfg(test)]
 fn parse_result_from_str<T>(parse_func: Box<Fn(&[Token]) -> IResult<&[Token], T, ParseErrorReason>>) -> Box<Fn(&'static str) -> Result<T, ParseErrorReason>> where T: 'static {
+    use super::preprocess::preprocess;
     Box::new(move |string: &'static str| {
         let modified_string = string.to_string() + "\n";
-        let input = &modified_string[..].as_bytes();
-        let lex_result = super::lexer::lex(input);
+        let preprocessed_text = preprocess(&modified_string).expect("preprocess failed");
+        let lex_result = super::lexer::lex(&preprocessed_text);
         match lex_result {
             Ok(tokens) => {
                 match parse_func(&tokens.get_nonstream_tokens()) {
@@ -991,10 +992,11 @@ fn parse_result_from_str<T>(parse_func: Box<Fn(&[Token]) -> IResult<&[Token], T,
 
 #[cfg(test)]
 fn parse_from_str<T>(parse_func: Box<Fn(&[Token]) -> IResult<&[Token], T, ParseErrorReason>>) -> Box<Fn(&'static str) -> T> where T: 'static {
+    use super::preprocess::preprocess;
     Box::new(move |string: &'static str| {
         let modified_string = string.to_string() + "\n";
-        let input = &modified_string[..].as_bytes();
-        let lex_result = super::lexer::lex(input);
+        let preprocessed_text = preprocess(&modified_string).expect("preprocess failed");
+        let lex_result = super::lexer::lex(&preprocessed_text);
         match lex_result {
             Ok(tokens) => {
                 let stream = tokens.get_nonstream_tokens();
