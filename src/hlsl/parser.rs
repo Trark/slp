@@ -756,27 +756,65 @@ fn condition(input: &[LexToken]) -> IResult<&[LexToken], Condition, ParseErrorRe
 }
 
 fn statement(input: &[LexToken]) -> IResult<&[LexToken], Statement, ParseErrorReason> {
-    alt!(input,
-        token!(Token::Semicolon) => { |_| { Statement::Empty } } |
-        chain!(token!(Token::If) ~ token!(Token::LeftParen) ~ cond: expr ~ token!(Token::RightParen) ~ inner_statement: statement, || { Statement::If(cond, Box::new(inner_statement)) }) |
-        chain!(token!(Token::LeftBrace) ~ statements: many0!(statement) ~ token!(Token::RightBrace), || { Statement::Block(statements) }) |
-        chain!(
-            token!(Token::For) ~
-            token!(Token::LeftParen) ~
-            init: condition ~
-            token!(Token::Semicolon) ~
-            cond: expr ~
-            token!(Token::Semicolon) ~
-            inc: expr ~
-            token!(Token::RightParen) ~
-            inner: statement,
-            || { Statement::For(init, cond, inc, Box::new(inner)) }
-        ) |
-        chain!(token!(Token::While) ~ token!(Token::LeftParen) ~ cond: expr ~ token!(Token::RightParen) ~ inner: statement, || { Statement::While(cond, Box::new(inner)) }) |
-        chain!(var: vardef ~ token!(Token::Semicolon), || { Statement::Var(var) }) |
-        chain!(token!(Token::Return) ~ expression_statement: expr ~ token!(Token::Semicolon), || { Statement::Return(expression_statement) }) |
-        chain!(expression_statement: expr ~ token!(Token::Semicolon), || { Statement::Expression(expression_statement) })
-    )
+    if input.len() == 0 {
+        IResult::Incomplete(Needed::Size(1))
+    } else {
+        let (head, tail) = (input[0].clone(), &input[1..]);
+        match head {
+            LexToken(Token::Semicolon, _) => IResult::Done(tail, Statement::Empty),
+            LexToken(Token::If, _) => {
+                chain!(tail,
+                    token!(Token::LeftParen) ~
+                    cond: expr ~
+                    token!(Token::RightParen) ~
+                    inner_statement: statement,
+                    || Statement::If(cond, Box::new(inner_statement))
+                )
+            },
+            LexToken(Token::For, _) => {
+                chain!(tail,
+                    token!(Token::LeftParen) ~
+                    init: condition ~
+                    token!(Token::Semicolon) ~
+                    cond: expr ~
+                    token!(Token::Semicolon) ~
+                    inc: expr ~
+                    token!(Token::RightParen) ~
+                    inner: statement,
+                    || Statement::For(init, cond, inc, Box::new(inner))
+                )
+            },
+            LexToken(Token::While, _) => {
+                chain!(tail,
+                    token!(Token::LeftParen) ~
+                    cond: expr ~
+                    token!(Token::RightParen) ~
+                    inner: statement,
+                    || Statement::While(cond, Box::new(inner))
+                )
+            },
+            LexToken(Token::Return, _) => {
+                chain!(tail,
+                    expression_statement: expr ~
+                    token!(Token::Semicolon),
+                    || Statement::Return(expression_statement)
+                )
+            },
+            LexToken(Token::LeftBrace, _) => {
+                chain!(tail,
+                    statements: many0!(statement) ~
+                    token!(Token::RightBrace),
+                    || Statement::Block(statements)
+                )
+            },
+            _ => {
+                alt!(input,
+                    chain!(var: vardef ~ token!(Token::Semicolon), || Statement::Var(var)) |
+                    chain!(expression_statement: expr ~ token!(Token::Semicolon), || Statement::Expression(expression_statement))
+                )
+            },
+        }
+    }
 }
 
 fn structmember(input: &[LexToken]) -> IResult<&[LexToken], StructMember, ParseErrorReason> {
@@ -931,16 +969,74 @@ fn functiondefinition(input: &[LexToken]) -> IResult<&[LexToken], FunctionDefini
 }
 
 fn rootdefinition(input: &[LexToken]) -> IResult<&[LexToken], RootDefinition, ParseErrorReason> {
-    alt!(input,
-        structdefinition => { |structdef| { RootDefinition::Struct(structdef) } } |
-        cbuffer => { |cbuffer| { RootDefinition::ConstantBuffer(cbuffer) } } |
-        globalvariable => { |globalvariable| { RootDefinition::GlobalVariable(globalvariable) } } |
-        functiondefinition => { |funcdef| { RootDefinition::Function(funcdef) } }
-    )
+
+    // Find the error with the longest tokens used
+    fn compare_errors<'a: 'c, 'b: 'c, 'c>(lhs: Err<&'a [LexToken], ParseErrorReason>, rhs: Err<&'b [LexToken], ParseErrorReason>) -> Err<&'c [LexToken], ParseErrorReason> {
+        let lhs_len = match lhs {
+            Err::Code(_) => panic!("expected error position"),
+            Err::Node(_, _) => panic!("expected error position"),
+            Err::Position(_, ref p) => p.len(),
+            Err::NodePosition(_, ref p, _) => p.len(),
+        };
+        let rhs_len = match lhs {
+            Err::Code(_) => panic!("expected error position"),
+            Err::Node(_, _) => panic!("expected error position"),
+            Err::Position(_, ref p) => p.len(),
+            Err::NodePosition(_, ref p, _) => p.len(),
+        };
+        if rhs_len < lhs_len {
+            lhs as Err<&'c [LexToken], ParseErrorReason>
+        } else {
+            rhs as Err<&'c [LexToken], ParseErrorReason>
+        }
+    }
+
+    let err = match structdefinition(input) {
+        IResult::Done(rest, structdef) => return IResult::Done(rest, RootDefinition::Struct(structdef)),
+        IResult::Incomplete(rem) => return IResult::Incomplete(rem),
+        IResult::Error(e) => e,
+    };
+
+    let err = match cbuffer(input) {
+        IResult::Done(rest, cbuffer) => return IResult::Done(rest, RootDefinition::ConstantBuffer(cbuffer)),
+        IResult::Incomplete(rem) => return IResult::Incomplete(rem),
+        IResult::Error(e) => compare_errors(err, e),
+    };
+
+    let err = match globalvariable(input) {
+        IResult::Done(rest, globalvariable) => return IResult::Done(rest, RootDefinition::GlobalVariable(globalvariable)),
+        IResult::Incomplete(rem) => return IResult::Incomplete(rem),
+        IResult::Error(e) => compare_errors(err, e),
+    };
+
+    let err = match functiondefinition(input) {
+        IResult::Done(rest, funcdef) => return IResult::Done(rest, RootDefinition::Function(funcdef)),
+        IResult::Incomplete(rem) => return IResult::Incomplete(rem),
+        IResult::Error(e) => compare_errors(err, e),
+    };
+
+    IResult::Error(err)
 }
 
 pub fn module(input: &[LexToken]) -> IResult<&[LexToken], Vec<RootDefinition>, ParseErrorReason> {
-    chain!(input, roots: many0!(rootdefinition) ~ token!(Token::Eof), || { roots })
+    let mut roots = Vec::new();
+    let mut rest = input;
+    loop {
+        let last_def = rootdefinition(rest);
+        if let IResult::Done(remaining, root) = last_def {
+            roots.push(root);
+            rest = remaining;
+        } else {
+            return match rest {
+                a if a.len() == 1 && a[0].0 == Token::Eof => IResult::Done(&[], roots),
+                _ => match last_def {
+                    IResult::Done(_, _) => unreachable!(),
+                    IResult::Incomplete(rem) => IResult::Incomplete(rem),
+                    IResult::Error(err) => IResult::Error(err),
+                },
+            }
+        }
+    }
 }
 
 fn errorkind_to_reason(errkind: ErrorKind<ParseErrorReason>) -> ParseErrorReason {
@@ -961,6 +1057,7 @@ fn iresult_to_error(err: Err<&[LexToken], ParseErrorReason>) -> ParseError {
 
 pub fn parse(entry_point: String, source: &[LexToken]) -> Result<Module, ParseError> {
     let parse_result = module(source);
+
     match parse_result {
         IResult::Done(rest, _) if rest.len() != 0 => Err(ParseError(ParseErrorReason::FailedToParse, Some(rest.to_vec()), None)),
         IResult::Done(_, hlsl) => Ok(Module { entry_point: entry_point, root_definitions: hlsl }),
@@ -1021,7 +1118,7 @@ fn parse_from_str<T>(parse_func: Box<Fn(&[LexToken]) -> IResult<&[LexToken], T, 
                         }
                     },
                     IResult::Incomplete(needed) => panic!("Failed to parse `{:?}`: Needed {:?} more", stream, needed),
-                    _ => panic!("Failed to parse {:?}", stream)
+                    IResult::Error(err) => panic!("Failed to parse `{:?}`: Error: {:?}", err, stream)
                 }
             }
             Err(error) => panic!("Failed to lex `{:?}`", error)
