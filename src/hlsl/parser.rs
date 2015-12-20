@@ -800,19 +800,49 @@ fn statement(input: &[LexToken]) -> IResult<&[LexToken], Statement, ParseErrorRe
                     || Statement::Return(expression_statement)
                 )
             },
-            LexToken(Token::LeftBrace, _) => {
-                chain!(tail,
-                    statements: many0!(statement) ~
-                    token!(Token::RightBrace),
-                    || Statement::Block(statements)
-                )
-            },
+            LexToken(Token::LeftBrace, _) => map!(input, statement_block, |s| Statement::Block(s)),
             _ => {
-                alt!(input,
-                    chain!(var: vardef ~ token!(Token::Semicolon), || Statement::Var(var)) |
-                    chain!(expression_statement: expr ~ token!(Token::Semicolon), || Statement::Expression(expression_statement))
-                )
+                // Try parsing a variable definition
+                let err = match chain!(input, var: vardef ~ token!(Token::Semicolon), || Statement::Var(var)) {
+                    IResult::Done(rest, statement) => return IResult::Done(rest, statement),
+                    IResult::Incomplete(rem) => return IResult::Incomplete(rem),
+                    IResult::Error(e) => e,
+                };
+                // Try parsing an expression statement
+                let err = match chain!(input, expression_statement: expr ~ token!(Token::Semicolon), || Statement::Expression(expression_statement)) {
+                    IResult::Done(rest, statement) => return IResult::Done(rest, statement),
+                    IResult::Incomplete(rem) => return IResult::Incomplete(rem),
+                    IResult::Error(e) => get_most_relevant_error(err, e),
+                };
+                // Return the most likely error
+                IResult::Error(err)
             },
+        }
+    }
+}
+
+fn statement_block(input: &[LexToken]) -> IResult<&[LexToken], Vec<Statement>, ParseErrorReason> {
+    let mut statements = Vec::new();
+    let mut rest = match token!(input, Token::LeftBrace) {
+        IResult::Done(rest, _) => rest,
+        IResult::Incomplete(rem) => return IResult::Incomplete(rem),
+        IResult::Error(err) => return IResult::Error(err),
+    };
+    loop {
+        let last_def = statement(rest);
+        if let IResult::Done(remaining, root) = last_def {
+            statements.push(root);
+            rest = remaining;
+        } else {
+            return match token!(rest, Token::RightBrace) {
+                IResult::Done(rest, _) => IResult::Done(rest, statements),
+                IResult::Incomplete(rem) => IResult::Incomplete(rem),
+                IResult::Error(_) => match last_def {
+                    IResult::Done(_, _) => unreachable!(),
+                    IResult::Incomplete(rem) => IResult::Incomplete(rem),
+                    IResult::Error(err) => IResult::Error(err),
+                },
+            }
         }
     }
 }
@@ -959,37 +989,12 @@ fn functiondefinition(input: &[LexToken]) -> IResult<&[LexToken], FunctionDefini
             separated_list!(token!(Token::Comma), functionparam),
             token!(Token::RightParen)
         ) ~
-        body: delimited!(
-            token!(Token::LeftBrace),
-            many0!(statement),
-            token!(Token::RightBrace)
-        ),
+        body: statement_block,
         || { FunctionDefinition { name: func_name, returntype: ret, params: params, body: body, attributes: attributes } }
     )
 }
 
 fn rootdefinition(input: &[LexToken]) -> IResult<&[LexToken], RootDefinition, ParseErrorReason> {
-
-    // Find the error with the longest tokens used
-    fn compare_errors<'a: 'c, 'b: 'c, 'c>(lhs: Err<&'a [LexToken], ParseErrorReason>, rhs: Err<&'b [LexToken], ParseErrorReason>) -> Err<&'c [LexToken], ParseErrorReason> {
-        let lhs_len = match lhs {
-            Err::Code(_) => panic!("expected error position"),
-            Err::Node(_, _) => panic!("expected error position"),
-            Err::Position(_, ref p) => p.len(),
-            Err::NodePosition(_, ref p, _) => p.len(),
-        };
-        let rhs_len = match lhs {
-            Err::Code(_) => panic!("expected error position"),
-            Err::Node(_, _) => panic!("expected error position"),
-            Err::Position(_, ref p) => p.len(),
-            Err::NodePosition(_, ref p, _) => p.len(),
-        };
-        if rhs_len < lhs_len {
-            lhs as Err<&'c [LexToken], ParseErrorReason>
-        } else {
-            rhs as Err<&'c [LexToken], ParseErrorReason>
-        }
-    }
 
     let err = match structdefinition(input) {
         IResult::Done(rest, structdef) => return IResult::Done(rest, RootDefinition::Struct(structdef)),
@@ -1000,22 +1005,43 @@ fn rootdefinition(input: &[LexToken]) -> IResult<&[LexToken], RootDefinition, Pa
     let err = match cbuffer(input) {
         IResult::Done(rest, cbuffer) => return IResult::Done(rest, RootDefinition::ConstantBuffer(cbuffer)),
         IResult::Incomplete(rem) => return IResult::Incomplete(rem),
-        IResult::Error(e) => compare_errors(err, e),
+        IResult::Error(e) => get_most_relevant_error(err, e),
     };
 
     let err = match globalvariable(input) {
         IResult::Done(rest, globalvariable) => return IResult::Done(rest, RootDefinition::GlobalVariable(globalvariable)),
         IResult::Incomplete(rem) => return IResult::Incomplete(rem),
-        IResult::Error(e) => compare_errors(err, e),
+        IResult::Error(e) => get_most_relevant_error(err, e),
     };
 
     let err = match functiondefinition(input) {
         IResult::Done(rest, funcdef) => return IResult::Done(rest, RootDefinition::Function(funcdef)),
         IResult::Incomplete(rem) => return IResult::Incomplete(rem),
-        IResult::Error(e) => compare_errors(err, e),
+        IResult::Error(e) => get_most_relevant_error(err, e),
     };
 
     IResult::Error(err)
+}
+
+// Find the error with the longest tokens used
+fn get_most_relevant_error<'a: 'c, 'b: 'c, 'c>(lhs: Err<&'a [LexToken], ParseErrorReason>, rhs: Err<&'b [LexToken], ParseErrorReason>) -> Err<&'c [LexToken], ParseErrorReason> {
+    let lhs_len = match lhs {
+        Err::Code(_) => panic!("expected error position"),
+        Err::Node(_, _) => panic!("expected error position"),
+        Err::Position(_, ref p) => p.len(),
+        Err::NodePosition(_, ref p, _) => p.len(),
+    };
+    let rhs_len = match lhs {
+        Err::Code(_) => panic!("expected error position"),
+        Err::Node(_, _) => panic!("expected error position"),
+        Err::Position(_, ref p) => p.len(),
+        Err::NodePosition(_, ref p, _) => p.len(),
+    };
+    if rhs_len < lhs_len {
+        lhs as Err<&'c [LexToken], ParseErrorReason>
+    } else {
+        rhs as Err<&'c [LexToken], ParseErrorReason>
+    }
 }
 
 pub fn module(input: &[LexToken]) -> IResult<&[LexToken], Vec<RootDefinition>, ParseErrorReason> {
