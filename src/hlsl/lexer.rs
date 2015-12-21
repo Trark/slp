@@ -246,7 +246,8 @@ fn identifier<'a>(input: &'a [u8]) -> IResult<&'a [u8], Identifier> {
 fn whitespace_ignore(_: Vec<&[u8]>) -> Result<(), ()> { Result::Ok(()) }
 named!(whitespace<()>, map_res!(
     many1!(alt!(
-        tag!(" ") | tag!("\n") | tag!("\r") | tag!("\t")
+        tag!(" ") | tag!("\n") | tag!("\r") | tag!("\t") |
+        chain!(tag!("//") ~ many0!(is_not!("\n")) ~ tag!("\n"), || { &[] as &[u8] })
     )),
     whitespace_ignore
 ));
