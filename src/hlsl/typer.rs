@@ -1936,6 +1936,9 @@ pub fn typeparse(ast: &ast::Module) -> Result<ir::Module, TyperError> {
 
 #[test]
 fn test_typeparse() {
+
+    use Located;
+
     let module = ast::Module {
         entry_point: "CSMAIN".to_string(),
         root_definitions: vec![
@@ -1949,7 +1952,7 @@ fn test_typeparse() {
                 name: "g_myFour".to_string(),
                 global_type: ast::GlobalType(ast::Type(ast::TypeLayout::from_scalar(ast::ScalarType::Int), ast::TypeModifier { is_const: true, .. ast::TypeModifier::default() }), ast::GlobalStorage::Static, None),
                 slot: None,
-                assignment: Some(ast::Expression::Literal(ast::Literal::UntypedInt(4))),
+                assignment: Some(Located::none(ast::Expression::Literal(ast::Literal::UntypedInt(4)))),
             }),
             ast::RootDefinition::Function(ast::FunctionDefinition {
                 name: "myFunc".to_string(),
@@ -1971,12 +1974,12 @@ fn test_typeparse() {
                 params: vec![ast::FunctionParam { name: "x".to_string(), param_type: ast::ParamType(ast::Type::float(), ast::InputModifier::Out, None), semantic: None }],
                 body: vec![
                     ast::Statement::Var(ast::VarDef { name: "local_static".to_string(), local_type: ast::LocalType(ast::Type::uint(), ast::LocalStorage::Static, None), assignment: None }),
-                    ast::Statement::Expression(
+                    ast::Statement::Expression(Located::loc(1, 1,
                         ast::Expression::BinaryOperation(ast::BinOp::Assignment,
-                            Box::new(ast::Expression::Variable("x".to_string())),
-                            Box::new(ast::Expression::Literal(ast::Literal::Float(1.5f32)))
+                            Box::new(Located::none(ast::Expression::Variable("x".to_string()))),
+                            Box::new(Located::none(ast::Expression::Literal(ast::Literal::Float(1.5f32))))
                         )
-                    ),
+                    )),
                 ],
                 attributes: vec![],
             }),
@@ -1988,43 +1991,43 @@ fn test_typeparse() {
                     ast::Statement::Empty,
                     ast::Statement::Var(ast::VarDef { name: "a".to_string(), local_type: ast::Type::uint().into(), assignment: None }),
                     ast::Statement::Var(ast::VarDef { name: "b".to_string(), local_type: ast::Type::uint().into(), assignment: None }),
-                    ast::Statement::Expression(
+                    ast::Statement::Expression(Located::none(
                         ast::Expression::BinaryOperation(ast::BinOp::Assignment,
-                            Box::new(ast::Expression::Variable("a".to_string())),
-                            Box::new(ast::Expression::Variable("b".to_string()))
+                            Box::new(Located::none(ast::Expression::Variable("a".to_string()))),
+                            Box::new(Located::none(ast::Expression::Variable("b".to_string())))
                         )
-                    ),
+                    )),
                     ast::Statement::If(
-                        ast::Expression::Variable("b".to_string()),
+                        Located::none(ast::Expression::Variable("b".to_string())),
                         Box::new(ast::Statement::Empty),
                     ),
-                    ast::Statement::Expression(
+                    ast::Statement::Expression(Located::none(
                         ast::Expression::BinaryOperation(ast::BinOp::Assignment,
-                            Box::new(ast::Expression::ArraySubscript(
-                                Box::new(ast::Expression::Variable("g_myInBuffer".to_string())),
-                                Box::new(ast::Expression::Literal(ast::Literal::Int(0)))
-                            )),
-                            Box::new(ast::Expression::Literal(ast::Literal::Int(4)))
-                        ),
-                    ),
-                    ast::Statement::Expression(
+                            Box::new(Located::none(ast::Expression::ArraySubscript(
+                                Box::new(Located::none(ast::Expression::Variable("g_myInBuffer".to_string()))),
+                                Box::new(Located::none(ast::Expression::Literal(ast::Literal::Int(0))))
+                            ))),
+                            Box::new(Located::none(ast::Expression::Literal(ast::Literal::Int(4))))
+                        )
+                    )),
+                    ast::Statement::Expression(Located::none(
                         ast::Expression::Call(
-                            Box::new(ast::Expression::Variable("myFunc".to_string())),
+                            Box::new(Located::none(ast::Expression::Variable("myFunc".to_string()))),
                             vec![
-                                ast::Expression::Variable("b".to_string())
+                                Located::none(ast::Expression::Variable("b".to_string()))
                             ]
-                        ),
-                    ),
+                        )
+                    )),
                     ast::Statement::Var(ast::VarDef { name: "testOut".to_string(), local_type: ast::Type::float().into(), assignment: None }),
                     ast::Statement::Var(ast::VarDef::new("x".to_string(),
                         ast::Type::from_layout(ast::TypeLayout::array(ast::TypeLayout::float(), 3)).into(), None
                     )),
-                    ast::Statement::Expression(
+                    ast::Statement::Expression(Located::none(
                         ast::Expression::Call(
-                            Box::new(ast::Expression::Variable("outFunc".to_string())),
-                            vec![ast::Expression::Variable("testOut".to_string())]
-                        ),
-                    ),
+                            Box::new(Located::none(ast::Expression::Variable("outFunc".to_string()))),
+                            vec![Located::none(ast::Expression::Variable("testOut".to_string()))]
+                        )
+                    )),
                 ],
                 attributes: vec![ast::FunctionAttribute::NumThreads(8, 8, 1)],
             }),
@@ -2040,7 +2043,7 @@ fn test_typeparse() {
                 name: "g_myFour".to_string(),
                 global_type: ast::GlobalType(ast::Type(ast::TypeLayout::from_scalar(ast::ScalarType::Int), ast::TypeModifier { is_const: true, .. ast::TypeModifier::default() }), ast::GlobalStorage::Static, None),
                 slot: None,
-                assignment: Some(ast::Expression::Literal(ast::Literal::UntypedInt(4))),
+                assignment: Some(Located::none(ast::Expression::Literal(ast::Literal::UntypedInt(4)))),
             }),
             ast::RootDefinition::Function(ast::FunctionDefinition {
                 name: "CSMAIN".to_string(),

@@ -130,6 +130,10 @@ pub enum Token {
 #[derive(PartialEq, Debug, Clone)]
 pub struct LexToken(pub Token, pub FileLocation);
 
+impl LexToken {
+    pub fn to_loc(self) -> FileLocation { self.1 }
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub struct Tokens {
     pub stream: Vec<LexToken>,

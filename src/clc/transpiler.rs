@@ -1385,6 +1385,7 @@ fn test_transpile() {
 
     use super::super::hlsl;
     use super::super::hlsl::typer::typeparse;
+    use Located;
 
     let module = hlsl::ast::Module {
         entry_point: "CSMAIN".to_string(),
@@ -1419,33 +1420,33 @@ fn test_transpile() {
                     hlsl::ast::Statement::Empty,
                     hlsl::ast::Statement::Var(hlsl::ast::VarDef { name: "a".to_string(), local_type: hlsl::ast::Type::uint().into(), assignment: None }),
                     hlsl::ast::Statement::Var(hlsl::ast::VarDef { name: "b".to_string(), local_type: hlsl::ast::Type::uint().into(), assignment: None }),
-                    hlsl::ast::Statement::Expression(
+                    hlsl::ast::Statement::Expression(Located::none(
                         hlsl::ast::Expression::BinaryOperation(hlsl::ast::BinOp::Assignment,
-                            Box::new(hlsl::ast::Expression::Variable("a".to_string())),
-                            Box::new(hlsl::ast::Expression::Variable("b".to_string()))
+                            Box::new(Located::none(hlsl::ast::Expression::Variable("a".to_string()))),
+                            Box::new(Located::none(hlsl::ast::Expression::Variable("b".to_string())))
                         )
-                    ),
+                    )),
                     hlsl::ast::Statement::If(
-                        hlsl::ast::Expression::Variable("b".to_string()),
+                        Located::none(hlsl::ast::Expression::Variable("b".to_string())),
                         Box::new(hlsl::ast::Statement::Empty),
                     ),
-                    hlsl::ast::Statement::Expression(
+                    hlsl::ast::Statement::Expression(Located::none(
                         hlsl::ast::Expression::BinaryOperation(hlsl::ast::BinOp::Assignment,
-                            Box::new(hlsl::ast::Expression::ArraySubscript(
-                                Box::new(hlsl::ast::Expression::Variable("g_myInBuffer".to_string())),
-                                Box::new(hlsl::ast::Expression::Literal(hlsl::ast::Literal::Int(0)))
-                            )),
-                            Box::new(hlsl::ast::Expression::Literal(hlsl::ast::Literal::Int(4)))
-                        ),
-                    ),
-                    hlsl::ast::Statement::Expression(
+                            Box::new(Located::none(hlsl::ast::Expression::ArraySubscript(
+                                Box::new(Located::none(hlsl::ast::Expression::Variable("g_myInBuffer".to_string()))),
+                                Box::new(Located::none(hlsl::ast::Expression::Literal(hlsl::ast::Literal::Int(0))))
+                            ))),
+                            Box::new(Located::none(hlsl::ast::Expression::Literal(hlsl::ast::Literal::Int(4))))
+                        )
+                    )),
+                    hlsl::ast::Statement::Expression(Located::none(
                         hlsl::ast::Expression::Call(
-                            Box::new(hlsl::ast::Expression::Variable("myFunc".to_string())),
+                            Box::new(Located::none(hlsl::ast::Expression::Variable("myFunc".to_string()))),
                             vec![
-                                hlsl::ast::Expression::Variable("b".to_string())
+                                Located::none(hlsl::ast::Expression::Variable("b".to_string()))
                             ]
-                        ),
-                    ),
+                        )
+                    )),
                 ],
                 attributes: vec![hlsl::ast::FunctionAttribute::NumThreads(8, 8, 1)],
             }),

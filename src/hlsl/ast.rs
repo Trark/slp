@@ -1,4 +1,6 @@
 
+use Located;
+
 /// Basic scalar types
 #[derive(PartialEq, Debug, Clone)]
 pub enum ScalarType {
@@ -294,44 +296,44 @@ pub enum Literal {
 pub enum Expression {
     Literal(Literal),
     Variable(String),
-    UnaryOperation(UnaryOp, Box<Expression>),
-    BinaryOperation(BinOp, Box<Expression>, Box<Expression>),
-    TernaryConditional(Box<Expression>, Box<Expression>, Box<Expression>),
-    ArraySubscript(Box<Expression>, Box<Expression>),
-    Member(Box<Expression>, String),
-    Call(Box<Expression>, Vec<Expression>),
-    Cast(Type, Box<Expression>),
+    UnaryOperation(UnaryOp, Box<Located<Expression>>),
+    BinaryOperation(BinOp, Box<Located<Expression>>, Box<Located<Expression>>),
+    TernaryConditional(Box<Located<Expression>>, Box<Located<Expression>>, Box<Located<Expression>>),
+    ArraySubscript(Box<Located<Expression>>, Box<Located<Expression>>),
+    Member(Box<Located<Expression>>, String),
+    Call(Box<Located<Expression>>, Vec<Located<Expression>>),
+    Cast(Type, Box<Located<Expression>>),
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct VarDef {
     pub name: String,
     pub local_type: LocalType,
-    pub assignment: Option<Expression>,
+    pub assignment: Option<Located<Expression>>,
 }
 
 impl VarDef {
-    pub fn new(name: String, local_type: LocalType, assignment: Option<Expression>) -> VarDef {
+    pub fn new(name: String, local_type: LocalType, assignment: Option<Located<Expression>>) -> VarDef {
         VarDef { name: name, local_type: local_type, assignment: assignment }
     }
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Condition {
-    Expr(Expression),
+    Expr(Located<Expression>),
     Assignment(VarDef),
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Statement {
     Empty,
-    Expression(Expression),
+    Expression(Located<Expression>),
     Var(VarDef),
     Block(Vec<Statement>),
-    If(Expression, Box<Statement>),
-    For(Condition, Expression, Expression, Box<Statement>),
-    While(Expression, Box<Statement>),
-    Return(Expression),
+    If(Located<Expression>, Box<Statement>),
+    For(Condition, Located<Expression>, Located<Expression>, Box<Statement>),
+    While(Located<Expression>, Box<Statement>),
+    Return(Located<Expression>),
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -389,7 +391,7 @@ pub struct GlobalVariable {
     pub name: String,
     pub global_type: GlobalType,
     pub slot: Option<GlobalSlot>,
-    pub assignment: Option<Expression>,
+    pub assignment: Option<Located<Expression>>,
 }
 
 #[derive(PartialEq, Debug, Clone)]
