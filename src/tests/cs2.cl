@@ -87,4 +87,18 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint
 	myFunc_0((uint)g_myFour);
 	uint2 cast_from;
 	int2 cast_t0 = cast_uint2_to_int2(cast_from);
+	float s;
+	float t1;
+	float arr1[3];
+	float arr2[4];
+	uint s_0 = 3u;
+	uint arr1_0[2];
+	for (uint t2 = 6u; s_0 < t2; s_0++)
+	{
+		myFunc_0(s_0);
+		myFunc_1(t1);
+		myFunc_0(t2);
+		myFunc_1(arr2[(int)0]);
+		myFunc_0(arr1_0[(int)0]);
+	}
 }

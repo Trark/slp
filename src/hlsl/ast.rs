@@ -89,7 +89,6 @@ pub enum TypeLayout {
     Custom(String),
     SamplerState,
     Object(ObjectType),
-    Array(Box<TypeLayout>, Box<Expression>),
 }
 
 impl TypeLayout {
@@ -103,7 +102,6 @@ impl TypeLayout {
     pub fn double() -> TypeLayout { TypeLayout::from_scalar(ScalarType::Double) }
     pub fn float4x4() -> TypeLayout { TypeLayout::Matrix(ScalarType::Float, 4, 4) }
     pub fn custom(name: &str) -> TypeLayout { TypeLayout::Custom(name.to_string()) }
-    pub fn array(inner: TypeLayout, dim: u64) -> TypeLayout { TypeLayout::Array(Box::new(inner), Box::new(Expression::Literal(Literal::UntypedInt(dim)))) }
 }
 
 impl From<DataLayout> for TypeLayout {
@@ -306,15 +304,27 @@ pub enum Expression {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct VarDef {
+pub enum LocalBind {
+    Normal,
+    Array(Located<Expression>),
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct LocalVariable {
     pub name: String,
-    pub local_type: LocalType,
+    pub bind: LocalBind,
     pub assignment: Option<Located<Expression>>,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct VarDef {
+    pub local_type: LocalType,
+    pub defs: Vec<LocalVariable>,
 }
 
 impl VarDef {
     pub fn new(name: String, local_type: LocalType, assignment: Option<Located<Expression>>) -> VarDef {
-        VarDef { name: name, local_type: local_type, assignment: assignment }
+        VarDef { local_type: local_type, defs: vec![LocalVariable { name: name, bind: LocalBind::Normal, assignment: assignment }] }
     }
 }
 

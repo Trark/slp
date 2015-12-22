@@ -81,4 +81,14 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     myFunc(g_myFour);
     uint2 cast_from;
     int2 cast_t0 = cast_from;
+    float s, t1;
+    float arr1[3], arr2[4];
+    for (uint s = 3u, arr1[2], t2 = 6u; s < t2; s++)
+    {
+        myFunc(s);
+        myFunc(t1);
+        myFunc(t2);
+        myFunc(arr2[0]);
+        myFunc(arr1[0]);
+    }
 }

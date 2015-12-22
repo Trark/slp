@@ -1072,30 +1072,16 @@ fn transpile_vardef(vardef: &src::VarDef, context: &mut Context) -> Result<dst::
     })
 }
 
-#[allow(dead_code)]
-fn transpile_condition(cond: &src::Condition, context: &mut Context) -> Result<dst::Condition, TranspileError> {
-    match *cond {
-        src::Condition::Expr(ref expr) => {
-            let expr_ir = try!(transpile_expression(expr, context));
-            Ok(dst::Condition::Expr(expr_ir))
-        },
-        src::Condition::Assignment(ref vd) => {
-            let cl_vardef = try!(transpile_vardef(vd, context));
-            Ok(dst::Condition::Assignment(cl_vardef))
-        },
-    }
-}
-
-fn transpile_statement(statement: &src::Statement, context: &mut Context) -> Result<dst::Statement, TranspileError> {
+fn transpile_statement(statement: &src::Statement, context: &mut Context) -> Result<Vec<dst::Statement>, TranspileError> {
     match statement {
-        &src::Statement::Expression(ref expr) => Ok(dst::Statement::Expression(try!(transpile_expression(expr, context)))),
-        &src::Statement::Var(ref vd) => Ok(dst::Statement::Var(try!(transpile_vardef(vd, context)))),
+        &src::Statement::Expression(ref expr) => Ok(vec![dst::Statement::Expression(try!(transpile_expression(expr, context)))]),
+        &src::Statement::Var(ref vd) => Ok(vec![dst::Statement::Var(try!(transpile_vardef(vd, context)))]),
         &src::Statement::Block(ref scope_block) => {
             let &src::ScopeBlock(ref statements, _) = scope_block;
             context.push_scope(scope_block);
             let cl_statements = try!(transpile_statements(statements, context));
             context.pop_scope();
-            Ok(dst::Statement::Block(cl_statements))
+            Ok(vec![dst::Statement::Block(cl_statements)])
         },
         &src::Statement::If(ref cond, ref scope_block) => {
             let &src::ScopeBlock(ref statements, _) = scope_block;
@@ -1103,17 +1089,36 @@ fn transpile_statement(statement: &src::Statement, context: &mut Context) -> Res
             let cl_cond = try!(transpile_expression(cond, context));
             let cl_statements = try!(transpile_statements(statements, context));
             context.pop_scope();
-            Ok(dst::Statement::If(cl_cond, Box::new(dst::Statement::Block(cl_statements))))
+            Ok(vec![dst::Statement::If(cl_cond, Box::new(dst::Statement::Block(cl_statements)))])
         },
         &src::Statement::For(ref init, ref cond, ref update, ref scope_block) => {
             let &src::ScopeBlock(ref statements, _) = scope_block;
             context.push_scope(scope_block);
-            let cl_init = try!(transpile_condition(init, context));
+
+            let (cl_init, defs) = match *init {
+                src::ForInit::Expression(ref expr) => {
+                    let expr_ir = try!(transpile_expression(expr, context));
+                    (dst::Condition::Expr(expr_ir), vec![])
+                },
+                src::ForInit::Definitions(ref vds) => {
+                    assert!(vds.len() > 0);
+                    let mut vardefs = vec![];
+                    for vd in vds {
+                        vardefs.push(try!(transpile_vardef(vd, context)));
+                    }
+                    let last_vardef = vardefs.pop().expect("zero variable definitions in for init");
+                    (dst::Condition::Assignment(last_vardef), vardefs)
+                },
+            };
+
             let cl_cond = try!(transpile_expression(cond, context));
             let cl_update = try!(transpile_expression(update, context));
             let cl_statements= try!(transpile_statements(statements, context));
             context.pop_scope();
-            Ok(dst::Statement::For(cl_init, cl_cond, cl_update, Box::new(dst::Statement::Block(cl_statements))))
+            let cl_for = dst::Statement::For(cl_init, cl_cond, cl_update, Box::new(dst::Statement::Block(cl_statements)));
+            let mut block_contents = defs.iter().map(|d| dst::Statement::Var(d.clone())).collect::<Vec<_>>();
+            block_contents.push(cl_for);
+            Ok(block_contents)
         },
         &src::Statement::While(ref cond, ref scope_block) => {
             let &src::ScopeBlock(ref statements, _) = scope_block;
@@ -1121,7 +1126,7 @@ fn transpile_statement(statement: &src::Statement, context: &mut Context) -> Res
             let cl_cond = try!(transpile_expression(cond, context));
             let cl_statements = try!(transpile_statements(statements, context));
             context.pop_scope();
-            Ok(dst::Statement::While(cl_cond, Box::new(dst::Statement::Block(cl_statements))))
+            Ok(vec![dst::Statement::While(cl_cond, Box::new(dst::Statement::Block(cl_statements)))])
         },
         &src::Statement::Return(_) => unimplemented!(),
     }
@@ -1130,7 +1135,7 @@ fn transpile_statement(statement: &src::Statement, context: &mut Context) -> Res
 fn transpile_statements(statements: &[src::Statement], context: &mut Context) -> Result<Vec<dst::Statement>, TranspileError> {
     let mut cl_statements = vec![];
     for statement in statements {
-        cl_statements.push(try!(transpile_statement(statement, context)));
+        cl_statements.append(&mut try!(transpile_statement(statement, context)));
     }
     Ok(cl_statements)
 }
@@ -1418,8 +1423,8 @@ fn test_transpile() {
                 params: vec![],
                 body: vec![
                     hlsl::ast::Statement::Empty,
-                    hlsl::ast::Statement::Var(hlsl::ast::VarDef { name: "a".to_string(), local_type: hlsl::ast::Type::uint().into(), assignment: None }),
-                    hlsl::ast::Statement::Var(hlsl::ast::VarDef { name: "b".to_string(), local_type: hlsl::ast::Type::uint().into(), assignment: None }),
+                    hlsl::ast::Statement::Var(hlsl::ast::VarDef::new("a".to_string(), hlsl::ast::Type::uint().into(), None)),
+                    hlsl::ast::Statement::Var(hlsl::ast::VarDef::new("b".to_string(), hlsl::ast::Type::uint().into(), None)),
                     hlsl::ast::Statement::Expression(Located::none(
                         hlsl::ast::Expression::BinaryOperation(hlsl::ast::BinOp::Assignment,
                             Box::new(Located::none(hlsl::ast::Expression::Variable("a".to_string()))),

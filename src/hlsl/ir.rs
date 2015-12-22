@@ -499,9 +499,9 @@ pub struct VarDef {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum Condition {
-    Expr(Expression),
-    Assignment(VarDef),
+pub enum ForInit {
+    Expression(Expression),
+    Definitions(Vec<VarDef>),
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -513,7 +513,7 @@ pub enum Statement {
     Var(VarDef),
     Block(ScopeBlock),
     If(Expression, ScopeBlock),
-    For(Condition, Expression, Expression, ScopeBlock),
+    For(ForInit, Expression, Expression, ScopeBlock),
     While(Expression, ScopeBlock),
     Return(Expression),
 }

@@ -449,7 +449,7 @@ impl TypeBlock {
             },
             ir::TypeLayout::SamplerState => ast::TypeLayout::SamplerState,
             ir::TypeLayout::Object(ref object_type) => ast::TypeLayout::Object(self.invert_objecttype(object_type)),
-            ir::TypeLayout::Array(ref array_type, ref dim) => ast::TypeLayout::Array(Box::new(self.invert_typelayout(array_type)), Box::new(ast::Expression::Literal(ast::Literal::Int(*dim)))),
+            ir::TypeLayout::Array(_, _) => panic!("error with array type. can't invert into previous context"),
         }
     }
 
@@ -1003,16 +1003,6 @@ fn parse_typelayout(ty: &ast::TypeLayout, struct_finder: &StructIdFinder) -> Res
         ast::TypeLayout::Custom(ref name) => ir::TypeLayout::Struct(try!(struct_finder.find_struct_id(name))),
         ast::TypeLayout::SamplerState => ir::TypeLayout::SamplerState,
         ast::TypeLayout::Object(ref object_type) => ir::TypeLayout::Object(try!(parse_objecttype(object_type, struct_finder))),
-        ast::TypeLayout::Array(ref array_type, ref const_expr) => {
-            // Todo: constant expressions
-            let dim = match **const_expr {
-                ast::Expression::Literal(ast::Literal::UntypedInt(i)) => i,
-                ast::Expression::Literal(ast::Literal::Int(i)) => i,
-                ast::Expression::Literal(ast::Literal::UInt(i)) => i,
-                _ => return Err(TyperError::ArrayDimensionsMustBeConstantExpression((**const_expr).clone())),
-            };
-            ir::TypeLayout::Array(Box::new(try!(parse_typelayout(array_type, struct_finder))), dim)
-        },
     })
 }
 
@@ -1578,42 +1568,68 @@ fn parse_expr_value_only(expr: &ast::Expression, context: &ExpressionContext) ->
     }
 }
 
-fn parse_vardef(ast: &ast::VarDef, context: ScopeContext) -> Result<(ir::VarDef, ScopeContext), TyperError> {
+fn parse_vardef(ast: &ast::VarDef, context: ScopeContext) -> Result<(Vec<ir::VarDef>, ScopeContext), TyperError> {
     let var_type = try!(parse_localtype(&ast.local_type, &context));
-    let assign_ir = match ast.assignment {
-        Some(ref expr) => {
-            match try!(parse_expr(expr, &context)) {
-                TypedExpression::Value(expr_ir, expt_ty) => {
-                    match ImplicitConversion::find(&expt_ty, &var_type.0.to_rvalue()) {
-                        Ok(rhs_cast) => Some(rhs_cast.apply(expr_ir)),
-                        Err(()) => return Err(TyperError::WrongTypeInInitExpression),
-                    }
-                },
-                _ => return Err(TyperError::FunctionTypeInInitExpression),
-            }
-        },
-        None => None,
-    };
-    let var_name = ast.name.clone();
-    let var_type = try!(parse_localtype(&ast.local_type, &context));
+    let rvalue = var_type.0.clone().to_rvalue();
+
     let mut context = context;
-    let var_id = try!(context.insert_variable(var_name.clone(), var_type.0.clone()));
-    let vd_ir = ir::VarDef { id: var_id, local_type: var_type, assignment: assign_ir };
-    Ok((vd_ir, context))
+    let mut vardefs = vec![];
+    for local_variable in &ast.defs {
+        let name = &local_variable.name;
+        let assignment = &local_variable.assignment;
+
+        let assign_ir = match *assignment {
+            Some(ref expr) => {
+                match try!(parse_expr(expr, &context)) {
+                    TypedExpression::Value(expr_ir, expt_ty) => {
+                        match ImplicitConversion::find(&expt_ty, &rvalue) {
+                            Ok(rhs_cast) => Some(rhs_cast.apply(expr_ir)),
+                            Err(()) => return Err(TyperError::WrongTypeInInitExpression),
+                        }
+                    },
+                    _ => return Err(TyperError::FunctionTypeInInitExpression),
+                }
+            },
+            None => None,
+        };
+        let var_name = name.clone();
+
+        let lv_type = match local_variable.bind {
+            ast::LocalBind::Array(ref dim) => {
+                let ir::LocalType(ir::Type(layout, modifiers), ls, interp) = var_type.clone();
+
+                // Todo: constant expressions
+                let constant_dim = match **dim {
+                    ast::Expression::Literal(ast::Literal::UntypedInt(i)) => i,
+                    ast::Expression::Literal(ast::Literal::Int(i)) => i,
+                    ast::Expression::Literal(ast::Literal::UInt(i)) => i,
+                    _ => return Err(TyperError::ArrayDimensionsMustBeConstantExpression((**dim).clone())),
+                };
+
+                ir::LocalType(ir::Type(ir::TypeLayout::Array(Box::new(layout), constant_dim), modifiers), ls, interp)
+            },
+            ast::LocalBind::Normal => var_type.clone(),
+        };
+
+        let var_id = try!(context.insert_variable(var_name.clone(), lv_type.0.clone()));
+        vardefs.push(ir::VarDef { id: var_id, local_type: lv_type, assignment: assign_ir });
+    }
+
+    Ok((vardefs, context))
 }
 
-fn parse_condition(ast: &ast::Condition, context: ScopeContext) -> Result<(ir::Condition, ScopeContext), TyperError> {
+fn parse_for_init(ast: &ast::Condition, context: ScopeContext) -> Result<(ir::ForInit, ScopeContext), TyperError> {
     match ast {
         &ast::Condition::Expr(ref expr) => {
             let expr_ir = match try!(parse_expr(expr, &context)) {
                 TypedExpression::Value(expr_ir, _) => expr_ir,
                 _ => return Err(TyperError::FunctionNotCalled),
             };
-            Ok((ir::Condition::Expr(expr_ir), context))
+            Ok((ir::ForInit::Expression(expr_ir), context))
         },
         &ast::Condition::Assignment(ref vd) => {
             let (vd_ir, context) = try!(parse_vardef(vd, context));
-            Ok((ir::Condition::Assignment(vd_ir), context))
+            Ok((ir::ForInit::Definitions(vd_ir), context))
         },
     }
 }
@@ -1641,55 +1657,55 @@ fn parse_scopeblock(ast: &ast::Statement, block_context: ScopeContext) -> Result
             Ok(ir::ScopeBlock(statements, block_context.destruct()))
         },
         _ => {
-            let (ir_statement, block_context) = try!(parse_statement(ast, block_context));
-            let ir_vec = match ir_statement { Some(st) => vec![st], None => vec![] };
-            Ok(ir::ScopeBlock(ir_vec, block_context.destruct()))
+            let (ir_statements, block_context) = try!(parse_statement(ast, block_context));
+            Ok(ir::ScopeBlock(ir_statements, block_context.destruct()))
         },
     }
 }
 
-fn parse_statement(ast: &ast::Statement, context: ScopeContext) -> Result<(Option<ir::Statement>, ScopeContext), TyperError> {
+fn parse_statement(ast: &ast::Statement, context: ScopeContext) -> Result<(Vec<ir::Statement>, ScopeContext), TyperError> {
     match ast {
-        &ast::Statement::Empty => Ok((None, context)),
+        &ast::Statement::Empty => Ok((vec![], context)),
         &ast::Statement::Expression(ref expr) => {
             match try!(parse_expr(expr, &context)) {
-                TypedExpression::Value(expr_ir, _) => Ok((Some(ir::Statement::Expression(expr_ir)), context)),
+                TypedExpression::Value(expr_ir, _) => Ok((vec![ir::Statement::Expression(expr_ir)], context)),
                 _ => return Err(TyperError::FunctionNotCalled),
             }
         },
         &ast::Statement::Var(ref vd) => {
             let (vd_ir, context) = try!(parse_vardef(vd, context));
-            Ok((Some(ir::Statement::Var(vd_ir)), context))
+            let vars = vd_ir.iter().map(|v| ir::Statement::Var(v.clone())).collect::<Vec<_>>();
+            Ok((vars, context))
         },
         &ast::Statement::Block(ref statement_vec) => {
             let scoped_context = ScopeContext::from_scope(&context);
             let (statements, scoped_context) = try!(parse_statement_vec(statement_vec, scoped_context));
             let decls = scoped_context.destruct();
-            Ok((Some(ir::Statement::Block(ir::ScopeBlock(statements, decls))), context))
+            Ok((vec![ir::Statement::Block(ir::ScopeBlock(statements, decls))], context))
         },
         &ast::Statement::If(ref cond, ref statement) => {
             let scoped_context = ScopeContext::from_scope(&context);
             let cond_ir = try!(parse_expr_value_only(cond, &scoped_context));
             let scope_block = try!(parse_scopeblock(statement, scoped_context));
-            Ok((Some(ir::Statement::If(cond_ir, scope_block)), context))
+            Ok((vec![ir::Statement::If(cond_ir, scope_block)], context))
         },
         &ast::Statement::For(ref init, ref cond, ref iter, ref statement) =>  {
             let scoped_context = ScopeContext::from_scope(&context);
-            let (init_ir, scoped_context) = try!(parse_condition(init, scoped_context));
+            let (init_ir, scoped_context) = try!(parse_for_init(init, scoped_context));
             let cond_ir = try!(parse_expr_value_only(cond, &scoped_context));
             let iter_ir = try!(parse_expr_value_only(iter, &scoped_context));
             let scope_block = try!(parse_scopeblock(statement, scoped_context));
-            Ok((Some(ir::Statement::For(init_ir, cond_ir, iter_ir, scope_block)), context))
+            Ok((vec![ir::Statement::For(init_ir, cond_ir, iter_ir, scope_block)], context))
         },
         &ast::Statement::While(ref cond, ref statement) => {
             let scoped_context = ScopeContext::from_scope(&context);
             let cond_ir = try!(parse_expr_value_only(cond, &scoped_context));
             let scope_block = try!(parse_scopeblock(statement, scoped_context));
-            Ok((Some(ir::Statement::While(cond_ir, scope_block)), context))
+            Ok((vec![ir::Statement::While(cond_ir, scope_block)], context))
         },
         &ast::Statement::Return(ref expr) => {
             match try!(parse_expr(expr, &context)) {
-                TypedExpression::Value(expr_ir, _) => Ok((Some(ir::Statement::Return(expr_ir)), context)),
+                TypedExpression::Value(expr_ir, _) => Ok((vec![ir::Statement::Return(expr_ir)], context)),
                 _ => return Err(TyperError::FunctionNotCalled),
             }
         },
@@ -1700,11 +1716,8 @@ fn parse_statement_vec(ast: &[ast::Statement], context: ScopeContext) -> Result<
     let mut context = context;
     let mut body_ir = vec![];
     for statement_ast in ast {
-        let (statement_ir_opt, next_context) = try!(parse_statement(&statement_ast, context));
-        match statement_ir_opt {
-            Some(statement_ir) => body_ir.push(statement_ir),
-            None => { },
-        };
+        let (mut statement_ir_vec, next_context) = try!(parse_statement(&statement_ast, context));
+        body_ir.append(&mut statement_ir_vec);
         context = next_context;
     }
     Ok((body_ir, context))
@@ -1973,7 +1986,7 @@ fn test_typeparse() {
                 returntype: ast::Type::void(),
                 params: vec![ast::FunctionParam { name: "x".to_string(), param_type: ast::ParamType(ast::Type::float(), ast::InputModifier::Out, None), semantic: None }],
                 body: vec![
-                    ast::Statement::Var(ast::VarDef { name: "local_static".to_string(), local_type: ast::LocalType(ast::Type::uint(), ast::LocalStorage::Static, None), assignment: None }),
+                    ast::Statement::Var(ast::VarDef::new("local_static".to_string(), ast::LocalType(ast::Type::uint(), ast::LocalStorage::Static, None), None)),
                     ast::Statement::Expression(Located::loc(1, 1,
                         ast::Expression::BinaryOperation(ast::BinOp::Assignment,
                             Box::new(Located::none(ast::Expression::Variable("x".to_string()))),
@@ -1989,8 +2002,8 @@ fn test_typeparse() {
                 params: vec![],
                 body: vec![
                     ast::Statement::Empty,
-                    ast::Statement::Var(ast::VarDef { name: "a".to_string(), local_type: ast::Type::uint().into(), assignment: None }),
-                    ast::Statement::Var(ast::VarDef { name: "b".to_string(), local_type: ast::Type::uint().into(), assignment: None }),
+                    ast::Statement::Var(ast::VarDef::new("a".to_string(), ast::Type::uint().into(), None)),
+                    ast::Statement::Var(ast::VarDef::new("b".to_string(), ast::Type::uint().into(), None)),
                     ast::Statement::Expression(Located::none(
                         ast::Expression::BinaryOperation(ast::BinOp::Assignment,
                             Box::new(Located::none(ast::Expression::Variable("a".to_string()))),
@@ -2018,10 +2031,15 @@ fn test_typeparse() {
                             ]
                         )
                     )),
-                    ast::Statement::Var(ast::VarDef { name: "testOut".to_string(), local_type: ast::Type::float().into(), assignment: None }),
-                    ast::Statement::Var(ast::VarDef::new("x".to_string(),
-                        ast::Type::from_layout(ast::TypeLayout::array(ast::TypeLayout::float(), 3)).into(), None
-                    )),
+                    ast::Statement::Var(ast::VarDef::new("testOut".to_string(), ast::Type::float().into(), None)),
+                    ast::Statement::Var(ast::VarDef {
+                        local_type: ast::Type::from_layout(ast::TypeLayout::float()).into(),
+                        defs: vec![ast::LocalVariable {
+                            name: "x".to_string(),
+                            bind: ast::LocalBind::Array(Located::none(ast::Expression::Literal(ast::Literal::UntypedInt(3)))),
+                            assignment: None,
+                        }]
+                    }),
                     ast::Statement::Expression(Located::none(
                         ast::Expression::Call(
                             Box::new(Located::none(ast::Expression::Variable("outFunc".to_string()))),

@@ -731,26 +731,30 @@ fn expr(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, ParseEr
 fn vardef(input: &[LexToken]) -> IResult<&[LexToken], VarDef, ParseErrorReason> {
     chain!(input,
         typename: parse_localtype ~
-        varname: parse_variablename ~
-        array_dim: opt!(parse_arraydim) ~
-        assign: opt!(
+        defs: map_res!(separated_list!(
+            token!(Token::Comma),
             chain!(
-                token!(Token::Equals) ~
-                assignment_expr: expr,
-                || { assignment_expr }
+                varname: parse_variablename ~
+                array_dim: opt!(parse_arraydim) ~
+                assign: opt!(
+                    chain!(
+                        token!(Token::Equals) ~
+                        assignment_expr: expr,
+                        || { assignment_expr }
+                    )
+                ),
+                || LocalVariable {
+                    name: varname.to_node(),
+                    bind: match array_dim { Some(ref expr) => LocalBind::Array(expr.clone()), None => LocalBind::Normal },
+                    assignment: assign
+                }
             )
-        ),
+        ), |res: Vec<_>| if res.len() > 0 { Ok(res) } else { Err(()) }),
         || {
-            VarDef::new(varname.to_node(),
-                match array_dim {
-                    Some(ref dim) => {
-                        let LocalType(Type(layout, modifiers), ls, interp) = typename;
-                        LocalType(Type(TypeLayout::Array(Box::new(layout), Box::new(dim.node.clone())), modifiers), ls, interp)
-                    },
-                    None => typename,
-                },
-                assign
-            )
+            VarDef {
+                local_type: typename,
+                defs: defs,
+            }
         }
     )
 }
@@ -1399,7 +1403,14 @@ fn test_statement() {
         Statement::Var(VarDef::new("x".to_string(), Type::uint().into(), Some(exp_var("y", 1, 10))))
     );
     assert_eq!(statement_str("float x[3];"),
-        Statement::Var(VarDef::new("x".to_string(), Type::from_layout(TypeLayout::array(TypeLayout::float(), 3)).into(), None))
+        Statement::Var(VarDef {
+            local_type: Type::from_layout(TypeLayout::float()).into(),
+            defs: vec![LocalVariable {
+                name: "x".to_string(),
+                bind: LocalBind::Array(Located::loc(1, 9, Expression::Literal(Literal::UntypedInt(3)))),
+                assignment: None,
+            }]
+        })
     );
 
     // Blocks

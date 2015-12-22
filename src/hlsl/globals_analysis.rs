@@ -113,10 +113,10 @@ fn search_statement(statement: &Statement, usage: &mut LocalFunctionGlobalUsage)
     }
 }
 
-fn search_initexpression(init: &Condition, usage: &mut LocalFunctionGlobalUsage) {
+fn search_initexpression(init: &ForInit, usage: &mut LocalFunctionGlobalUsage) {
     match *init {
-        Condition::Expr(ref expr) => search_expression(expr, usage),
-        Condition::Assignment(ref vd) => search_vardef(vd, usage),
+        ForInit::Expression(ref expr) => search_expression(expr, usage),
+        ForInit::Definitions(ref vds) => for vd in vds { search_vardef(vd, usage) },
     }
 }
 
