@@ -588,7 +588,7 @@ fn test_token() {
     assert_eq!(token(&b"12L"[..]), IResult::Done(&b""[..], from_end(Token::LiteralLong(12), 3)));
 
     assert_eq!(token(&b"1.0f"[..]), IResult::Done(&b""[..], from_end(Token::LiteralFloat(1.0f32), 4)));
-    assert_eq!(token(&b"2.0"[..]), IResult::Done(&b""[..], from_end(Token::LiteralFloat(2.0f32), 3)));
+    assert_eq!(token(&b"2.0 "[..]), IResult::Done(&b""[..], from_end(Token::LiteralFloat(2.0f32), 4)));
     assert_eq!(token(&b"2.0L"[..]), IResult::Done(&b""[..], from_end(Token::LiteralDouble(2.0f64), 4)));
     assert_eq!(token(&b"0.5h"[..]), IResult::Done(&b""[..], from_end(Token::LiteralHalf(0.5f32), 4)));
 
@@ -599,28 +599,28 @@ fn test_token() {
     assert_eq!(token(&b"["[..]), IResult::Done(&b""[..], from_end(Token::LeftSquareBracket, 1)));
     assert_eq!(token(&b"]"[..]), IResult::Done(&b""[..], from_end(Token::RightSquareBracket, 1)));
 
-    assert_eq!(token(&b"<"[..]), IResult::Done(&b""[..], from_end(Token::LeftAngleBracket(FollowedBy::Whitespace), 1)));
-    assert_eq!(token(&b">"[..]), IResult::Done(&b""[..], from_end(Token::RightAngleBracket(FollowedBy::Whitespace), 1)));
-    assert_eq!(token(&b"<<"[..]), IResult::Done(&b"<"[..], from_end(Token::LeftAngleBracket(FollowedBy::Token), 2)));
-    assert_eq!(token(&b">>"[..]), IResult::Done(&b">"[..], from_end(Token::RightAngleBracket(FollowedBy::Token), 2)));
+    assert_eq!(token(&b"< "[..]), IResult::Done(&b""[..], from_end(Token::LeftAngleBracket(FollowedBy::Whitespace), 2)));
+    assert_eq!(token(&b"> "[..]), IResult::Done(&b""[..], from_end(Token::RightAngleBracket(FollowedBy::Whitespace), 2)));
+    assert_eq!(token(&b"<< "[..]), IResult::Done(&b"< "[..], from_end(Token::LeftAngleBracket(FollowedBy::Token), 3)));
+    assert_eq!(token(&b">> "[..]), IResult::Done(&b"> "[..], from_end(Token::RightAngleBracket(FollowedBy::Token), 3)));
     assert_eq!(token(&b"<>"[..]), IResult::Done(&b">"[..], from_end(Token::LeftAngleBracket(FollowedBy::Token), 2)));
     assert_eq!(token(&b"><"[..]), IResult::Done(&b"<"[..], from_end(Token::RightAngleBracket(FollowedBy::Token), 2)));
 
     assert_eq!(token(&b";"[..]), IResult::Done(&b""[..], from_end(Token::Semicolon, 1)));
     assert_eq!(token(&b","[..]), IResult::Done(&b""[..], from_end(Token::Comma, 1)));
 
-    assert_eq!(token(&b"+"[..]), IResult::Done(&b""[..], from_end(Token::Plus, 1)));
-    assert_eq!(token(&b"-"[..]), IResult::Done(&b""[..], from_end(Token::Minus, 1)));
-    assert_eq!(token(&b"/"[..]), IResult::Done(&b""[..], from_end(Token::ForwardSlash, 1)));
-    assert_eq!(token(&b"%"[..]), IResult::Done(&b""[..], from_end(Token::Percent, 1)));
-    assert_eq!(token(&b"*"[..]), IResult::Done(&b""[..], from_end(Token::Asterix, 1)));
-    assert_eq!(token(&b"|"[..]), IResult::Done(&b""[..], from_end(Token::VerticalBar, 1)));
-    assert_eq!(token(&b"&"[..]), IResult::Done(&b""[..], from_end(Token::Ampersand, 1)));
-    assert_eq!(token(&b"^"[..]), IResult::Done(&b""[..], from_end(Token::Hat, 1)));
-    assert_eq!(token(&b"="[..]), IResult::Done(&b""[..], from_end(Token::Equals, 1)));
+    assert_eq!(token(&b"+ "[..]), IResult::Done(&b""[..], from_end(Token::Plus, 2)));
+    assert_eq!(token(&b"- "[..]), IResult::Done(&b""[..], from_end(Token::Minus, 2)));
+    assert_eq!(token(&b"/ "[..]), IResult::Done(&b""[..], from_end(Token::ForwardSlash, 2)));
+    assert_eq!(token(&b"% "[..]), IResult::Done(&b""[..], from_end(Token::Percent, 2)));
+    assert_eq!(token(&b"* "[..]), IResult::Done(&b""[..], from_end(Token::Asterix, 2)));
+    assert_eq!(token(&b"| "[..]), IResult::Done(&b""[..], from_end(Token::VerticalBar, 2)));
+    assert_eq!(token(&b"& "[..]), IResult::Done(&b""[..], from_end(Token::Ampersand, 2)));
+    assert_eq!(token(&b"^ "[..]), IResult::Done(&b""[..], from_end(Token::Hat, 2)));
+    assert_eq!(token(&b"= "[..]), IResult::Done(&b""[..], from_end(Token::Equals, 2)));
     assert_eq!(token(&b"#"[..]), IResult::Done(&b""[..], from_end(Token::Hash, 1)));
     assert_eq!(token(&b"@"[..]), IResult::Done(&b""[..], from_end(Token::At, 1)));
-    assert_eq!(token(&b"!"[..]), IResult::Done(&b""[..], from_end(Token::ExclamationPoint, 1)));
+    assert_eq!(token(&b"! "[..]), IResult::Done(&b""[..], from_end(Token::ExclamationPoint, 2)));
     assert_eq!(token(&b"~"[..]), IResult::Done(&b""[..], from_end(Token::Tilde, 1)));
     assert_eq!(token(&b"."[..]), IResult::Done(&b""[..], from_end(Token::Period, 1)));
 
