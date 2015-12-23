@@ -6,15 +6,21 @@ use FileLocation;
 use File;
 use Line;
 use Column;
+use FileLoader;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum PreprocessError {
-    
+    UnknownCommand,
+    InvalidInclude,
+    FailedToFindFile,
 }
 
 impl error::Error for PreprocessError {
     fn description(&self) -> &str {
         match *self {
+            PreprocessError::UnknownCommand => "unknown preprocessor command",
+            PreprocessError::InvalidInclude => "invalid #include command",
+            PreprocessError::FailedToFindFile => "could not find file",
         }
     }
 }
@@ -63,10 +69,53 @@ impl LineMap {
     }
 }
 
-fn preprocess_file(buffer: String, file: &str, debug_locations: &mut Vec<(StreamLocation, FileLocation)>) -> String {
+fn preprocess_file(buffer: String, file_loader: &FileLoader, file: &str, debug_locations: &mut Vec<(StreamLocation, FileLocation)>) -> Result<String, PreprocessError> {
     let lines = file.split('\n').collect::<Vec<_>>();
     let mut buffer = buffer;
     for (line_index, line) in lines.iter().enumerate() {
+
+        let trimmed = line.trim_left();
+        if trimmed.starts_with("#") {
+            let trimmed = trimmed[1..].trim_left();
+            if trimmed.starts_with("include") {
+                let next = &trimmed[7..];
+                match next.chars().next() {
+                    Some(' ') | Some('\t') | Some('"') | Some('<') => {
+                        let next = next.trim_left();
+                        let end = match next.chars().next() {
+                            Some('"') => '"',
+                            Some('<') => '>',
+                            _ => return Err(PreprocessError::InvalidInclude),
+                        };
+                        let next = &next[1..];
+                        match next.find(end) {
+                            Some(sz) => {
+                                let file_name = &next[..sz];
+                                // Ignore the rest of the line
+
+                                // Include the file
+                                match file_loader.load(file_name) {
+                                    Ok(file) => {
+                                        buffer = try!(preprocess_file(buffer, file_loader, &file, debug_locations));
+                                        // Push a new line so the last line of the include file is on a
+                                        // separate line to the first line after the #include
+                                        buffer.push('\n');
+                                    },
+                                    Err(()) => return Err(PreprocessError::FailedToFindFile),
+                                }
+                            }
+                            None => return Err(PreprocessError::InvalidInclude),
+                        }
+                    }
+                    _ => return Err(PreprocessError::InvalidInclude),
+                }
+            } else {
+                return Err(PreprocessError::UnknownCommand);
+            }
+
+            // Finish processing the current line
+            continue;
+        }
 
         // Add the current location to the line map
         let stream_offset = buffer.as_bytes().len() as u64;
@@ -85,16 +134,21 @@ fn preprocess_file(buffer: String, file: &str, debug_locations: &mut Vec<(Stream
             buffer.push('\n');
         }
     }
-    buffer
+    Ok(buffer)
 }
 
-pub fn preprocess(input: &str) -> Result<PreprocessedText, PreprocessError> {
+pub fn preprocess(input: &str, file_loader: &FileLoader) -> Result<PreprocessedText, PreprocessError> {
 
     let mut lines = vec![];
-    let code = preprocess_file(String::new(), input, &mut lines);
+    let code = try!(preprocess_file(String::new(), file_loader, input, &mut lines));
 
     Ok(PreprocessedText {
         code: code.into_bytes(),
         debug_locations: LineMap { lines: lines },
     })
+}
+
+pub fn preprocess_single(input: &str) -> Result<PreprocessedText, PreprocessError> {
+    use NullFileLoader;
+    preprocess(input, &NullFileLoader)
 }

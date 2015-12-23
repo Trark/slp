@@ -109,19 +109,37 @@ impl BindMap {
     }
 }
 
+/// Trait for loading files from #include directives
+pub trait FileLoader {
+    fn load(&self, &str) -> Result<String, ()>;
+}
+
+/// A file loader that fails to load any files
+pub struct NullFileLoader;
+
+impl FileLoader for NullFileLoader {
+    fn load(&self, _: &str) -> Result<String, ()> { Err(()) }
+}
+
+pub struct Input {
+    pub entry_point: String,
+    pub main_file: String,
+    pub file_loader: Box<FileLoader>,
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub struct Output {
     pub code: clc::binary::Binary,
     pub binds: BindMap,
 }
 
-pub fn hlsl_to_cl(hlsl_source: &str, entry_point: &'static str) -> Result<Output, CompileError> {
+pub fn hlsl_to_cl(input: Input) -> Result<Output, CompileError> {
 
-    let preprocessed = try!(hlsl::preprocess::preprocess(hlsl_source));
+    let preprocessed = try!(hlsl::preprocess::preprocess(&input.main_file, &*input.file_loader));
 
     let tokens = try!(hlsl::lexer::lex(&preprocessed));
 
-    let ast = try!(hlsl::parser::parse(entry_point.to_string(), &tokens.stream));
+    let ast = try!(hlsl::parser::parse(input.entry_point.to_string(), &tokens.stream));
 
     let ir = try!(hlsl::typer::typeparse(&ast));
 

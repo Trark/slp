@@ -17,11 +17,13 @@ const CS1: &'static str = include_str!("cs1.hlsl");
 #[test]
 fn cs1_lex() {
 
+    use NullFileLoader;
+
     // Normalise line ending so we don't have to deal with git potentially
     // changing them
     let cs1_str = CS1.to_string().replace("\r\n", "\n");
 
-    let cs1_preprocessed = preprocess(&cs1_str).expect("cs1 failed preprocess");
+    let cs1_preprocessed = preprocess(&cs1_str, &NullFileLoader).expect("cs1 failed preprocess");
 
     let tokens_res = lex(&cs1_preprocessed);
 
@@ -161,14 +163,14 @@ fn cs1_lex() {
 
 #[test]
 fn cs1_parse() {
-    let tokens = lex(&preprocess(CS1).unwrap()).unwrap();
+    let tokens = lex(&preprocess_single(CS1).unwrap()).unwrap();
     let parse_result = parse("CSMain".to_string(), &tokens.stream);
     assert!(parse_result.is_ok(), "{:?}", parse_result);
 }
 
 #[test]
 fn cs1_typecheck() {
-    let tokens = lex(&preprocess(CS1).unwrap()).unwrap();
+    let tokens = lex(&preprocess_single(CS1).unwrap()).unwrap();
     let ast = parse("CSMain".to_string(), &tokens.stream).unwrap();
     let ir_result = typeparse(&ast);
     assert!(ir_result.is_ok(), "{:?}", ir_result);

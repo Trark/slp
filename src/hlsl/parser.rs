@@ -1111,10 +1111,10 @@ fn bexp_var(var_name: &'static str, line: u64, column: u64) -> Box<Located<Expre
 
 #[cfg(test)]
 fn parse_result_from_str<T>(parse_func: Box<Fn(&[LexToken]) -> IResult<&[LexToken], T, ParseErrorReason>>) -> Box<Fn(&'static str) -> Result<T, ParseErrorReason>> where T: 'static {
-    use super::preprocess::preprocess;
+    use super::preprocess::preprocess_single;
     Box::new(move |string: &'static str| {
         let modified_string = string.to_string() + "\n";
-        let preprocessed_text = preprocess(&modified_string).expect("preprocess failed");
+        let preprocessed_text = preprocess_single(&modified_string).expect("preprocess failed");
         let lex_result = super::lexer::lex(&preprocessed_text);
         match lex_result {
             Ok(tokens) => {
@@ -1138,10 +1138,10 @@ fn parse_result_from_str<T>(parse_func: Box<Fn(&[LexToken]) -> IResult<&[LexToke
 
 #[cfg(test)]
 fn parse_from_str<T>(parse_func: Box<Fn(&[LexToken]) -> IResult<&[LexToken], T, ParseErrorReason>>) -> Box<Fn(&'static str) -> T> where T: 'static {
-    use super::preprocess::preprocess;
+    use super::preprocess::preprocess_single;
     Box::new(move |string: &'static str| {
         let modified_string = string.to_string() + "\n";
-        let preprocessed_text = preprocess(&modified_string).expect("preprocess failed");
+        let preprocessed_text = preprocess_single(&modified_string).expect("preprocess failed");
         let lex_result = super::lexer::lex(&preprocessed_text);
         match lex_result {
             Ok(tokens) => {
