@@ -1,4 +1,3 @@
-#![feature(plugin)]
 
 #[macro_use]
 extern crate nom;
