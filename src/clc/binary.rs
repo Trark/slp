@@ -411,11 +411,10 @@ fn print_vardef(vardef: &VarDef, printer: &mut Printer) {
     };
 }
 
-#[allow(dead_code)]
-fn print_condition(cond: &Condition, printer: &mut Printer) {
+fn print_init_statement(cond: &InitStatement, printer: &mut Printer) {
     match *cond {
-        Condition::Expr(ref expr) => print_expression(expr, printer),
-        Condition::Assignment(ref vd) => print_vardef(vd, printer),
+        InitStatement::Expression(ref expr) => print_expression(expr, printer),
+        InitStatement::Declaration(ref vd) => print_vardef(vd, printer),
     }
 }
 
@@ -457,7 +456,7 @@ fn print_statement(statement: &Statement, printer: &mut Printer) {
             printer.print("for");
             printer.space();
             printer.print("(");
-            print_condition(init, printer);
+            print_init_statement(init, printer);
             printer.print(";");
             printer.space();
             print_expression(cond, printer);

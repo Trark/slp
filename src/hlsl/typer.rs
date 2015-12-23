@@ -1618,16 +1618,16 @@ fn parse_vardef(ast: &ast::VarDef, context: ScopeContext) -> Result<(Vec<ir::Var
     Ok((vardefs, context))
 }
 
-fn parse_for_init(ast: &ast::Condition, context: ScopeContext) -> Result<(ir::ForInit, ScopeContext), TyperError> {
+fn parse_for_init(ast: &ast::InitStatement, context: ScopeContext) -> Result<(ir::ForInit, ScopeContext), TyperError> {
     match ast {
-        &ast::Condition::Expr(ref expr) => {
+        &ast::InitStatement::Expression(ref expr) => {
             let expr_ir = match try!(parse_expr(expr, &context)) {
                 TypedExpression::Value(expr_ir, _) => expr_ir,
                 _ => return Err(TyperError::FunctionNotCalled),
             };
             Ok((ir::ForInit::Expression(expr_ir), context))
         },
-        &ast::Condition::Assignment(ref vd) => {
+        &ast::InitStatement::Declaration(ref vd) => {
             let (vd_ir, context) = try!(parse_vardef(vd, context));
             Ok((ir::ForInit::Definitions(vd_ir), context))
         },

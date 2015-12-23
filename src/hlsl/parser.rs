@@ -759,10 +759,10 @@ fn vardef(input: &[LexToken]) -> IResult<&[LexToken], VarDef, ParseErrorReason> 
     )
 }
 
-fn condition(input: &[LexToken]) -> IResult<&[LexToken], Condition, ParseErrorReason> {
+fn init_statement(input: &[LexToken]) -> IResult<&[LexToken], InitStatement, ParseErrorReason> {
     alt!(input,
-        vardef => { |variable_definition| Condition::Assignment(variable_definition) } |
-        expr => { |expression| Condition::Expr(expression) }
+        vardef => { |variable_definition| InitStatement::Declaration(variable_definition) } |
+        expr => { |expression| InitStatement::Expression(expression) }
     )
 }
 
@@ -785,7 +785,7 @@ fn statement(input: &[LexToken]) -> IResult<&[LexToken], Statement, ParseErrorRe
             LexToken(Token::For, _) => {
                 chain!(tail,
                     token!(Token::LeftParen) ~
-                    init: condition ~
+                    init: init_statement ~
                     token!(Token::Semicolon) ~
                     cond: expr ~
                     token!(Token::Semicolon) ~
@@ -1381,21 +1381,21 @@ fn test_statement() {
         Statement::Expression(Located::loc(1, 2, Expression::Call(bexp_var("func", 1, 2), vec![])))
     );
 
-    // Condition expressions
-    let condition_str = parse_from_str(Box::new(condition));
+    // For loop init statement
+    let init_statement_str = parse_from_str(Box::new(init_statement));
     let vardef_str = parse_from_str(Box::new(vardef));
 
-    assert_eq!(condition_str("x"),
-        Condition::Expr(exp_var("x", 1, 1))
+    assert_eq!(init_statement_str("x"),
+        InitStatement::Expression(exp_var("x", 1, 1))
     );
     assert_eq!(vardef_str("uint x"),
         VarDef::new("x".to_string(), Type::uint().into(), None)
     );
-    assert_eq!(condition_str("uint x"),
-        Condition::Assignment(VarDef::new("x".to_string(), Type::uint().into(), None))
+    assert_eq!(init_statement_str("uint x"),
+        InitStatement::Declaration(VarDef::new("x".to_string(), Type::uint().into(), None))
     );
-    assert_eq!(condition_str("uint x = y"),
-        Condition::Assignment(VarDef::new("x".to_string(), Type::uint().into(), Some(exp_var("y", 1, 10))))
+    assert_eq!(init_statement_str("uint x = y"),
+        InitStatement::Declaration(VarDef::new("x".to_string(), Type::uint().into(), Some(exp_var("y", 1, 10))))
     );
 
     // Variable declarations
@@ -1451,13 +1451,13 @@ fn test_statement() {
 
     // For loops
     assert_eq!(statement_str("for(a;b;c)func();"),
-        Statement::For(Condition::Expr(exp_var("a", 1, 5)), exp_var("b", 1, 7), exp_var("c", 1, 9), Box::new(
+        Statement::For(InitStatement::Expression(exp_var("a", 1, 5)), exp_var("b", 1, 7), exp_var("c", 1, 9), Box::new(
             Statement::Expression(Located::loc(1, 11, Expression::Call(bexp_var("func", 1, 11), vec![])))
         ))
     );
     assert_eq!(statement_str("for (uint i = 0; i; i++) { func(); }"),
         Statement::For(
-            Condition::Assignment(VarDef::new("i".to_string(), Type::uint().into(), Some(Located::loc(1, 15, Expression::Literal(Literal::UntypedInt(0)))))),
+            InitStatement::Declaration(VarDef::new("i".to_string(), Type::uint().into(), Some(Located::loc(1, 15, Expression::Literal(Literal::UntypedInt(0)))))),
             exp_var("i", 1, 18),
             Located::loc(1, 21, Expression::UnaryOperation(UnaryOp::PostfixIncrement, bexp_var("i", 1, 21))),
             Box::new(Statement::Block(vec![Statement::Expression(Located::loc(1, 28, Expression::Call(bexp_var("func", 1, 28), vec![])))]))

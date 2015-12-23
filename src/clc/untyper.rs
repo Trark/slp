@@ -284,10 +284,10 @@ fn untype_vardef(vd: &src::VarDef, context: &mut Context) -> Result<dst::VarDef,
     })
 }
 
-fn untype_init_expression(member: &src::Condition, context: &mut Context) -> Result<dst::Condition, UntyperError> {
+fn untype_init_expression(member: &src::InitStatement, context: &mut Context) -> Result<dst::InitStatement, UntyperError> {
     Ok(match *member {
-        src::Condition::Expr(ref expr) => dst::Condition::Expr(try!(untype_expression(expr, context))),
-        src::Condition::Assignment(ref vd) => dst::Condition::Assignment(try!(untype_vardef(vd, context))),
+        src::InitStatement::Expression(ref expr) => dst::InitStatement::Expression(try!(untype_expression(expr, context))),
+        src::InitStatement::Declaration(ref vd) => dst::InitStatement::Declaration(try!(untype_vardef(vd, context))),
     })
 }
 

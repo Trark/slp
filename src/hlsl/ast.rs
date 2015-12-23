@@ -329,9 +329,9 @@ impl VarDef {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum Condition {
-    Expr(Located<Expression>),
-    Assignment(VarDef),
+pub enum InitStatement {
+    Expression(Located<Expression>),
+    Declaration(VarDef),
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -341,7 +341,7 @@ pub enum Statement {
     Var(VarDef),
     Block(Vec<Statement>),
     If(Located<Expression>, Box<Statement>),
-    For(Condition, Located<Expression>, Located<Expression>, Box<Statement>),
+    For(InitStatement, Located<Expression>, Located<Expression>, Box<Statement>),
     While(Located<Expression>, Box<Statement>),
     Return(Located<Expression>),
 }

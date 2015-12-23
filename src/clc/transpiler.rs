@@ -1098,7 +1098,7 @@ fn transpile_statement(statement: &src::Statement, context: &mut Context) -> Res
             let (cl_init, defs) = match *init {
                 src::ForInit::Expression(ref expr) => {
                     let expr_ir = try!(transpile_expression(expr, context));
-                    (dst::Condition::Expr(expr_ir), vec![])
+                    (dst::InitStatement::Expression(expr_ir), vec![])
                 },
                 src::ForInit::Definitions(ref vds) => {
                     assert!(vds.len() > 0);
@@ -1107,7 +1107,7 @@ fn transpile_statement(statement: &src::Statement, context: &mut Context) -> Res
                         vardefs.push(try!(transpile_vardef(vd, context)));
                     }
                     let last_vardef = vardefs.pop().expect("zero variable definitions in for init");
-                    (dst::Condition::Assignment(last_vardef), vardefs)
+                    (dst::InitStatement::Declaration(last_vardef), vardefs)
                 },
             };
 
