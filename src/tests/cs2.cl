@@ -39,9 +39,9 @@ void outTest_0(__private float* x)
 	*x = 4.0f;
 }
 
-void outTest_1(float x, __private float* y, float z)
+uint outTest_1(float x, __private float* y, float z)
 {
-	*y = x + z;
+	return (uint)(*y = x + z);
 }
 
 __attribute__((reqd_work_group_size(8, 8, 1)))
@@ -77,7 +77,7 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint
 	}
 	float u = (float)y + 5.4f;
 	outTest_0(&u);
-	outTest_1(4.5f, &u, u > (float)4 ? 3.4f : u);
+	float returnValue = (float)outTest_1(4.5f, &u, u > (float)4 ? 3.4f : u);
 	float vals[3];
 	vals[(int)0] = 0.0f;
 	vals[(int)1] = 1.0f;

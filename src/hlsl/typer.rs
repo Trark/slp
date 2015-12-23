@@ -49,6 +49,7 @@ pub enum TyperError {
     InvalidCast(ErrorType, ErrorType),
     FunctionTypeInInitExpression,
     WrongTypeInInitExpression,
+    WrongTypeInReturnStatement,
     FunctionNotCalled,
 
     KernelNotDefined,
@@ -131,6 +132,7 @@ impl error::Error for TyperError {
             TyperError::InvalidCast(_, _) => "invalid cast",
             TyperError::FunctionTypeInInitExpression => "function not called",
             TyperError::WrongTypeInInitExpression => "wrong type in variable initialization",
+            TyperError::WrongTypeInReturnStatement => "wrong type in return statement",
             TyperError::FunctionNotCalled => "function not called",
 
             TyperError::KernelNotDefined => "entry point not found",
@@ -186,6 +188,8 @@ struct GlobalContext {
     types: TypeBlock,
     globals: HashMap<String, (ir::Type, ir::GlobalId)>,
     next_free_global_id: ir::GlobalId,
+
+    current_return_type: Option<ir::Type>,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -204,6 +208,7 @@ enum Context {
 trait ExpressionContext : StructIdFinder + ErrorTypeContext + ir::TypeContext {
     fn find_variable(&self, name: &String) -> Result<TypedExpression, TyperError>;
     fn find_struct_member(&self, id: &ir::StructId, member_name: &String) -> Result<ir::Type, TyperError>;
+    fn get_return_type(&self) -> ir::Type;
 
     fn as_struct_id_finder(&self) -> &StructIdFinder;
     fn as_type_context(&self) -> &ir::TypeContext;
@@ -505,7 +510,8 @@ impl GlobalContext {
             next_free_function_id: ir::FunctionId(0),
             types: TypeBlock::new(),
             globals: HashMap::new(),
-            next_free_global_id: ir::GlobalId(0)
+            next_free_global_id: ir::GlobalId(0),
+            current_return_type: None,
         }
     }
 
@@ -632,6 +638,10 @@ impl ExpressionContext for GlobalContext {
         self.types.find_struct_member(id, member_name)
     }
 
+    fn get_return_type(&self) -> ir::Type {
+        self.current_return_type.clone().expect("not inside function")
+    }
+
     fn as_struct_id_finder(&self) -> &StructIdFinder {
         self
     }
@@ -748,6 +758,10 @@ impl ExpressionContext for ScopeContext {
         self.parent.find_struct_member(id, member_name)
     }
 
+    fn get_return_type(&self) -> ir::Type {
+        self.parent.get_return_type()
+    }
+
     fn as_struct_id_finder(&self) -> &StructIdFinder {
         self
     }
@@ -814,6 +828,13 @@ impl Context {
         match *self {
             Context::Global(ref global) => global.find_struct_id(name),
             Context::Scope(ref scope) => scope.find_struct_id(name),
+        }
+    }
+
+    fn get_return_type(&self) -> ir::Type {
+        match *self {
+            Context::Global(ref global) => global.get_return_type(),
+            Context::Scope(ref scope) => scope.get_return_type(),
         }
     }
 
@@ -1705,7 +1726,12 @@ fn parse_statement(ast: &ast::Statement, context: ScopeContext) -> Result<(Vec<i
         },
         &ast::Statement::Return(ref expr) => {
             match try!(parse_expr(expr, &context)) {
-                TypedExpression::Value(expr_ir, _) => Ok((vec![ir::Statement::Return(expr_ir)], context)),
+                TypedExpression::Value(expr_ir, expr_ty) => {
+                    match ImplicitConversion::find(&expr_ty, &context.get_return_type().to_rvalue()) {
+                        Ok(rhs_cast) => Ok((vec![ir::Statement::Return(rhs_cast.apply(expr_ir))], context)),
+                        Err(()) => return Err(TyperError::WrongTypeInReturnStatement),
+                    }
+                }
                 _ => return Err(TyperError::FunctionNotCalled),
             }
         },
@@ -1825,6 +1851,11 @@ fn parse_rootdefinition_globalvariable(gv: &ast::GlobalVariable, mut context: Gl
 
 fn parse_rootdefinition_function(fd: &ast::FunctionDefinition, mut context: GlobalContext) -> Result<(ir::RootDefinition, GlobalContext), TyperError> {
 
+    let return_type = try!(parse_type(&fd.returntype, &context));
+    // Set the return type of the current function (for return statement parsing)
+    assert_eq!(context.current_return_type, None);
+    context.current_return_type = Some(return_type.clone());
+
     let mut scoped_context = ScopeContext::from_global(&context);
     let func_params = {
         let mut vec = vec![];
@@ -1840,7 +1871,11 @@ fn parse_rootdefinition_function(fd: &ast::FunctionDefinition, mut context: Glob
     };
     let (body_ir, scoped_context) = try!(parse_statement_vec(&fd.body, scoped_context));
     let decls = scoped_context.destruct();
-    let return_type = try!(parse_type(&fd.returntype, &context));
+
+    // Unset the return type for the current function
+    assert!(context.current_return_type != None);
+    context.current_return_type = None;
+
     let fd_ir = ir::FunctionDefinition {
         id: context.make_function_id(),
         returntype: return_type,

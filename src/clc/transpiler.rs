@@ -1128,7 +1128,7 @@ fn transpile_statement(statement: &src::Statement, context: &mut Context) -> Res
             context.pop_scope();
             Ok(vec![dst::Statement::While(cl_cond, Box::new(dst::Statement::Block(cl_statements)))])
         },
-        &src::Statement::Return(_) => unimplemented!(),
+        &src::Statement::Return(ref expr) => Ok(vec![dst::Statement::Return(try!(transpile_expression(expr, context)))]),
     }
 }
 
