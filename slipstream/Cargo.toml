@@ -1,0 +1,11 @@
+[package]
+name = "slipstream"
+version = "0.1.0"
+authors = ["Trark"]
+
+[dependencies]
+docopt = "0.6.0"
+rustc-serialize = "0.3"
+
+[dependencies.slp]
+path = "../"

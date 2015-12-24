@@ -1,2 +1,4 @@
 target
 Cargo.lock
+slipstream/target
+slipstream/Cargo.lock
