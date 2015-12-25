@@ -11,6 +11,7 @@ pub struct FunctionGlobalUsage {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct GlobalUsage {
+    pub kernel: FunctionGlobalUsage,
     pub functions: HashMap<FunctionId, FunctionGlobalUsage>,
     pub image_reads: HashSet<GlobalId>,
     pub image_writes: HashSet<GlobalId>,
@@ -28,16 +29,22 @@ struct LocalFunctionGlobalUsage {
 impl GlobalUsage {
     pub fn analyse(root_definitions: &[RootDefinition]) -> GlobalUsage {
         let mut lfgus = HashMap::new();
+        let mut kernel_usage_opt = None;
         for root in root_definitions {
             match *root {
                 RootDefinition::Function(ref func) => {
                     lfgus.insert(func.id, LocalFunctionGlobalUsage::analyse(func));
                 }
+                RootDefinition::Kernel(ref kernel) => {
+                    assert!(kernel_usage_opt == None, "Multiple kernels");
+                    kernel_usage_opt = Some(LocalFunctionGlobalUsage::analyse_kernel(kernel));
+                }
                 _ => { }
             }
         }
-        let mut image_reads = HashSet::new();
-        let mut image_writes = HashSet::new();
+        let kernel_local_usage = kernel_usage_opt.expect("No kernels");
+        let mut image_reads = kernel_local_usage.image_reads.clone();
+        let mut image_writes = kernel_local_usage.image_writes.clone();
         for (_, current_usage) in &lfgus {
             image_reads = image_reads.union(&current_usage.image_reads).cloned().collect::<HashSet<_>>();
             image_writes = image_writes.union(&current_usage.image_writes).cloned().collect::<HashSet<_>>();
@@ -59,12 +66,23 @@ impl GlobalUsage {
                 break;
             }
         }
+        let global_usages = prev;
+        let kernel_global_usage = kernel_local_usage.functions.iter().fold(
+            FunctionGlobalUsage { globals: kernel_local_usage.globals, cbuffers: kernel_local_usage.cbuffers },
+            |mut global_usage, function_id| {
+                let other_usage = global_usages.get(function_id).expect("Kernel references unknown function");
+                global_usage.globals = global_usage.globals.union(&other_usage.globals).cloned().collect::<HashSet<_>>();
+                global_usage.cbuffers = global_usage.cbuffers.union(&other_usage.cbuffers).cloned().collect::<HashSet<_>>();
+                global_usage
+            }
+        );
         let mut usage = GlobalUsage {
+            kernel: kernel_global_usage,
             functions: HashMap::new(),
             image_reads: image_reads.clone(),
             image_writes: image_writes.clone(),
         };
-        for (id, local_usage) in prev {
+        for (id, local_usage) in global_usages {
             usage.functions.insert(id, FunctionGlobalUsage {
                 globals: local_usage.globals.clone(),
                 cbuffers: local_usage.cbuffers.clone(),
@@ -84,6 +102,18 @@ impl LocalFunctionGlobalUsage {
             image_writes: HashSet::new(),
         };
         search_scope_block(&function.scope_block, &mut usage);
+        usage
+    }
+
+    fn analyse_kernel(kernel: &Kernel) -> LocalFunctionGlobalUsage {
+        let mut usage = LocalFunctionGlobalUsage {
+            globals: HashSet::new(),
+            cbuffers: HashSet::new(),
+            functions: HashSet::new(),
+            image_reads: HashSet::new(),
+            image_writes: HashSet::new(),
+        };
+        search_scope_block(&kernel.scope_block, &mut usage);
         usage
     }
 }
