@@ -191,9 +191,9 @@ struct GlobalContext {
 
     current_return_type: Option<ir::Type>,
 
-    global_slots_r: HashMap<ir::GlobalId, (u32, ir::GlobalEntry)>,
-    global_slots_rw: HashMap<ir::GlobalId, (u32, ir::GlobalEntry)>,
-    global_slots_constants: HashMap<ir::ConstantBufferId, (u32, ir::ConstantBufferId)>,
+    global_slots_r: Vec<(u32, ir::GlobalEntry)>,
+    global_slots_rw: Vec<(u32, ir::GlobalEntry)>,
+    global_slots_constants: Vec<(u32, ir::ConstantBufferId)>,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -501,9 +501,9 @@ impl GlobalContext {
             globals: HashMap::new(),
             next_free_global_id: ir::GlobalId(0),
             current_return_type: None,
-            global_slots_r: HashMap::new(),
-            global_slots_rw: HashMap::new(),
-            global_slots_constants: HashMap::new(),
+            global_slots_r: vec![],
+            global_slots_rw: vec![],
+            global_slots_constants: vec![],
         }
     }
 
@@ -1762,10 +1762,7 @@ fn parse_rootdefinition_constantbuffer(cb: &ast::ConstantBuffer, mut context: Gl
     let cb_ir = ir::ConstantBuffer { id: id, members: members };
     match cb.slot {
         Some(ast::ConstantSlot(slot)) => {
-            match context.global_slots_constants.insert(cb_ir.id.clone(), (slot, cb_ir.id.clone())) {
-                Some(_) => panic!("multiple constant buffers with the same internal id"),
-                None => { },
-            }
+            context.global_slots_constants.push((slot, cb_ir.id.clone()));;
         },
         None => { },
     }
@@ -1798,16 +1795,10 @@ fn parse_rootdefinition_globalvariable(gv: &ast::GlobalVariable, mut context: Gl
     let entry = ir::GlobalEntry { id: var_id, ty: gv_ir.global_type.clone() };
     match gv.slot {
         Some(ast::GlobalSlot::ReadSlot(slot)) => {
-            match context.global_slots_r.insert(entry.id.clone(), (slot, entry)) {
-                Some(_) => panic!("multiple global variables with the same internal id"),
-                None => { },
-            }
+            context.global_slots_r.push((slot, entry));
         },
         Some(ast::GlobalSlot::ReadWriteSlot(slot)) => {
-            match context.global_slots_rw.insert(entry.id.clone(), (slot, entry)) {
-                Some(_) => panic!("multiple global variables with the same internal id"),
-                None => { },
-            }
+            context.global_slots_rw.push((slot, entry));
         },
         None => { },
     }
@@ -1997,10 +1988,11 @@ pub fn typeparse(ast: &ast::Module) -> Result<ir::Module, TyperError> {
 
     // Resolve used globals into SRV list
     let mut global_table_r = HashMap::new();
-    for (id, (slot, entry)) in context.global_slots_r {
-        if global_declarations.globals.contains_key(&id) {
+    for (slot, entry) in context.global_slots_r {
+        if global_declarations.globals.contains_key(&entry.id) {
+            let error_id = entry.id.clone();
             match global_table_r.insert(slot, entry) {
-                Some(currently_used_by) => return Err(TyperError::ReadResourceSlotAlreadyUsed(currently_used_by.id.clone(), id.clone())),
+                Some(currently_used_by) => return Err(TyperError::ReadResourceSlotAlreadyUsed(currently_used_by.id.clone(), error_id)),
                 None => { },
             }
         }
@@ -2008,10 +2000,11 @@ pub fn typeparse(ast: &ast::Module) -> Result<ir::Module, TyperError> {
 
     // Resolve used globals into UAV list
     let mut global_table_rw = HashMap::new();
-    for (id, (slot, entry)) in context.global_slots_rw {
-        if global_declarations.globals.contains_key(&id) {
+    for (slot, entry) in context.global_slots_rw {
+        if global_declarations.globals.contains_key(&entry.id) {
+            let error_id = entry.id.clone();
             match global_table_rw.insert(slot, entry) {
-                Some(currently_used_by) => return Err(TyperError::ReadWriteResourceSlotAlreadyUsed(currently_used_by.id.clone(), id.clone())),
+                Some(currently_used_by) => return Err(TyperError::ReadWriteResourceSlotAlreadyUsed(currently_used_by.id.clone(), error_id)),
                 None => { },
             }
         }
@@ -2019,10 +2012,11 @@ pub fn typeparse(ast: &ast::Module) -> Result<ir::Module, TyperError> {
 
     // Resolve used constant buffers into constabt buffer list
     let mut global_table_constants = HashMap::new();
-    for (id, (slot, cb_id)) in context.global_slots_constants {
-        if global_declarations.constants.contains_key(&id) {
+    for (slot, cb_id) in context.global_slots_constants {
+        if global_declarations.constants.contains_key(&cb_id) {
+            let error_id = cb_id.clone();
             match global_table_constants.insert(slot, cb_id) {
-                Some(currently_used_by) => return Err(TyperError::ConstantSlotAlreadyUsed(currently_used_by.clone(), id.clone())),
+                Some(currently_used_by) => return Err(TyperError::ConstantSlotAlreadyUsed(currently_used_by.clone(), error_id)),
                 None => { },
             }
         }
