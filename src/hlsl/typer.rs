@@ -20,7 +20,7 @@ pub enum TyperError {
     StructAlreadyDefined(String),
     ConstantBufferAlreadyDefined(String),
 
-    ConstantSlotAlreadyUsed(String),
+    ConstantSlotAlreadyUsed(ir::ConstantBufferId, ir::ConstantBufferId),
     ReadResourceSlotAlreadyUsed(ir::GlobalId, ir::GlobalId),
     ReadWriteResourceSlotAlreadyUsed(ir::GlobalId, ir::GlobalId),
 
@@ -103,7 +103,7 @@ impl error::Error for TyperError {
             TyperError::StructAlreadyDefined(_) => "struct aready defined",
             TyperError::ConstantBufferAlreadyDefined(_) => "cbuffer aready defined",
 
-            TyperError::ConstantSlotAlreadyUsed(_) => "global constant slot already used",
+            TyperError::ConstantSlotAlreadyUsed(_, _) => "global constant slot already used",
             TyperError::ReadResourceSlotAlreadyUsed(_, _) => "global resource slot already used",
             TyperError::ReadWriteResourceSlotAlreadyUsed(_, _) => "global writable resource slot already used",
 
@@ -190,6 +190,10 @@ struct GlobalContext {
     next_free_global_id: ir::GlobalId,
 
     current_return_type: Option<ir::Type>,
+
+    global_slots_r: HashMap<ir::GlobalId, (u32, ir::GlobalEntry)>,
+    global_slots_rw: HashMap<ir::GlobalId, (u32, ir::GlobalEntry)>,
+    global_slots_constants: HashMap<ir::ConstantBufferId, (u32, ir::ConstantBufferId)>,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -462,21 +466,6 @@ impl TypeBlock {
         let &ir::Type(ref tyl, ref modifier) = ty;
         ast::Type(self.invert_typelayout(tyl), self.invert_modifier(modifier))
     }
-
-    fn destruct(self) -> (HashMap<ir::StructId, String>, HashMap<ir::ConstantBufferId, String>) {
-        (self.struct_ids.iter().fold(HashMap::new(),
-            |mut map, (name, id)| {
-                map.insert(id.clone(), name.clone());
-                map
-             }
-        ),
-        self.cbuffer_ids.iter().fold(HashMap::new(),
-            |mut map, (name, id)| {
-                map.insert(id.clone(), name.clone());
-                map
-             }
-        ))
-    }
 }
 
 impl StructIdFinder for TypeBlock {
@@ -512,6 +501,9 @@ impl GlobalContext {
             globals: HashMap::new(),
             next_free_global_id: ir::GlobalId(0),
             current_return_type: None,
+            global_slots_r: HashMap::new(),
+            global_slots_rw: HashMap::new(),
+            global_slots_constants: HashMap::new(),
         }
     }
 
@@ -600,32 +592,6 @@ impl GlobalContext {
 
     fn get_type_block(&self) -> &TypeBlock {
         &self.types
-    }
-
-    fn destruct(self) -> ir::GlobalDeclarations {
-        let globals = self.globals.iter().fold(HashMap::new(),
-            |mut map, (name, &(_, ref id))| {
-                map.insert(id.clone(), name.clone());
-                map
-            }
-        );
-        let (structs, constants) = self.types.destruct();
-        ir::GlobalDeclarations {
-            globals: globals,
-            functions: self.functions.iter().fold(HashMap::new(),
-                |mut map, (_, &UnresolvedFunction(ref name, ref overloads))| {
-                    for overload in overloads {
-                        match overload.0 {
-                            FunctionName::User(id) => { map.insert(id, name.clone()); },
-                            _ => { },
-                        }
-                    }
-                    map
-                }
-            ),
-            structs: structs,
-            constants: constants,
-        }
     }
 }
 
@@ -1774,7 +1740,7 @@ fn parse_rootdefinition_struct(sd: &ast::StructDefinition, mut context: GlobalCo
     }
 }
 
-fn parse_rootdefinition_constantbuffer(cb: &ast::ConstantBuffer, mut context: GlobalContext, globals: &mut ir::GlobalTable) -> Result<(ir::RootDefinition, GlobalContext), TyperError> {
+fn parse_rootdefinition_constantbuffer(cb: &ast::ConstantBuffer, mut context: GlobalContext) -> Result<(ir::RootDefinition, GlobalContext), TyperError> {
     let cb_name = cb.name.clone();
     let mut members = vec![];
     let mut members_map = HashMap::new();
@@ -1796,9 +1762,8 @@ fn parse_rootdefinition_constantbuffer(cb: &ast::ConstantBuffer, mut context: Gl
     let cb_ir = ir::ConstantBuffer { id: id, members: members };
     match cb.slot {
         Some(ast::ConstantSlot(slot)) => {
-            match globals.constants.insert(slot, cb_ir.id.clone()) {
-                // Todo: ConstantSlotAlreadyUsed should get name of previously used slot
-                Some(_) => return Err(TyperError::ConstantSlotAlreadyUsed(cb_name.clone())),
+            match context.global_slots_constants.insert(cb_ir.id.clone(), (slot, cb_ir.id.clone())) {
+                Some(_) => panic!("multiple constant buffers with the same internal id"),
                 None => { },
             }
         },
@@ -1807,7 +1772,7 @@ fn parse_rootdefinition_constantbuffer(cb: &ast::ConstantBuffer, mut context: Gl
     Ok((ir::RootDefinition::ConstantBuffer(cb_ir), context))
 }
 
-fn parse_rootdefinition_globalvariable(gv: &ast::GlobalVariable, mut context: GlobalContext, globals: &mut ir::GlobalTable) -> Result<(ir::RootDefinition, GlobalContext), TyperError> {
+fn parse_rootdefinition_globalvariable(gv: &ast::GlobalVariable, mut context: GlobalContext) -> Result<(ir::RootDefinition, GlobalContext), TyperError> {
     let var_name = gv.name.clone();
     let var_type = try!(parse_globaltype(&gv.global_type, &context));
     let input_type = var_type.0.clone();
@@ -1833,14 +1798,14 @@ fn parse_rootdefinition_globalvariable(gv: &ast::GlobalVariable, mut context: Gl
     let entry = ir::GlobalEntry { id: var_id, ty: gv_ir.global_type.clone() };
     match gv.slot {
         Some(ast::GlobalSlot::ReadSlot(slot)) => {
-            match globals.r_resources.insert(slot, entry) {
-                Some(currently_used_by) => return Err(TyperError::ReadResourceSlotAlreadyUsed(currently_used_by.id.clone(), gv_ir.id.clone())),
+            match context.global_slots_r.insert(entry.id.clone(), (slot, entry)) {
+                Some(_) => panic!("multiple global variables with the same internal id"),
                 None => { },
             }
         },
         Some(ast::GlobalSlot::ReadWriteSlot(slot)) => {
-            match globals.rw_resources.insert(slot, entry) {
-                Some(currently_used_by) => return Err(TyperError::ReadWriteResourceSlotAlreadyUsed(currently_used_by.id.clone(), gv_ir.id.clone())),
+            match context.global_slots_rw.insert(entry.id.clone(), (slot, entry)) {
+                Some(_) => panic!("multiple global variables with the same internal id"),
                 None => { },
             }
         },
@@ -1929,30 +1894,147 @@ fn parse_rootdefinition_kernel(fd: &ast::FunctionDefinition, context: GlobalCont
     Ok((ir::RootDefinition::Kernel(kernel), context))
 }
 
-fn parse_rootdefinition(ast: &ast::RootDefinition, context: GlobalContext, globals: &mut ir::GlobalTable, entry_point: &str) -> Result<(ir::RootDefinition, GlobalContext), TyperError> {
+fn parse_rootdefinition(ast: &ast::RootDefinition, context: GlobalContext, entry_point: &str) -> Result<(ir::RootDefinition, GlobalContext), TyperError> {
     match ast {
         &ast::RootDefinition::Struct(ref sd) => parse_rootdefinition_struct(sd, context),
         &ast::RootDefinition::SamplerState => Ok((ir::RootDefinition::SamplerState, context)),
-        &ast::RootDefinition::ConstantBuffer(ref cb) => parse_rootdefinition_constantbuffer(cb, context, globals),
-        &ast::RootDefinition::GlobalVariable(ref gv) => parse_rootdefinition_globalvariable(gv, context, globals),
+        &ast::RootDefinition::ConstantBuffer(ref cb) => parse_rootdefinition_constantbuffer(cb, context),
+        &ast::RootDefinition::GlobalVariable(ref gv) => parse_rootdefinition_globalvariable(gv, context),
         &ast::RootDefinition::Function(ref fd) if fd.name == entry_point => parse_rootdefinition_kernel(fd, context),
         &ast::RootDefinition::Function(ref fd) => parse_rootdefinition_function(fd, context),
     }
 }
 
 pub fn typeparse(ast: &ast::Module) -> Result<ir::Module, TyperError> {
+    use super::globals_analysis::GlobalUsage;
+
     let mut context = GlobalContext::new();
 
-    let mut global_table = ir::GlobalTable::new();
     let mut root_definitions = vec![];
 
     for def in &ast.root_definitions {
-        let (def_ir, next_context) = try!(parse_rootdefinition(&def, context, &mut global_table, &ast.entry_point.clone()));
+        let (def_ir, next_context) = try!(parse_rootdefinition(&def, context, &ast.entry_point.clone()));
         root_definitions.push(def_ir);
         context = next_context;
     }
 
-    let global_declarations = context.destruct();
+    let analysis = GlobalUsage::analyse(&root_definitions);
+
+    let root_definitions = root_definitions.into_iter().filter(
+        |def| {
+            match *def {
+                ir::RootDefinition::GlobalVariable(ref gv) => {
+                    analysis.kernel.globals.contains(&gv.id)
+                }
+                ir::RootDefinition::ConstantBuffer(ref cb) => {
+                    analysis.kernel.cbuffers.contains(&cb.id)
+                }
+                ir::RootDefinition::Function(ref func) => {
+                    analysis.kernel.functions.contains(&func.id)
+                }
+                _ => true
+            }
+        }
+    ).collect::<Vec<_>>();
+
+    // Gather remaining global declaration names
+    let global_declarations = root_definitions.iter().fold(ir::GlobalDeclarations {
+            functions: HashMap::new(),
+            globals: HashMap::new(),
+            structs: HashMap::new(),
+            constants: HashMap::new(),
+        },
+        |mut map, def| {
+            match *def {
+                ir::RootDefinition::Struct(ref sd) => {
+                    for (name, id) in &context.types.struct_ids {
+                        if sd.id == *id {
+                            map.structs.insert(sd.id, name.clone());
+                            return map;
+                        }
+                    }
+                    panic!("struct name does not exist")
+                }
+                ir::RootDefinition::ConstantBuffer(ref cb) => {
+                    for (name, id) in &context.types.cbuffer_ids {
+                        if cb.id == *id {
+                            map.constants.insert(cb.id, name.clone());
+                            return map;
+                        }
+                    }
+                    panic!("cbuffer name does not exist")
+                }
+                ir::RootDefinition::GlobalVariable(ref gv) => {
+                    for (name, &(_, id)) in &context.globals {
+                        if gv.id == id {
+                            map.globals.insert(gv.id, name.clone());
+                            return map;
+                        }
+                    }
+                    panic!("global variable name does not exist")
+                }
+                ir::RootDefinition::Function(ref func) => {
+                    for (_, &UnresolvedFunction(ref name, ref overloads)) in &context.functions {
+                        for overload in overloads {
+                            match overload.0 {
+                                FunctionName::User(id) => {
+                                    if id == func.id {
+                                        map.functions.insert(func.id, name.clone());
+                                        return map;
+                                    }
+                                },
+                                _ => { },
+                            }
+                        }
+                    }
+                    panic!("function name does not exist")
+                }
+                _ => { }
+            }
+            map
+        }
+    );
+
+    // Resolve used globals into SRV list
+    let mut global_table_r = HashMap::new();
+    for (id, (slot, entry)) in context.global_slots_r {
+        if global_declarations.globals.contains_key(&id) {
+            match global_table_r.insert(slot, entry) {
+                Some(currently_used_by) => return Err(TyperError::ReadResourceSlotAlreadyUsed(currently_used_by.id.clone(), id.clone())),
+                None => { },
+            }
+        }
+    }
+
+    // Resolve used globals into UAV list
+    let mut global_table_rw = HashMap::new();
+    for (id, (slot, entry)) in context.global_slots_rw {
+        if global_declarations.globals.contains_key(&id) {
+            match global_table_rw.insert(slot, entry) {
+                Some(currently_used_by) => return Err(TyperError::ReadWriteResourceSlotAlreadyUsed(currently_used_by.id.clone(), id.clone())),
+                None => { },
+            }
+        }
+    }
+
+    // Resolve used constant buffers into constabt buffer list
+    let mut global_table_constants = HashMap::new();
+    for (id, (slot, cb_id)) in context.global_slots_constants {
+        if global_declarations.constants.contains_key(&id) {
+            match global_table_constants.insert(slot, cb_id) {
+                Some(currently_used_by) => return Err(TyperError::ConstantSlotAlreadyUsed(currently_used_by.clone(), id.clone())),
+                None => { },
+            }
+        }
+    }
+
+    // Make the table describing all global bindings
+    let global_table = ir::GlobalTable {
+        r_resources: global_table_r,
+        rw_resources: global_table_rw,
+        samplers: HashMap::new(),
+        constants: global_table_constants,
+    };
 
     let ir = ir::Module {
         entry_point: ast.entry_point.clone(),
@@ -2102,7 +2184,9 @@ fn test_typeparse() {
                 name: "CSMAIN".to_string(),
                 returntype: ast::Type::void(),
                 params: vec![],
-                body: vec![],
+                body: vec![
+                    ast::Statement::Expression(Located::none(ast::Expression::Variable("g_myFour".to_string())))
+                ],
                 attributes: vec![ast::FunctionAttribute::NumThreads(8, 8, 1)],
             }),
         ],
@@ -2126,7 +2210,9 @@ fn test_typeparse() {
             ir::RootDefinition::Kernel(ir::Kernel {
                 group_dimensions: ir::Dimension(8, 8, 1),
                 params: vec![],
-                scope_block: ir::ScopeBlock(vec![], ir::ScopedDeclarations { variables: HashMap::new() }),
+                scope_block: ir::ScopeBlock(vec![
+                    ir::Statement::Expression(ir::Expression::Global(ir::GlobalId(0)))
+                ], ir::ScopedDeclarations { variables: HashMap::new() }),
             }),
         ],
     });

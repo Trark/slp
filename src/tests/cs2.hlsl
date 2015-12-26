@@ -1,8 +1,11 @@
 
 Buffer<uint> g_myInBuffer : register(t0);
 RWBuffer<uint> g_myOutBuffer : register(u0);
+Buffer<float> unused_t0 : register(t0);
+RWBuffer<float> unused_u0 : register(u0);
 
 static const int g_myFour = 4;
+static const int unused_static_constant = -4;
 
 struct myStruct
 {
@@ -18,6 +21,11 @@ struct testStruct_0
 cbuffer myConstants : register(b0)
 {
     uint g_offset;
+};
+
+cbuffer unused_constants : register(b1)
+{
+    uint unused_constant;
 };
 
 void myFunc(uint x)
@@ -37,6 +45,11 @@ void outTest(out float x)
 uint outTest(float x, out float y, float z)
 {
     return y = x + z;
+}
+
+void unused_function()
+{
+    unused_u0[0] = unused_t0[0] + unused_constant + unused_static_constant;
 }
 
 [numthreads(8, 8, 1)]

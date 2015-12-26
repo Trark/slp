@@ -7,6 +7,7 @@ use super::ir::*;
 pub struct FunctionGlobalUsage {
     pub globals: HashSet<GlobalId>,
     pub cbuffers: HashSet<ConstantBufferId>,
+    pub functions: HashSet<FunctionId>,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -57,6 +58,7 @@ impl GlobalUsage {
                     if current_usage.functions.contains(&other_id) {
                         current_usage.globals = current_usage.globals.union(&other_usage.globals).cloned().collect::<HashSet<_>>();
                         current_usage.cbuffers = current_usage.cbuffers.union(&other_usage.cbuffers).cloned().collect::<HashSet<_>>();
+                        current_usage.functions = current_usage.functions.union(&other_usage.functions).cloned().collect::<HashSet<_>>();
                     }
                 }
             }
@@ -68,11 +70,13 @@ impl GlobalUsage {
         }
         let global_usages = prev;
         let kernel_global_usage = kernel_local_usage.functions.iter().fold(
-            FunctionGlobalUsage { globals: kernel_local_usage.globals, cbuffers: kernel_local_usage.cbuffers },
+            FunctionGlobalUsage { globals: kernel_local_usage.globals, cbuffers: kernel_local_usage.cbuffers, functions: HashSet::new() },
             |mut global_usage, function_id| {
                 let other_usage = global_usages.get(function_id).expect("Kernel references unknown function");
                 global_usage.globals = global_usage.globals.union(&other_usage.globals).cloned().collect::<HashSet<_>>();
                 global_usage.cbuffers = global_usage.cbuffers.union(&other_usage.cbuffers).cloned().collect::<HashSet<_>>();
+                global_usage.functions.insert(*function_id);
+                global_usage.functions = global_usage.functions.union(&other_usage.functions).cloned().collect::<HashSet<_>>();
                 global_usage
             }
         );
@@ -86,6 +90,7 @@ impl GlobalUsage {
             usage.functions.insert(id, FunctionGlobalUsage {
                 globals: local_usage.globals.clone(),
                 cbuffers: local_usage.cbuffers.clone(),
+                functions: local_usage.functions.clone(),
             });
         }
         usage
