@@ -172,10 +172,12 @@ struct VariableBlock {
 #[derive(PartialEq, Debug, Clone)]
 struct TypeBlock {
     struct_ids: HashMap<String, ir::StructId>,
+    struct_names: HashMap<ir::StructId, String>,
     struct_definitions: HashMap<ir::StructId, HashMap<String, ir::Type>>,
     next_free_struct_id: ir::StructId,
 
     cbuffer_ids: HashMap<String, ir::ConstantBufferId>,
+    cbuffer_names: HashMap<ir::ConstantBufferId, String>,
     cbuffer_definitions: HashMap<ir::ConstantBufferId, HashMap<String, ir::Type>>,
     next_free_cbuffer_id: ir::ConstantBufferId,
 }
@@ -183,10 +185,12 @@ struct TypeBlock {
 #[derive(PartialEq, Debug, Clone)]
 struct GlobalContext {
     functions: HashMap<String, UnresolvedFunction>,
+    function_names: HashMap<ir::FunctionId, String>,
     next_free_function_id: ir::FunctionId,
 
     types: TypeBlock,
     globals: HashMap<String, (ir::Type, ir::GlobalId)>,
+    global_names: HashMap<ir::GlobalId, String>,
     next_free_global_id: ir::GlobalId,
 
     current_return_type: Option<ir::Type>,
@@ -284,9 +288,11 @@ impl TypeBlock {
     fn new() -> TypeBlock {
         TypeBlock {
             struct_ids: HashMap::new(),
+            struct_names: HashMap::new(),
             struct_definitions: HashMap::new(),
             next_free_struct_id: ir::StructId(0),
             cbuffer_ids: HashMap::new(),
+            cbuffer_names: HashMap::new(),
             cbuffer_definitions: HashMap::new(),
             next_free_cbuffer_id: ir::ConstantBufferId(0),
         }
@@ -295,9 +301,10 @@ impl TypeBlock {
     fn insert_struct(&mut self, name: &String, members: HashMap<String, ir::Type>) -> Option<ir::StructId> {
         let id = self.next_free_struct_id;
         self.next_free_struct_id = ir::StructId(self.next_free_struct_id.0 + 1);
-        match (self.struct_ids.entry(name.clone()), self.struct_definitions.entry(id.clone())) {
-            (Entry::Vacant(id_entry), Entry::Vacant(def_entry)) => {
+        match (self.struct_ids.entry(name.clone()), self.struct_names.entry(id.clone()), self.struct_definitions.entry(id.clone())) {
+            (Entry::Vacant(id_entry), Entry::Vacant(name_entry), Entry::Vacant(def_entry)) => {
                 id_entry.insert(id.clone());
+                name_entry.insert(name.clone());
                 def_entry.insert(members);
                 Some(id.clone())
             },
@@ -322,9 +329,10 @@ impl TypeBlock {
     fn insert_cbuffer(&mut self, name: &String, members: HashMap<String, ir::Type>) -> Option<ir::ConstantBufferId> {
         let id = self.next_free_cbuffer_id;
         self.next_free_cbuffer_id = ir::ConstantBufferId(self.next_free_cbuffer_id.0 + 1);
-        match (self.cbuffer_ids.entry(name.clone()), self.cbuffer_definitions.entry(id.clone())) {
-            (Entry::Vacant(id_entry), Entry::Vacant(def_entry)) => {
+        match (self.cbuffer_ids.entry(name.clone()), self.cbuffer_names.entry(id.clone()), self.cbuffer_definitions.entry(id.clone())) {
+            (Entry::Vacant(id_entry), Entry::Vacant(name_entry), Entry::Vacant(def_entry)) => {
                 id_entry.insert(id.clone());
+                name_entry.insert(name.clone());
                 def_entry.insert(members);
                 Some(id.clone())
             },
@@ -496,9 +504,11 @@ impl GlobalContext {
     fn new() -> GlobalContext {
         GlobalContext {
             functions: get_intrinsics(),
+            function_names: HashMap::new(),
             next_free_function_id: ir::FunctionId(0),
             types: TypeBlock::new(),
             globals: HashMap::new(),
+            global_names: HashMap::new(),
             next_free_global_id: ir::GlobalId(0),
             current_return_type: None,
             global_slots_r: vec![],
@@ -512,6 +522,23 @@ impl GlobalContext {
         if let Some(&(ref ty, _)) = self.has_variable(&name) {
             return Err(TyperError::ValueAlreadyDefined(name, self.ir_type_to_error_type(ty), ErrorType::Unknown))
         };
+
+        fn insert_function_name(function_names: &mut HashMap<ir::FunctionId, String>, function_type: FunctionOverload, name: String) {
+            match function_type.0 {
+                FunctionName::User(id) => {
+                    match function_names.entry(id) {
+                        Entry::Occupied(_) => {
+                            panic!("function id named twice");
+                        }
+                        Entry::Vacant(vacant) => {
+                            vacant.insert(name);
+                        }
+                    }
+                }
+                FunctionName::Intrinsic(_) => { }
+            }
+        }
+
         // Try to add the function
         match self.functions.entry(name.clone()) {
             Entry::Occupied(mut occupied) => {
@@ -522,11 +549,13 @@ impl GlobalContext {
                     }
                 };
                 // Insert a new overload
+                insert_function_name(&mut self.function_names, function_type.clone(), name);
                 occupied.get_mut().1.push(function_type);
                 Ok(())
             },
             Entry::Vacant(vacant) => {
                 // Insert a new function with one overload
+                insert_function_name(&mut self.function_names, function_type.clone(), name.clone());
                 vacant.insert(UnresolvedFunction(name, vec![function_type])); Ok(())
             },
         }
@@ -563,16 +592,19 @@ impl GlobalContext {
         if let Some(&(ref ty, _)) = self.has_variable(&name) {
             return Err(TyperError::ValueAlreadyDefined(name, self.ir_type_to_error_type(ty), self.ir_type_to_error_type(&typename)))
         };
-        let cur_ty = match self.globals.entry(name.clone()) {
-            Entry::Occupied(occupied) => occupied.get().0.clone(),
+        match self.globals.entry(name.clone()) {
+            Entry::Occupied(_) => unreachable!("global variable inserted multiple times"),
             Entry::Vacant(vacant) => {
                 let id = self.next_free_global_id;
                 self.next_free_global_id = ir::GlobalId(self.next_free_global_id.0 + 1);
                 vacant.insert((typename, id));
-                return Ok(id)
+                match self.global_names.insert(id, name) {
+                    Some(_) => panic!("global variable named multiple times"),
+                    None => { },
+                };
+                Ok(id)
             },
-        };
-        Err(TyperError::ValueAlreadyDefined(name, self.ir_type_to_error_type(&cur_ty), self.ir_type_to_error_type(&typename)))
+        }
     }
 
     fn find_global(&self, name: &String) -> Option<TypedExpression> {
@@ -1938,47 +1970,28 @@ pub fn typeparse(ast: &ast::Module) -> Result<ir::Module, TyperError> {
         |mut map, def| {
             match *def {
                 ir::RootDefinition::Struct(ref sd) => {
-                    for (name, id) in &context.types.struct_ids {
-                        if sd.id == *id {
-                            map.structs.insert(sd.id, name.clone());
-                            return map;
-                        }
+                    match context.types.struct_names.get(&sd.id) {
+                        Some(name) => { map.structs.insert(sd.id, name.clone()); }
+                        None => { panic!("struct name does not exist"); }
                     }
-                    panic!("struct name does not exist")
                 }
                 ir::RootDefinition::ConstantBuffer(ref cb) => {
-                    for (name, id) in &context.types.cbuffer_ids {
-                        if cb.id == *id {
-                            map.constants.insert(cb.id, name.clone());
-                            return map;
-                        }
+                    match context.types.cbuffer_names.get(&cb.id) {
+                        Some(name) => { map.constants.insert(cb.id, name.clone()); }
+                        None => { panic!("constant buffer name does not exist"); }
                     }
-                    panic!("cbuffer name does not exist")
                 }
                 ir::RootDefinition::GlobalVariable(ref gv) => {
-                    for (name, &(_, id)) in &context.globals {
-                        if gv.id == id {
-                            map.globals.insert(gv.id, name.clone());
-                            return map;
-                        }
+                    match context.global_names.get(&gv.id) {
+                        Some(name) => { map.globals.insert(gv.id, name.clone()); }
+                        None => { panic!("global variable name does not exist"); }
                     }
-                    panic!("global variable name does not exist")
                 }
                 ir::RootDefinition::Function(ref func) => {
-                    for (_, &UnresolvedFunction(ref name, ref overloads)) in &context.functions {
-                        for overload in overloads {
-                            match overload.0 {
-                                FunctionName::User(id) => {
-                                    if id == func.id {
-                                        map.functions.insert(func.id, name.clone());
-                                        return map;
-                                    }
-                                },
-                                _ => { },
-                            }
-                        }
+                    match context.function_names.get(&func.id) {
+                        Some(name) => { map.functions.insert(func.id, name.clone()); }
+                        None => { panic!("function name does not exist"); }
                     }
-                    panic!("function name does not exist")
                 }
                 _ => { }
             }
