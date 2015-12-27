@@ -109,21 +109,21 @@ impl BindMap {
 }
 
 /// Trait for loading files from #include directives
-pub trait FileLoader {
+pub trait IncludeHandler {
     fn load(&self, &str) -> Result<String, ()>;
 }
 
 /// A file loader that fails to load any files
-pub struct NullFileLoader;
+pub struct NullIncludeHandler;
 
-impl FileLoader for NullFileLoader {
+impl IncludeHandler for NullIncludeHandler {
     fn load(&self, _: &str) -> Result<String, ()> { Err(()) }
 }
 
 pub struct Input {
     pub entry_point: String,
     pub main_file: String,
-    pub file_loader: Box<FileLoader>,
+    pub file_loader: Box<IncludeHandler>,
 }
 
 #[derive(PartialEq, Debug, Clone)]

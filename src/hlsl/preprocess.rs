@@ -6,7 +6,7 @@ use FileLocation;
 use File;
 use Line;
 use Column;
-use FileLoader;
+use IncludeHandler;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum PreprocessError {
@@ -69,7 +69,7 @@ impl LineMap {
     }
 }
 
-fn preprocess_file(buffer: String, file_loader: &FileLoader, file: &str, debug_locations: &mut Vec<(StreamLocation, FileLocation)>) -> Result<String, PreprocessError> {
+fn preprocess_file(buffer: String, file_loader: &IncludeHandler, file: &str, debug_locations: &mut Vec<(StreamLocation, FileLocation)>) -> Result<String, PreprocessError> {
     let lines = file.split('\n').collect::<Vec<_>>();
     let mut buffer = buffer;
     for (line_index, line) in lines.iter().enumerate() {
@@ -137,7 +137,7 @@ fn preprocess_file(buffer: String, file_loader: &FileLoader, file: &str, debug_l
     Ok(buffer)
 }
 
-pub fn preprocess(input: &str, file_loader: &FileLoader) -> Result<PreprocessedText, PreprocessError> {
+pub fn preprocess(input: &str, file_loader: &IncludeHandler) -> Result<PreprocessedText, PreprocessError> {
 
     let mut lines = vec![];
     let code = try!(preprocess_file(String::new(), file_loader, input, &mut lines));
@@ -149,6 +149,6 @@ pub fn preprocess(input: &str, file_loader: &FileLoader) -> Result<PreprocessedT
 }
 
 pub fn preprocess_single(input: &str) -> Result<PreprocessedText, PreprocessError> {
-    use NullFileLoader;
-    preprocess(input, &NullFileLoader)
+    use NullIncludeHandler;
+    preprocess(input, &NullIncludeHandler)
 }

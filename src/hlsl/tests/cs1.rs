@@ -17,13 +17,13 @@ const CS1: &'static str = include_str!("cs1.hlsl");
 #[test]
 fn cs1_lex() {
 
-    use NullFileLoader;
+    use NullIncludeHandler;
 
     // Normalise line ending so we don't have to deal with git potentially
     // changing them
     let cs1_str = CS1.to_string().replace("\r\n", "\n");
 
-    let cs1_preprocessed = preprocess(&cs1_str, &NullFileLoader).expect("cs1 failed preprocess");
+    let cs1_preprocessed = preprocess(&cs1_str, &NullIncludeHandler).expect("cs1 failed preprocess");
 
     let tokens_res = lex(&cs1_preprocessed);
 

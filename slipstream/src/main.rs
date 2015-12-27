@@ -9,7 +9,7 @@ use std::fs::File;
 use std::path::Path;
 use std::path::PathBuf;
 use docopt::Docopt;
-use slp::FileLoader;
+use slp::IncludeHandler;
 
 const USAGE: &'static str = "
 Slipstream HLSL to OpenCL Compiler
@@ -34,11 +34,11 @@ struct Args {
     arg_source_file: String,
 }
 
-struct IncludeHandler {
+struct FileLoader {
     include_paths: Vec<PathBuf>,
 }
 
-impl FileLoader for IncludeHandler {
+impl IncludeHandler for FileLoader {
     fn load(&self, file_name: &str) -> Result<String, ()> {
         let file_path = Path::new(file_name);
         let mut file_res = File::open(file_path);
@@ -108,7 +108,7 @@ fn main() {
         }
     }
 
-    let include_handler = Box::new(IncludeHandler { include_paths: paths });
+    let include_handler = Box::new(FileLoader { include_paths: paths });
 
     let input = Input {
         entry_point: flag_entry_point,

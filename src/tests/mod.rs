@@ -1,7 +1,7 @@
 
 use std::collections::HashMap;
 use Input;
-use NullFileLoader;
+use NullIncludeHandler;
 use hlsl_to_cl;
 use BindMap;
 
@@ -23,7 +23,7 @@ fn run_full(hlsl: &'static str, cl: &'static str, binds: BindMap) {
     run_input(Input {
         entry_point: "CSMAIN".to_string(),
         main_file: hlsl.to_string(),
-        file_loader: Box::new(NullFileLoader),
+        file_loader: Box::new(NullIncludeHandler),
     }, cl, binds)
 }
 
@@ -84,13 +84,13 @@ fn swizzle_full() {
 
 #[test]
 fn include() {
-    use FileLoader;
+    use IncludeHandler;
 
     const HLSL_MAIN: &'static str = include_str!("include_main.hlsl");
     const CL: &'static str = include_str!("include.cl");
 
     struct TestFileLoader;
-    impl FileLoader for TestFileLoader {
+    impl IncludeHandler for TestFileLoader {
         fn load(&self, file_name: &str) -> Result<String, ()> {
             match file_name.as_ref() {
                 "aux.csh" => Ok(include_str!("include_aux.hlsl").to_string()),
