@@ -1155,7 +1155,7 @@ fn find_function_type(overloads: &Vec<FunctionOverload>, param_types: &[Expressi
 
 fn apply_casts(casts: Vec<ImplicitConversion>, values: Vec<ir::Expression>) -> Vec<ir::Expression> {
     assert_eq!(casts.len(), values.len());
-    values.iter().enumerate().map(|(index, value)| casts[index].apply(value.clone())).collect::<Vec<_>>()
+    values.into_iter().enumerate().map(|(index, value)| casts[index].apply(value)).collect::<Vec<_>>()
 }
 
 fn write_function(unresolved: UnresolvedFunction, param_types: &[ExpressionType], param_values: Vec<ir::Expression>) -> Result<TypedExpression, TyperError> {
@@ -1693,7 +1693,7 @@ fn parse_statement(ast: &ast::Statement, context: ScopeContext) -> Result<(Vec<i
         },
         &ast::Statement::Var(ref vd) => {
             let (vd_ir, context) = try!(parse_vardef(vd, context));
-            let vars = vd_ir.iter().map(|v| ir::Statement::Var(v.clone())).collect::<Vec<_>>();
+            let vars = vd_ir.into_iter().map(|v| ir::Statement::Var(v)).collect::<Vec<_>>();
             Ok((vars, context))
         },
         &ast::Statement::Block(ref statement_vec) => {

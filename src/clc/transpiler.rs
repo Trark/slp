@@ -1116,7 +1116,7 @@ fn transpile_statement(statement: &src::Statement, context: &mut Context) -> Res
             let cl_statements= try!(transpile_statements(statements, context));
             context.pop_scope();
             let cl_for = dst::Statement::For(cl_init, cl_cond, cl_update, Box::new(dst::Statement::Block(cl_statements)));
-            let mut block_contents = defs.iter().map(|d| dst::Statement::Var(d.clone())).collect::<Vec<_>>();
+            let mut block_contents = defs.into_iter().map(|d| dst::Statement::Var(d)).collect::<Vec<_>>();
             block_contents.push(cl_for);
             Ok(block_contents)
         },

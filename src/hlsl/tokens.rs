@@ -138,9 +138,3 @@ impl LexToken {
 pub struct Tokens {
     pub stream: Vec<LexToken>,
 }
-
-impl Tokens {
-    pub fn get_nonstream_tokens(&self) -> Vec<Token> {
-        self.stream.iter().map(|stoken| stoken.0.clone()).collect::<Vec<_>>()
-    }
-}

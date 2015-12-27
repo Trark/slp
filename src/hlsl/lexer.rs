@@ -529,8 +529,8 @@ fn token_stream(input: &[u8]) -> IResult<&[u8], Vec<StreamToken>> {
     let total_length = input.len() as u64;
     match many0!(input, token) {
         IResult::Done(rest, itokens) => {
-            let tokens = itokens.iter().map(|itoken|
-                StreamToken(itoken.0.clone(), StreamLocation(total_length - (itoken.1).0))
+            let tokens = itokens.into_iter().map(|itoken|
+                StreamToken(itoken.0, StreamLocation(total_length - (itoken.1).0))
             ).collect::<Vec<_>>();
             IResult::Done(rest, tokens)
         },
