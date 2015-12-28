@@ -579,10 +579,12 @@ fn preprocess_command<'a>(buffer: &mut IntermediateText,
                     loop {
                         match remaining.find('\n') {
                             Some(sz) => {
-                                let before = &remaining[..(sz - 1)];
+                                let before_c0 = &remaining[..sz];
+                                let before_c1 = &remaining[..(sz - 1)];
                                 remaining = &remaining[(sz + 1)..];
-                                match before.chars().last() {
-                                    Some(x) if x == '\\' => {}
+                                match (before_c0.chars().last(), before_c1.chars().last()) {
+                                    (Some(x), _) if x == '\\' => {}
+                                    (Some(x), Some(y)) if x == '\r' && y == '\\' => {}
                                     _ => break,
                                 }
                             }
