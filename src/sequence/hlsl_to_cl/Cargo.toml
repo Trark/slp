@@ -1,46 +1,43 @@
 [package]
-name = "slp"
+name = "slp_sequence_hlsl_to_cl"
 version = "0.1.0"
 authors = ["Trark"]
 
 [dependencies.slp_shared]
-path = "src/shared"
+path = "../../shared"
 
 [dependencies.slp_lang_htk]
-path = "src/lang/hir"
+path = "../../lang/htk"
 
 [dependencies.slp_lang_hst]
-path = "src/lang/hst"
+path = "../../lang/hst"
 
 [dependencies.slp_lang_hir]
-path = "src/lang/hir"
+path = "../../lang/hir"
 
 [dependencies.slp_lang_cil]
-path = "src/lang/cil"
+path = "../../lang/cil"
 
 [dependencies.slp_lang_cst]
-path = "src/lang/cst"
+path = "../../lang/cst"
 
 [dependencies.slp_transform_preprocess]
-path = "src/transform/preprocess"
+path = "../../transform/preprocess"
 
 [dependencies.slp_transform_lexer]
-path = "src/transform/lexer"
+path = "../../transform/lexer"
 
 [dependencies.slp_transform_htk_to_hst]
-path = "src/transform/htk_to_hst"
+path = "../../transform/htk_to_hst"
 
 [dependencies.slp_transform_hst_to_hir]
-path = "src/transform/hst_to_hir"
+path = "../../transform/hst_to_hir"
 
 [dependencies.slp_transform_hir_to_cil]
-path = "src/transform/hir_to_cil"
+path = "../../transform/hir_to_cil"
 
 [dependencies.slp_transform_cil_to_cst]
-path = "src/transform/cil_to_cst"
+path = "../../transform/cil_to_cst"
 
 [dependencies.slp_transform_cst_printer]
-path = "src/transform/cst_printer"
-
-[dependencies.slp_sequence_hlsl_to_cl]
-path = "src/sequence/hlsl_to_cl"
+path = "../../transform/cst_printer"

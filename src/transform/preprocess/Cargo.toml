@@ -1,0 +1,7 @@
+[package]
+name = "slp_transform_preprocess"
+version = "0.1.0"
+authors = ["Trark"]
+
+[dependencies.slp_shared]
+path = "../../shared"

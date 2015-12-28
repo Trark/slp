@@ -1,7 +1,7 @@
 
 extern crate rustc_serialize;
 extern crate docopt;
-extern crate slp;
+extern crate slp_sequence_hlsl_to_cl;
 
 use std::io::Read;
 use std::io::Write;
@@ -9,7 +9,7 @@ use std::fs::File;
 use std::path::Path;
 use std::path::PathBuf;
 use docopt::Docopt;
-use slp::IncludeHandler;
+use slp_sequence_hlsl_to_cl::*;
 
 const USAGE: &'static str = "
 Slipstream HLSL to OpenCL Compiler
@@ -22,7 +22,7 @@ Options:
   -h --help                    Show help.
   --entry-point <entry_point>  Entry function [default: CSMAIN].
   -o <output_file>             Output file.
-  -I <include_path>         Path to search for includes in.
+  -I <include_path>            Path to search for includes in.
 ";
 
 #[derive(Debug, RustcDecodable)]
@@ -68,9 +68,6 @@ impl IncludeHandler for FileLoader {
 }
 
 fn main() {
-    use slp::Input;
-    use slp::hlsl_to_cl;
-
     let args: Args = Docopt::new(USAGE).and_then(|d| d.decode()).unwrap_or_else(|e| e.exit());
     let Args {
         flag_entry_point,

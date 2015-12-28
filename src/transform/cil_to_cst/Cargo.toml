@@ -1,0 +1,13 @@
+[package]
+name = "slp_transform_cil_to_cst"
+version = "0.1.0"
+authors = ["Trark"]
+
+[dependencies.slp_shared]
+path = "../../shared"
+
+[dependencies.slp_lang_cil]
+path = "../../lang/cil"
+
+[dependencies.slp_lang_cst]
+path = "../../lang/cst"

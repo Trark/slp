@@ -7,5 +7,5 @@ authors = ["Trark"]
 docopt = "0.6.0"
 rustc-serialize = "0.3"
 
-[dependencies.slp]
-path = "../"
+[dependencies.slp_sequence_hlsl_to_cl]
+path = "../src/sequence/hlsl_to_cl"

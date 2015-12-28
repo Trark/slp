@@ -1,0 +1,7 @@
+[package]
+name = "slp_lang_cst"
+version = "0.1.0"
+authors = ["Trark"]
+
+[dependencies.slp_shared]
+path = "../../shared"

@@ -1,0 +1,4 @@
+[package]
+name = "slp_shared"
+version = "0.1.0"
+authors = ["Trark"]

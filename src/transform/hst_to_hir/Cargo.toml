@@ -1,0 +1,13 @@
+[package]
+name = "slp_transform_hst_to_hir"
+version = "0.1.0"
+authors = ["Trark"]
+
+[dependencies.slp_shared]
+path = "../../shared"
+
+[dependencies.slp_lang_hst]
+path = "../../lang/hst"
+
+[dependencies.slp_lang_hir]
+path = "../../lang/hir"

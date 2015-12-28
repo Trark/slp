@@ -1,0 +1,22 @@
+[package]
+name = "slp_transform_htk_to_hst"
+version = "0.1.0"
+authors = ["Trark"]
+
+[dependencies]
+nom = "1.0.0"
+
+[dependencies.slp_shared]
+path = "../../shared"
+
+[dependencies.slp_lang_htk]
+path = "../../lang/htk"
+
+[dependencies.slp_lang_hst]
+path = "../../lang/hst"
+
+[dependencies.slp_transform_preprocess]
+path = "../../transform/preprocess"
+
+[dependencies.slp_transform_lexer]
+path = "../../transform/lexer"

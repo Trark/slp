@@ -1,0 +1,10 @@
+[package]
+name = "slp_lang_hir"
+version = "0.1.0"
+authors = ["Trark"]
+
+[dependencies.slp_shared]
+path = "../../shared"
+
+[dependencies.slp_lang_hst]
+path = "../hst"

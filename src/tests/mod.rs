@@ -1,9 +1,12 @@
 
 use std::collections::HashMap;
-use Input;
-use NullIncludeHandler;
-use hlsl_to_cl;
-use BindMap;
+use slp_sequence_hlsl_to_cl::Input;
+use slp_shared::IncludeHandler;
+use slp_shared::NullIncludeHandler;
+use slp_sequence_hlsl_to_cl::hlsl_to_cl;
+use slp_shared::BindMap;
+
+mod cs1;
 
 fn run_input(input: Input, cl: &'static str, binds: BindMap) {
     let code_result = hlsl_to_cl(input);
@@ -84,8 +87,6 @@ fn swizzle_full() {
 
 #[test]
 fn include() {
-    use IncludeHandler;
-
     const HLSL_MAIN: &'static str = include_str!("include_main.hlsl");
     const CL: &'static str = include_str!("include.cl");
 
