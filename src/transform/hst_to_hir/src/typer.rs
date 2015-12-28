@@ -1766,7 +1766,9 @@ fn parse_expr_binop(op: &ast::BinOp,
                                                                       Box::new(rhs_final)),
                                       ir::Type::bool().to_rvalue()))
         }
-        ast::BinOp::Assignment => {
+        ast::BinOp::Assignment |
+        ast::BinOp::SumAssignment |
+        ast::BinOp::DifferenceAssignment => {
             let required_rtype = match lhs_type.1 {
                 ir::ValueType::Lvalue => ExpressionType(lhs_type.0.clone(), ir::ValueType::Rvalue),
                 _ => return Err(TyperError::LvalueRequired),

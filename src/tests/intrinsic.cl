@@ -73,6 +73,8 @@ kernel void MyKernel(__global uint4* g_roBuffer, __global struct testStruct* g_r
 	j = +i;
 	j = -i;
 	j = ~i;
+	j += i;
+	j -= i;
 	int i1;
 	int2 i2;
 	int3 i3;
@@ -83,6 +85,8 @@ kernel void MyKernel(__global uint4* g_roBuffer, __global struct testStruct* g_r
 	uint3 u3;
 	uint4 u4;
 	float f = 0.0f;
+	j += (int)f;
+	j -= (int)f;
 	float f1;
 	float2 f2;
 	float3 f3;

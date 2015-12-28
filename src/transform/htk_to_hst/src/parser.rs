@@ -792,13 +792,19 @@ fn expr_p13(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, Par
 }
 
 fn expr_p15(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, ParseErrorReason> {
+
+    fn op_p15(input: &[LexToken]) -> IResult<&[LexToken], BinOp, ParseErrorReason> {
+        alt!(input,
+             token!(LexToken(Token::Equals, _) => BinOp::Assignment) |
+             chain!(token!(Token::Plus) ~ token!(Token::Equals), || BinOp::SumAssignment) |
+             chain!(token!(Token::Minus) ~ token!(Token::Equals), || BinOp::DifferenceAssignment))
+    }
+
     alt!(input,
-        chain!(lhs: expr_p13 ~ token!(Token::Equals) ~ rhs: expr_p15, || {
+         chain!(lhs: expr_p13 ~ op: op_p15 ~ rhs: expr_p15, || {
             let loc = lhs.location.clone();
-            Located::new(Expression::BinaryOperation(BinOp::Assignment, Box::new(lhs), Box::new(rhs)), loc)
-        }) |
-        expr_p13
-    )
+            Located::new(Expression::BinaryOperation(op, Box::new(lhs), Box::new(rhs)), loc)
+        }) | expr_p13)
 }
 
 fn expr(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, ParseErrorReason> {
@@ -1552,6 +1558,20 @@ fn test_expr() {
             bexp_var("c", 1, 9)
         )))
     )));
+
+    assert_eq!(expr_str("a += b"),
+               Located::loc(1,
+                            1,
+                            Expression::BinaryOperation(BinOp::SumAssignment,
+                                                        bexp_var("a", 1, 1),
+                                                        bexp_var("b", 1, 6))));
+
+    assert_eq!(expr_str("a -= b"),
+               Located::loc(1,
+                            1,
+                            Expression::BinaryOperation(BinOp::DifferenceAssignment,
+                                                        bexp_var("a", 1, 1),
+                                                        bexp_var("b", 1, 6))));
 
     assert_eq!(expr_str("a ? b : c"),
                Located::loc(1,

@@ -314,6 +314,8 @@ pub enum BinOp {
     Equality,
     Inequality,
     Assignment,
+    SumAssignment,
+    DifferenceAssignment,
 }
 
 #[derive(PartialEq, Debug, Clone)]

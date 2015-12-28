@@ -84,6 +84,8 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     j = +i;
     j = -i;
     j = ~i;
+    j += i;
+    j -= i;
     int1 i1;
     int2 i2;
     int3 i3;
@@ -94,6 +96,8 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     uint3 u3;
     uint4 u4;
     float f = 0.0;
+    j += f;
+    j -= f;
     float1 f1;
     float2 f2;
     float3 f3;

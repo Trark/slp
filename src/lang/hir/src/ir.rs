@@ -990,7 +990,9 @@ impl TypeParser {
                         Ok(ExpressionType(base_type, ValueType::Rvalue))
                     }
 
-                    BinOp::Assignment => TypeParser::get_expression_type(expr, context),
+                    BinOp::Assignment |
+                    BinOp::SumAssignment |
+                    BinOp::DifferenceAssignment => TypeParser::get_expression_type(expr, context),
 
                     BinOp::LessThan |
                     BinOp::LessEqual |

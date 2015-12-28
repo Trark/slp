@@ -791,6 +791,8 @@ fn transpile_binop(binop: &src::BinOp) -> Result<dst::BinOp, TranspileError> {
         src::BinOp::Equality => Ok(dst::BinOp::Equality),
         src::BinOp::Inequality => Ok(dst::BinOp::Inequality),
         src::BinOp::Assignment => Ok(dst::BinOp::Assignment),
+        src::BinOp::SumAssignment => Ok(dst::BinOp::SumAssignment),
+        src::BinOp::DifferenceAssignment => Ok(dst::BinOp::DifferenceAssignment),
     }
 }
 

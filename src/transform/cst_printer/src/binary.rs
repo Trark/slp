@@ -192,6 +192,8 @@ fn print_binaryoperation(binop: &BinOp,
         BinOp::Equality => "==",
         BinOp::Inequality => "!=",
         BinOp::Assignment => "=",
+        BinOp::SumAssignment => "+=",
+        BinOp::DifferenceAssignment => "-=",
     };
 
     let op_prec = match *binop {
@@ -214,6 +216,8 @@ fn print_binaryoperation(binop: &BinOp,
         BinOp::Equality => 7,
         BinOp::Inequality => 7,
         BinOp::Assignment => 14,
+        BinOp::SumAssignment => 14,
+        BinOp::DifferenceAssignment => 14,
     };
 
     if last_precedence <= op_prec {
