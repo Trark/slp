@@ -193,6 +193,7 @@ pub enum Statement {
     Var(VarDef),
     Block(Vec<Statement>),
     If(Expression, Box<Statement>),
+    IfElse(Expression, Box<Statement>, Box<Statement>),
     For(InitStatement, Expression, Expression, Box<Statement>),
     While(Expression, Box<Statement>),
     Return(Expression),

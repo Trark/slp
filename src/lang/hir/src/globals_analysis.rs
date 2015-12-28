@@ -152,6 +152,11 @@ fn search_statement(statement: &Statement, usage: &mut LocalFunctionGlobalUsage)
             search_expression(cond, usage);
             search_scope_block(sb, usage);
         }
+        Statement::IfElse(ref cond, ref true_sb, ref false_sb) => {
+            search_expression(cond, usage);
+            search_scope_block(true_sb, usage);
+            search_scope_block(false_sb, usage);
+        }
         Statement::For(ref init, ref cond, ref update, ref sb) => {
             search_initexpression(init, usage);
             search_expression(cond, usage);

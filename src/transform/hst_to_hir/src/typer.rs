@@ -2164,6 +2164,15 @@ fn parse_statement(ast: &ast::Statement,
             let scope_block = try!(parse_scopeblock(statement, scoped_context));
             Ok((vec![ir::Statement::If(cond_ir, scope_block)], context))
         }
+        &ast::Statement::IfElse(ref cond, ref true_statement, ref false_statement) => {
+            let cond_ir = try!(parse_expr_value_only(cond, &context));
+            let scoped_context = ScopeContext::from_scope(&context);
+            let scope_block = try!(parse_scopeblock(true_statement, scoped_context));
+            let scoped_context = ScopeContext::from_scope(&context);
+            let else_block = try!(parse_scopeblock(false_statement, scoped_context));
+            Ok((vec![ir::Statement::IfElse(cond_ir, scope_block, else_block)],
+                context))
+        }
         &ast::Statement::For(ref init, ref cond, ref iter, ref statement) => {
             let scoped_context = ScopeContext::from_scope(&context);
             let (init_ir, scoped_context) = try!(parse_for_init(init, scoped_context));

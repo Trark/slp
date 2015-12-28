@@ -405,6 +405,7 @@ pub enum Statement {
     Var(VarDef),
     Block(Vec<Statement>),
     If(Located<Expression>, Box<Statement>),
+    IfElse(Located<Expression>, Box<Statement>, Box<Statement>),
     For(InitStatement, Located<Expression>, Located<Expression>, Box<Statement>),
     While(Located<Expression>, Box<Statement>),
     Return(Located<Expression>),

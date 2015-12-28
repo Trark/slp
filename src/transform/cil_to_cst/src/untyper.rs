@@ -386,6 +386,11 @@ fn untype_statement(statement: &src::Statement,
             dst::Statement::If(try!(untype_expression(cond, context)),
                                Box::new(try!(untype_statement(statement, context))))
         }
+        src::Statement::IfElse(ref cond, ref true_st, ref false_st) => {
+            dst::Statement::IfElse(try!(untype_expression(cond, context)),
+                                   Box::new(try!(untype_statement(true_st, context))),
+                                   Box::new(try!(untype_statement(false_st, context))))
+        }
         src::Statement::For(ref init, ref cond, ref update, ref statement) => {
             dst::Statement::For(try!(untype_init_expression(init, context)),
                                 try!(untype_expression(cond, context)),

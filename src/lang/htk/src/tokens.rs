@@ -68,6 +68,7 @@ pub enum Token {
     ExclamationEquals,
 
     If,
+    Else,
     For,
     While,
     Switch,

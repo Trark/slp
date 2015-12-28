@@ -1292,6 +1292,24 @@ fn transpile_statement(statement: &src::Statement,
             context.pop_scope();
             Ok(vec![dst::Statement::If(cl_cond, Box::new(dst::Statement::Block(cl_statements)))])
         }
+        &src::Statement::IfElse(ref cond, ref true_block, ref false_block) => {
+            let &src::ScopeBlock(ref true_statements, _) = true_block;
+            let &src::ScopeBlock(ref false_statements, _) = false_block;
+            // Condition
+            let cl_cond = try!(transpile_expression(cond, context));
+            // True part
+            context.push_scope(true_block);
+            let cl_true_statements = try!(transpile_statements(true_statements, context));
+            context.pop_scope();
+            // False part
+            context.push_scope(false_block);
+            let cl_false_statements = try!(transpile_statements(false_statements, context));
+            context.pop_scope();
+            // Combine
+            Ok(vec![dst::Statement::IfElse(cl_cond,
+                                           Box::new(dst::Statement::Block(cl_true_statements)),
+                                           Box::new(dst::Statement::Block(cl_false_statements)))])
+        }
         &src::Statement::For(ref init, ref cond, ref update, ref scope_block) => {
             let &src::ScopeBlock(ref statements, _) = scope_block;
             context.push_scope(scope_block);

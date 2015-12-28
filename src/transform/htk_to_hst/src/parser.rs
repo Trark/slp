@@ -857,13 +857,40 @@ fn statement(input: &[LexToken]) -> IResult<&[LexToken], Statement, ParseErrorRe
         match head {
             LexToken(Token::Semicolon, _) => IResult::Done(tail, Statement::Empty),
             LexToken(Token::If, _) => {
-                chain!(tail,
+                let if_part = chain!(tail,
                     token!(Token::LeftParen) ~
                     cond: expr ~
                     token!(Token::RightParen) ~
                     inner_statement: statement,
                     || Statement::If(cond, Box::new(inner_statement))
-                )
+                );
+                match if_part {
+                    IResult::Incomplete(rem) => IResult::Incomplete(rem),
+                    IResult::Error(err) => IResult::Error(err),
+                    IResult::Done(rest, Statement::If(cond, first)) => {
+                        if input.len() == 0 {
+                            IResult::Incomplete(Needed::Size(1))
+                        } else {
+                            let (head, tail) = (rest[0].clone(), &rest[1..]);
+                            match head {
+                                LexToken(Token::Else, _) => {
+                                    match statement(tail) {
+                                        IResult::Incomplete(rem) => IResult::Incomplete(rem),
+                                        IResult::Error(err) => IResult::Error(err),
+                                        IResult::Done(rest, else_part) => {
+                                            let s = Statement::IfElse(cond,
+                                                                      first,
+                                                                      Box::new(else_part));
+                                            IResult::Done(rest, s)
+                                        }
+                                    }
+                                }
+                                _ => IResult::Done(rest, Statement::If(cond, first)),
+                            }
+                        }
+                    }
+                    _ => unreachable!(),
+                }
             }
             LexToken(Token::For, _) => {
                 chain!(tail,
@@ -1695,6 +1722,14 @@ fn test_statement() {
             Statement::Expression(Located::loc(3, 2, Expression::Call(bexp_var("one", 3, 2), vec![]))),
             Statement::Expression(Located::loc(4, 2, Expression::Call(bexp_var("two", 4, 2), vec![])))
         ])))
+    );
+
+    // If-else statement
+    assert_eq!(statement_str("if (a) one(); else two();"),
+        Statement::IfElse(exp_var("a", 1, 5),
+            Box::new(Statement::Expression(Located::loc(1, 8, Expression::Call(bexp_var("one", 1, 8), vec![])))),
+            Box::new(Statement::Expression(Located::loc(1, 20, Expression::Call(bexp_var("two", 1, 20), vec![]))))
+        )
     );
 
     // While loops

@@ -591,6 +591,7 @@ pub enum Statement {
     Var(VarDef),
     Block(ScopeBlock),
     If(Expression, ScopeBlock),
+    IfElse(Expression, ScopeBlock, ScopeBlock),
     For(ForInit, Expression, Expression, ScopeBlock),
     While(Expression, ScopeBlock),
     Return(Expression),

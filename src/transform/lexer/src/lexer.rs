@@ -277,6 +277,7 @@ named!(whitespace<()>, map_res!(
 
 // Reserved words
 named!(reserved_word_if, complete!(tag!("if")));
+named!(reserved_word_else, complete!(tag!("else")));
 named!(reserved_word_for, complete!(tag!("for")));
 named!(reserved_word_while, complete!(tag!("while")));
 named!(reserved_word_switch, complete!(tag!("switch")));
@@ -334,6 +335,7 @@ named!(reserved_word_virtual, complete!(tag!("virtual")));
 
 named!(reserved_word_s0, alt!(
     reserved_word_if |
+    reserved_word_else |
     reserved_word_for |
     reserved_word_while |
     reserved_word_switch |
@@ -501,6 +503,7 @@ named!(token_no_whitespace_symbols<Token>, alt!(
 
 named!(token_no_whitespace_words<Token>, alt!(
     reserved_word_if => { |_| { Token::If } } |
+    reserved_word_else => { |_| { Token::Else } } |
     reserved_word_for => { |_| { Token::For } } |
     reserved_word_while => { |_| { Token::While } } |
     reserved_word_switch => { |_| { Token::Switch } } |
@@ -700,6 +703,19 @@ fn test_token() {
                IResult::Done(&b""[..], from_end(Token::Tilde, 1)));
     assert_eq!(token(&b"."[..]),
                IResult::Done(&b""[..], from_end(Token::Period, 1)));
+
+    assert_eq!(token(&b"if"[..]),
+               IResult::Done(&b""[..], from_end(Token::If, 2)));
+    assert_eq!(token(&b"else"[..]),
+               IResult::Done(&b""[..], from_end(Token::Else, 4)));
+    assert_eq!(token(&b"for"[..]),
+               IResult::Done(&b""[..], from_end(Token::For, 3)));
+    assert_eq!(token(&b"while"[..]),
+               IResult::Done(&b""[..], from_end(Token::While, 5)));
+    assert_eq!(token(&b"switch"[..]),
+               IResult::Done(&b""[..], from_end(Token::Switch, 6)));
+    assert_eq!(token(&b"return"[..]),
+               IResult::Done(&b""[..], from_end(Token::Return, 6)));
 
     assert_eq!(token(&b"struct"[..]),
                IResult::Done(&b""[..], from_end(Token::Struct, 6)));

@@ -535,6 +535,17 @@ fn print_statement(statement: &Statement, printer: &mut Printer) {
             printer.print(")");
             print_statement(statement, printer);
         }
+        &Statement::IfElse(ref cond, ref true_st, ref false_st) => {
+            printer.print("if");
+            printer.space();
+            printer.print("(");
+            print_expression(cond, printer);
+            printer.print(")");
+            print_statement(true_st, printer);
+            printer.line();
+            printer.print("else");
+            print_statement(false_st, printer);
+        }
         &Statement::For(ref init, ref cond, ref update, ref statement) => {
             printer.print("for");
             printer.space();
