@@ -34,6 +34,12 @@ pub struct Column(pub u64);
 #[derive(PartialEq, Debug, Clone)]
 pub struct FileLocation(pub File, pub Line, pub Column);
 
+impl FileLocation {
+    fn none() -> FileLocation {
+        FileLocation(File::Unknown, Line(0), Column(0))
+    }
+}
+
 /// The raw number of bytes from the start of a stream
 #[derive(PartialEq, Debug, Clone)]
 pub struct StreamLocation(pub u64);
@@ -65,7 +71,7 @@ impl<T> Located<T> {
     fn none(node: T) -> Located<T> {
         Located {
             node: node,
-            location: FileLocation(File::Unknown, Line(0), Column(0)),
+            location: FileLocation::none(),
         }
     }
 }

@@ -1,6 +1,9 @@
 
 void test(uint x)
 {
+	x = (uint)1;
+	x = (uint)1;
+	x = 1u + 2u;
 }
 
 __attribute__((reqd_work_group_size(8, 8, 1)))
