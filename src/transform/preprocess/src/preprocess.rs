@@ -8,10 +8,19 @@ pub enum PreprocessError {
     UnknownCommand,
     InvalidInclude,
     InvalidDefine,
+    MacroAlreadyDefined(String),
     MacroRequiresArguments,
     MacroArgumentsNeverEnd,
     MacroExpectsDifferentNumberOfArguments,
     FailedToFindFile,
+    InvalidIf(String),
+    FailedToParseIfCondition(String),
+    InvalidIfndef(String),
+    InvalidElse,
+    InvalidEndIf,
+    ConditionChainNotFinished,
+    ElseNotMatched,
+    EndIfNotMatched,
 }
 
 impl error::Error for PreprocessError {
@@ -20,12 +29,21 @@ impl error::Error for PreprocessError {
             PreprocessError::UnknownCommand => "unknown preprocessor command",
             PreprocessError::InvalidInclude => "invalid #include command",
             PreprocessError::InvalidDefine => "invalid #define command",
+            PreprocessError::MacroAlreadyDefined(_) => "macro already defined",
             PreprocessError::MacroRequiresArguments => "macro function requires arguments",
             PreprocessError::MacroArgumentsNeverEnd => "expected end of macro arguments",
             PreprocessError::MacroExpectsDifferentNumberOfArguments => {
                 "macro requires different number of arguments"
             }
             PreprocessError::FailedToFindFile => "could not find file",
+            PreprocessError::InvalidIf(_) => "invalid #if",
+            PreprocessError::FailedToParseIfCondition(_) => "#if condition parser failed",
+            PreprocessError::InvalidIfndef(_) => "invalid #ifndef",
+            PreprocessError::InvalidElse => "invalid #else",
+            PreprocessError::InvalidEndIf => "invalid #endif",
+            PreprocessError::ConditionChainNotFinished => "not enough #endif's encountered",
+            PreprocessError::ElseNotMatched => "encountered #else but with no matching #if",
+            PreprocessError::EndIfNotMatched => "encountered #endif but with no matching #if",
         }
     }
 }
@@ -459,6 +477,40 @@ fn macro_resolve() {
         "(A || (0 && 1)) && 1");
 }
 
+/// Stores the active #if blocks
+struct ConditionChain(Vec<bool>);
+
+impl ConditionChain {
+    fn new() -> ConditionChain {
+        ConditionChain(vec![])
+    }
+
+    fn push(&mut self, gate: bool) {
+        self.0.push(gate);
+    }
+
+    fn switch(&mut self) -> Result<(), PreprocessError> {
+        match self.0.pop() {
+            Some(val) => {
+                self.0.push(!val);
+                Ok(())
+            }
+            None => Err(PreprocessError::ElseNotMatched),
+        }
+    }
+
+    fn pop(&mut self) -> Result<(), PreprocessError> {
+        match self.0.pop() {
+            Some(_) => Ok(()),
+            None => Err(PreprocessError::EndIfNotMatched),
+        }
+    }
+
+    fn is_active(&self) -> bool {
+        self.0.iter().fold(true, |acc, gate| acc && *gate)
+    }
+}
+
 fn build_file_linemap(file_contents: &str, file_name: File) -> LineMap {
     let mut line_map = LineMap { lines: vec![] };
     let file_length = file_contents.len() as u64;
@@ -481,13 +533,58 @@ fn build_file_linemap(file_contents: &str, file_name: File) -> LineMap {
     line_map
 }
 
+// Function to find end of definition past escaped endlines
+fn find_macro_end(mut remaining: &str) -> usize {
+    let initial_length = remaining.len();
+    loop {
+        match remaining.find('\n') {
+            Some(sz) => {
+                let before_c0 = &remaining[..sz];
+                let before_c1 = if sz > 0 {
+                    &remaining[..(sz - 1)]
+                } else {
+                    ""
+                };
+                remaining = &remaining[(sz + 1)..];
+                match (before_c0.chars().last(), before_c1.chars().last()) {
+                    (Some(x), _) if x == '\\' => {}
+                    (Some(x), Some(y)) if x == '\r' && y == '\\' => {}
+                    _ => break,
+                }
+            }
+            None => {
+                return remaining.len();
+            }
+        }
+    }
+    initial_length - remaining.len() - 1
+}
+
+fn get_normal_end(remaining: &str) -> &str {
+    let len = match remaining.find('\n') {
+        Some(sz) => sz + 1,
+        None => remaining.len(),
+    };
+    &remaining[len..]
+}
+
+fn get_macro_end(remaining: &str) -> &str {
+    let len = find_macro_end(remaining) + 1;
+    &remaining[len..]
+}
+
 fn preprocess_command<'a>(buffer: &mut IntermediateText,
                           include_handler: &IncludeHandler,
                           command: &'a str,
                           location: FileLocation,
-                          macros: &mut Vec<Macro>)
+                          macros: &mut Vec<Macro>,
+                          condition_chain: &mut ConditionChain)
                           -> Result<&'a str, PreprocessError> {
+    let skip = !condition_chain.is_active();
     if command.starts_with("include") {
+        if skip {
+            return Ok(get_normal_end(command));
+        }
         let next = &command[7..];
         match next.chars().next() {
             Some(' ') | Some('\t') | Some('"') | Some('<') => {
@@ -508,12 +605,33 @@ fn preprocess_command<'a>(buffer: &mut IntermediateText,
                         // Include the file
                         match include_handler.load(file_name) {
                             Ok(file) => {
-                                try!(preprocess_file(buffer, include_handler, &file, macros));
-                                // Push a new line so the last line of the include file is on a
-                                // separate line to the first line after the #include
-                                buffer.push_str("\n", location);
+                                try!(preprocess_file(buffer,
+                                                     include_handler,
+                                                     &file,
+                                                     macros,
+                                                     condition_chain));
 
-                                Ok(&args[(sz + 1)..])
+
+
+                                let next = &args[(sz + 1)..];
+                                let end = match next.find('\n') {
+                                    Some(sz) => {
+                                        // Push a new line so the last line of the include file is on a
+                                        // separate line to the first line after the #include
+                                        buffer.push_str("\n", location);
+                                        sz + 1
+                                    }
+                                    None => next.len(),
+                                };
+                                let remains = &next[..end].trim();
+                                if remains.len() != 0 && !remains.starts_with("//") {
+                                    return Err(PreprocessError::InvalidInclude);
+                                }
+
+                                let next = &next[end..];
+
+
+                                Ok(next)
                             }
                             Err(()) => return Err(PreprocessError::FailedToFindFile),
                         }
@@ -523,13 +641,114 @@ fn preprocess_command<'a>(buffer: &mut IntermediateText,
             }
             _ => return Err(PreprocessError::InvalidInclude),
         }
+    } else if command.starts_with("ifdef") || command.starts_with("ifndef") {
+        if skip {
+            condition_chain.push(false);
+            return Ok(get_normal_end(command));
+        }
+        let not = command.starts_with("ifndef");
+        let next = if not {
+            &command[6..]
+        } else {
+            &command[5..]
+        };
+        match next.chars().next() {
+            Some(' ') | Some('\t') => {
+                let args = next.trim_left();
+                let end = match args.find('\n') {
+                    Some(sz) => sz + 1,
+                    _ => return Err(PreprocessError::InvalidIfndef(command.to_string())),
+                };
+                let body = &args[..end].trim();
+
+                let exists = macros.iter().fold(false, |acc, m| acc || &m.0 == body);
+                condition_chain.push(if not {
+                    !exists
+                } else {
+                    exists
+                });
+
+                let remaining = &args[end..];
+                Ok(remaining)
+            }
+            _ => return Err(PreprocessError::InvalidIfndef(command.to_string())),
+        }
     } else if command.starts_with("if") {
-        panic!("unimplemented: #if")
+        if skip {
+            condition_chain.push(false);
+            return Ok(get_normal_end(command));
+        }
+        let next = &command[2..];
+        match next.chars().next() {
+            Some(' ') | Some('\t') | Some('(') => {
+                let args = next.trim_left();
+                let end = match args.find('\n') {
+                    Some(sz) => sz + 1,
+                    _ => return Err(PreprocessError::InvalidIf(command.to_string())),
+                };
+                let body = &args[..end].trim();
+                let remaining = &args[end..];
+
+                let resolved = try!(SubstitutedText::new(body, StreamLocation(0))
+                                        .apply_all(macros))
+                                   .resolve();
+
+                let active = {
+                    use condition_parser::parse;
+                    try!(parse(&resolved))
+                };
+                condition_chain.push(active);
+
+                Ok(remaining)
+            }
+            _ => return Err(PreprocessError::InvalidIf(command.to_string())),
+        }
     } else if command.starts_with("else") {
-        panic!("unimplemented: #else")
+        let next = &command[4..];
+        match next.chars().next() {
+            Some(' ') | Some('\t') | Some('\n') | Some('\r') => {
+                let args = next;
+                let end = match args.find('\n') {
+                    Some(sz) => sz + 1,
+                    _ => return Err(PreprocessError::InvalidElse),
+                };
+                let body = &args[..end].trim();
+                if body.len() != 0 {
+                    return Err(PreprocessError::InvalidElse);
+                }
+
+                try!(condition_chain.switch());
+
+                let remaining = &args[end..];
+                Ok(remaining)
+            }
+            _ => return Err(PreprocessError::InvalidElse),
+        }
     } else if command.starts_with("endif") {
-        panic!("unimplemented: #endif")
+        let next = &command[5..];
+        match next.chars().next() {
+            Some(' ') | Some('\t') | Some('\n') | Some('\r') | None => {
+                let args = next;
+                let end = match args.find('\n') {
+                    Some(sz) => sz + 1,
+                    None => args.len(),
+                };
+                let body = &args[..end].trim();
+                if body.len() != 0 && !body.starts_with("//") {
+                    return Err(PreprocessError::InvalidEndIf);
+                }
+
+                try!(condition_chain.pop());
+
+                let remaining = &args[end..];
+                Ok(remaining)
+            }
+            _ => return Err(PreprocessError::InvalidEndIf),
+        }
     } else if command.starts_with("define") {
+        if skip {
+            return Ok(get_macro_end(command));
+        }
         let next = &command[6..];
         match next.chars().next() {
             Some(' ') | Some('\t') => {
@@ -564,60 +783,32 @@ fn preprocess_command<'a>(buffer: &mut IntermediateText,
                 let header = &header_start[..(header_start.len() - remaining.len())];
 
                 // Consume gap between macro name/args and body
-                match remaining.chars().next() {
-                    Some(' ') | Some('\t') => {
+                let (body, remaining) = match remaining.chars().next() {
+                    Some(' ') | Some('\t') | Some('\r') => {
                         remaining = &remaining[1..];
+                        let sz = find_macro_end(remaining);
+                        let body = &remaining[..sz];
+                        (body, &remaining[(sz + 1)..])
                     }
+                    Some('\n') => (&remaining[..1], &remaining[1..]),
+                    None => ("", ""),
                     _ => return Err(PreprocessError::InvalidDefine),
                 };
 
-                // Consume up to first real char in body
-                remaining = remaining.trim_left();
+                let body = body.trim().replace("\\\n", "\n").replace("\\\r\n", "\r\n");
+                let subbed_body = try!(SubstitutedText::new(&body, StreamLocation(0))
+                                           .apply_all(&macros))
+                                      .resolve();
+                let macro_def = try!(Macro::from_definition(&header, &subbed_body, location));
 
-                fn find_macro_end(mut remaining: &str) -> Option<usize> {
-                    let initial_length = remaining.len();
-                    loop {
-                        match remaining.find('\n') {
-                            Some(sz) => {
-                                let before_c0 = &remaining[..sz];
-                                let before_c1 = &remaining[..(sz - 1)];
-                                remaining = &remaining[(sz + 1)..];
-                                match (before_c0.chars().last(), before_c1.chars().last()) {
-                                    (Some(x), _) if x == '\\' => {}
-                                    (Some(x), Some(y)) if x == '\r' && y == '\\' => {}
-                                    _ => break,
-                                }
-                            }
-                            _ => return None,
-                        }
+                for current_macro in macros.iter() {
+                    if *current_macro.0 == macro_def.0 {
+                        return Err(PreprocessError::MacroAlreadyDefined(current_macro.0.clone()));
                     }
-                    Some(initial_length - remaining.len() - 1)
                 }
+                macros.push(macro_def);
 
-                match find_macro_end(remaining) {
-                    Some(sz) => {
-                        let body = &remaining[..sz]
-                                        .trim()
-                                        .replace("\\\n", "\n")
-                                        .replace("\\\r\n", "\n");
-                        let subbed_body = try!(SubstitutedText::new(body, StreamLocation(0))
-                                                   .apply_all(&macros))
-                                              .resolve();
-                        let macro_def = try!(Macro::from_definition(&header,
-                                                                    &subbed_body,
-                                                                    location));
-
-                        for current_macro in macros.iter() {
-                            if *current_macro.0 == macro_def.0 {
-                                return Err(PreprocessError::InvalidDefine);
-                            }
-                        }
-                        macros.push(macro_def);
-
-                        Ok(&remaining[(sz + 1)..])
-                    }
-                    None => return Err(PreprocessError::InvalidDefine),
-                }
+                Ok(remaining)
             }
             _ => return Err(PreprocessError::InvalidDefine),
         }
@@ -629,7 +820,8 @@ fn preprocess_command<'a>(buffer: &mut IntermediateText,
 fn preprocess_file(buffer: &mut IntermediateText,
                    include_handler: &IncludeHandler,
                    file: &str,
-                   macros: &mut Vec<Macro>)
+                   macros: &mut Vec<Macro>,
+                   condition_chain: &mut ConditionChain)
                    -> Result<(), PreprocessError> {
 
     let line_map = build_file_linemap(file, File::Unknown);
@@ -649,7 +841,8 @@ fn preprocess_file(buffer: &mut IntermediateText,
                                              include_handler,
                                              command,
                                              file_location,
-                                             macros));
+                                             macros,
+                                             condition_chain));
         } else {
 
             fn find_region(mut stream: &str) -> (usize, bool) {
@@ -673,8 +866,10 @@ fn preprocess_file(buffer: &mut IntermediateText,
             let (sz, final_segment) = find_region(stream);
             let line = &stream[..sz];
             stream = &stream[sz..];
-            try!(SubstitutedText::new(line, stream_location_in_file).apply_all(macros))
-                .store(buffer, &line_map);
+            if condition_chain.is_active() {
+                try!(SubstitutedText::new(line, stream_location_in_file).apply_all(macros))
+                    .store(buffer, &line_map);
+            }
             if final_segment {
                 break;
             }
@@ -690,11 +885,123 @@ pub fn preprocess(input: &str,
 
     let mut intermediate_text = IntermediateText::new();
     let mut macros = vec![];
-    try!(preprocess_file(&mut intermediate_text, include_handler, input, &mut macros));
+    let mut condition_chain = ConditionChain::new();
+    try!(preprocess_file(&mut intermediate_text,
+                         include_handler,
+                         input,
+                         &mut macros,
+                         &mut condition_chain));
+
+    if condition_chain.0.len() != 0 {
+        return Err(PreprocessError::ConditionChainNotFinished);
+    }
 
     Ok(PreprocessedText::from_intermediate_text(intermediate_text))
 }
 
 pub fn preprocess_single(input: &str) -> Result<PreprocessedText, PreprocessError> {
     preprocess(input, &NullIncludeHandler)
+}
+
+#[test]
+fn test_empty() {
+    assert_eq!(preprocess_single("").unwrap().code, b"");
+    assert_eq!(preprocess_single("test").unwrap().code, b"test");
+    assert_eq!(preprocess_single("t1\nt2").unwrap().code, b"t1\nt2");
+    assert_eq!(preprocess_single("t1\r\nt2").unwrap().code, b"t1\r\nt2");
+}
+
+#[test]
+fn test_define() {
+    let pp = preprocess_single;
+    assert_eq!(pp("#define X 0\nX").unwrap().code, b"0");
+    assert_eq!(pp("#define X 1\r\nX").unwrap().code, b"1");
+    assert_eq!(pp("#define X 2\n#define Y X\nX").unwrap().code, b"2");
+    assert_eq!(pp("#define X 2\\\n + 3\nX").unwrap().code, b"2\n + 3");
+    assert_eq!(pp("#define X(a) a\nX(2)").unwrap().code, b"2");
+    assert_eq!(pp("#define X(a,b) a+b\nX(2,3)").unwrap().code, b"2+3");
+    assert_eq!(pp("#define X(X,b) X+b\nX(2,3)").unwrap().code, b"2+3");
+    assert_eq!(pp("#define X(a,b) a+\\\nb\nX(2,3)").unwrap().code, b"2+\n3");
+    assert_eq!(pp("#define X(a,b) a+\\\r\nb\nX(2,3)").unwrap().code,
+               b"2+\r\n3");
+    assert_eq!(pp("#define X").unwrap().code, b"");
+}
+
+#[test]
+fn test_condition() {
+    let pp = preprocess_single;
+    assert!(pp("#if 0\nX").is_err());
+    assert_eq!(pp("#if 0\nX\n#endif").unwrap().code, b"");
+    assert_eq!(pp("#if 1\nX\n#endif").unwrap().code, b"X\n");
+    assert_eq!(pp("#if 0\nX\n#else\nY\n#endif").unwrap().code, b"Y\n");
+    assert_eq!(pp("#if 1\nX\n#else\nY\n#endif").unwrap().code, b"X\n");
+    assert_eq!(pp("#if !0\nX\n#else\nY\n#endif").unwrap().code, b"X\n");
+    assert_eq!(pp("#if !1\nX\n#else\nY\n#endif").unwrap().code, b"Y\n");
+    assert_eq!(pp("#if\t 1  \n X  \n #else \n Y \n#endif \n\t").unwrap().code,
+               b" X  \n\t");
+    assert_eq!(pp("#define TRUE 1\n#if TRUE\nX\n#else\nY\n#endif").unwrap().code,
+               b"X\n");
+    assert_eq!(pp("#define TRUE\n#ifdef TRUE\nX\n#else\nY\n#endif").unwrap().code,
+               b"X\n");
+    assert_eq!(pp("#define TRUE\n#ifndef TRUE\nX\n#else\nY\n#endif").unwrap().code,
+               b"Y\n");
+    assert_eq!(pp("#define TRUE 1\n#ifdef TRUE\nX\n#else\nY\n#endif").unwrap().code,
+               b"X\n");
+    assert_eq!(pp("#define TRUE 0\n#ifndef TRUE\nX\n#else\nY\n#endif").unwrap().code,
+               b"Y\n");
+    assert_eq!(pp("#if 0\n#define X Y\n#endif\nX").unwrap().code, b"X");
+    assert_eq!(pp("#if 1\n#define X Y\n#else\n#define X Z\n#endif\nX").unwrap().code,
+               b"Y");
+    assert_eq!(pp("#if 1\n#define X Y\n#else\n#include\"fail\"\n#endif\nX").unwrap().code,
+               b"Y");
+}
+
+#[test]
+fn test_include() {
+    struct TestFileLoader;
+    impl IncludeHandler for TestFileLoader {
+        fn load(&self, file_name: &str) -> Result<String, ()> {
+            Ok(match file_name.as_ref() {
+                   "1.csh" => "X",
+                   "2.csh" => "Y",
+                   _ => return Err(()),
+               }
+               .to_string())
+        }
+    }
+
+    fn pf(contents: &str) -> Result<PreprocessedText, PreprocessError> {
+        preprocess(contents, &TestFileLoader)
+    }
+
+    // Unknown files should always fail
+    assert!(pf("#include \"unknown.csh\"").is_err());
+    assert!(pf("#include").is_err());
+    assert!(pf("#include\n").is_err());
+    // Normal case
+    assert_eq!(pf("#include \"1.csh\"\n").unwrap().code, b"X\n");
+    // End of file include
+    assert_eq!(pf("#include \"1.csh\"").unwrap().code, b"X");
+    // Extra whitespace
+    assert_eq!(pf("#include \"1.csh\"\t\n").unwrap().code, b"X\n");
+    // Less whitespace
+    assert_eq!(pf("#include\"1.csh\"\n").unwrap().code, b"X\n");
+    // Alternative delimiters (not treated differently currently)
+    assert_eq!(pf("#include <1.csh>\n").unwrap().code, b"X\n");
+    assert_eq!(pf("#include<1.csh>\n").unwrap().code, b"X\n");
+    assert!(pf("#include \"1.csh>\n").is_err());
+    assert!(pf("#include <1.csh\"\n").is_err());
+    // Comments after includes needs to work
+    assert_eq!(pf("#include \"1.csh\" // include \n").unwrap().code, b"X\n");
+    assert_eq!(pf("#include \"1.csh\"\n#include \"2.csh\"").unwrap().code,
+               b"X\nY");
+    // We don't want to read files that are #if'd out
+    assert_eq!(pf("#if 1\n#include \"1.csh\"\n#else\n#include \"unknown.csh\"\n#endif")
+                   .unwrap()
+                   .code,
+               b"X\n");
+    assert_eq!(pf("#if 0\n#include \"unknown.csh\"\n#else\n#include \"2.csh\"\n#endif")
+                   .unwrap()
+                   .code,
+               b"Y\n");
 }
