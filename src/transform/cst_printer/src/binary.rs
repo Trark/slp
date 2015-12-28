@@ -5,15 +5,13 @@ use slp_lang_cst::*;
 /// This is both the code (text) and slot binding metadata
 #[derive(PartialEq, Debug, Clone)]
 pub struct Binary {
-    source: String
+    source: String,
 }
 
 impl Binary {
     pub fn from_cir(cir: &Module) -> Binary {
         let printer = print(cir);
-        Binary {
-            source: printer.buffer.clone(),
-        }
+        Binary { source: printer.buffer.clone() }
     }
 }
 
@@ -116,28 +114,31 @@ fn print_typename(typename: &Type, printer: &mut Printer) {
         &Type::Vector(ref scalar, ref dim) => {
             print_scalar(scalar, printer);
             print_dimension(dim, printer);
-        },
+        }
         &Type::Pointer(ref address_space, ref pointed_type) => {
             print_address_space(address_space, printer);
             printer.space();
             print_typename(pointed_type, printer);
             printer.print("*");
-        },
+        }
         &Type::Struct(ref identifier) => {
             printer.print("struct");
             printer.space();
             printer.print(identifier);
-        },
+        }
         &Type::Array(_, _) => panic!("Array types should not be printed directly"),
         &Type::Image2D(ref access_modifier) => {
             print_access_modifier(access_modifier, printer);
             printer.print("image2d_t");
-        },
+        }
         _ => unimplemented!(),
     };
 }
 
-fn print_unaryoperation(unaryop: &UnaryOp, expr: &Box<Expression>, last_precedence: u32, printer: &mut Printer) {
+fn print_unaryoperation(unaryop: &UnaryOp,
+                        expr: &Box<Expression>,
+                        last_precedence: u32,
+                        printer: &mut Printer) {
 
     let (op_symbol, op_prec, after) = match *unaryop {
         UnaryOp::PrefixIncrement => ("++", 2, false),
@@ -150,7 +151,9 @@ fn print_unaryoperation(unaryop: &UnaryOp, expr: &Box<Expression>, last_preceden
         UnaryOp::BitwiseNot => ("~", 2, false),
     };
 
-    if last_precedence <= op_prec { printer.print("("); }
+    if last_precedence <= op_prec {
+        printer.print("(");
+    }
     if !after {
         printer.print(op_symbol);
     }
@@ -158,10 +161,16 @@ fn print_unaryoperation(unaryop: &UnaryOp, expr: &Box<Expression>, last_preceden
     if after {
         printer.print(op_symbol);
     }
-    if last_precedence <= op_prec { printer.print(")"); }
+    if last_precedence <= op_prec {
+        printer.print(")");
+    }
 }
 
-fn print_binaryoperation(binop: &BinOp, lhs: &Box<Expression>, rhs: &Box<Expression>, last_precedence: u32, printer: &mut Printer) {
+fn print_binaryoperation(binop: &BinOp,
+                         lhs: &Box<Expression>,
+                         rhs: &Box<Expression>,
+                         last_precedence: u32,
+                         printer: &mut Printer) {
 
     let op_symbol = match *binop {
         BinOp::Add => "+",
@@ -207,24 +216,58 @@ fn print_binaryoperation(binop: &BinOp, lhs: &Box<Expression>, rhs: &Box<Express
         BinOp::Assignment => 14,
     };
 
-    if last_precedence <= op_prec { printer.print("("); }
+    if last_precedence <= op_prec {
+        printer.print("(");
+    }
     print_expression_inner(lhs, op_prec + 1, printer);
     printer.space();
     printer.print(op_symbol);
     printer.space();
     print_expression_inner(rhs, op_prec, printer);
-    if last_precedence <= op_prec { printer.print(")"); }
+    if last_precedence <= op_prec {
+        printer.print(")");
+    }
 }
 
 fn print_literal(lit: &Literal, printer: &mut Printer) {
     printer.print(&(match lit {
-        &Literal::Bool(b) => if b { "true".to_string() } else { "false".to_string() },
+        &Literal::Bool(b) => {
+            if b {
+                "true".to_string()
+            } else {
+                "false".to_string()
+            }
+        }
         &Literal::Int(i) => format!("{}", i),
         &Literal::UInt(i) => format!("{}u", i),
         &Literal::Long(i) => format!("{}L", i),
-        &Literal::Half(f) => format!("{}{}h", f, if f == f.floor() { ".0" }  else { "" }),
-        &Literal::Float(f) => format!("{}{}f", f, if f == f.floor() { ".0" }  else { "" }),
-        &Literal::Double(f) => format!("{}{}", f, if f == f.floor() { ".0" }  else { "" }),
+        &Literal::Half(f) => {
+            format!("{}{}h",
+                    f,
+                    if f == f.floor() {
+                        ".0"
+                    } else {
+                        ""
+                    })
+        }
+        &Literal::Float(f) => {
+            format!("{}{}f",
+                    f,
+                    if f == f.floor() {
+                        ".0"
+                    } else {
+                        ""
+                    })
+        }
+        &Literal::Double(f) => {
+            format!("{}{}",
+                    f,
+                    if f == f.floor() {
+                        ".0"
+                    } else {
+                        ""
+                    })
+        }
     })[..]);
 }
 
@@ -243,7 +286,7 @@ fn print_constructor(cons: &Constructor, printer: &mut Printer) {
             printer.space();
             print_expression_inner(&*z, 15, printer);
             printer.print(")");
-        },
+        }
         &Constructor::Float4(ref x, ref y, ref z, ref w) => {
             printer.print("(");
             print_typename(&Type::Vector(Scalar::Float, VectorDimension::Four), printer);
@@ -260,7 +303,7 @@ fn print_constructor(cons: &Constructor, printer: &mut Printer) {
             printer.space();
             print_expression_inner(&*w, 15, printer);
             printer.print(")");
-        },
+        }
     }
 }
 
@@ -271,7 +314,7 @@ fn print_intrinsic(intrinsic: &Intrinsic, printer: &mut Printer) {
             printer.print("(");
             print_expression_inner(expr, 15, printer);
             printer.print(")");
-        },
+        }
     }
 }
 
@@ -280,11 +323,17 @@ fn print_expression_inner(expression: &Expression, last_precedence: u32, printer
         &Expression::Literal(ref lit) => print_literal(lit, printer),
         &Expression::Constructor(ref cons) => print_constructor(cons, printer),
         &Expression::Variable(ref name) => printer.print(name),
-        &Expression::UnaryOperation(ref unaryop, ref expr) => print_unaryoperation(unaryop, expr, last_precedence, printer),
-        &Expression::BinaryOperation(ref binop, ref lhs, ref rhs) => print_binaryoperation(binop, lhs, rhs, last_precedence, printer),
+        &Expression::UnaryOperation(ref unaryop, ref expr) => {
+            print_unaryoperation(unaryop, expr, last_precedence, printer)
+        }
+        &Expression::BinaryOperation(ref binop, ref lhs, ref rhs) => {
+            print_binaryoperation(binop, lhs, rhs, last_precedence, printer)
+        }
         &Expression::TernaryConditional(ref cond, ref lhs, ref rhs) => {
             let prec = 13;
-            if last_precedence <= prec { printer.print("(") }
+            if last_precedence <= prec {
+                printer.print("(")
+            }
             print_expression_inner(cond, prec, printer);
             printer.space();
             printer.print("?");
@@ -294,11 +343,15 @@ fn print_expression_inner(expression: &Expression, last_precedence: u32, printer
             printer.print(":");
             printer.space();
             print_expression_inner(rhs, prec, printer);
-            if last_precedence <= prec { printer.print(")") }
-        },
+            if last_precedence <= prec {
+                printer.print(")")
+            }
+        }
         &Expression::Swizzle(ref vec, ref swizzle) => {
             let prec = 1;
-            if last_precedence <= prec { printer.print("(") }
+            if last_precedence <= prec {
+                printer.print("(")
+            }
             print_expression_inner(vec, prec + 1, printer);
             printer.print(".");
             for swizzle_slot in swizzle {
@@ -308,50 +361,72 @@ fn print_expression_inner(expression: &Expression, last_precedence: u32, printer
                     SwizzleSlot::Z => printer.print("z"),
                     SwizzleSlot::W => printer.print("w"),
                 }
-            };
-            if last_precedence <= prec { printer.print(")") }
-        },
+            }
+            if last_precedence <= prec {
+                printer.print(")")
+            }
+        }
         &Expression::ArraySubscript(ref array, ref sub) => {
             let prec = 1;
-            if last_precedence <= prec { printer.print("(") }
+            if last_precedence <= prec {
+                printer.print("(")
+            }
             print_expression_inner(array, prec + 1, printer);
             printer.print("[");
             print_expression(sub, printer);
             printer.print("]");
-            if last_precedence <= prec { printer.print(")") }
-        },
+            if last_precedence <= prec {
+                printer.print(")")
+            }
+        }
         &Expression::Member(ref composite, ref member) => {
             let prec = 1;
-            if last_precedence <= prec { printer.print("(") }
+            if last_precedence <= prec {
+                printer.print("(")
+            }
             print_expression_inner(composite, prec + 1, printer);
             printer.print(".");
             printer.print(member);
-            if last_precedence <= prec { printer.print(")") }
-        },
+            if last_precedence <= prec {
+                printer.print(")")
+            }
+        }
         &Expression::Deref(ref inner) => {
             let prec = 2;
-            if last_precedence <= prec { printer.print("(") }
+            if last_precedence <= prec {
+                printer.print("(")
+            }
             printer.print("*");
             printer.separator();
             print_expression_inner(inner, prec + 1, printer);
-            if last_precedence <= prec { printer.print(")") }
-        },
+            if last_precedence <= prec {
+                printer.print(")")
+            }
+        }
         &Expression::MemberDeref(ref composite, ref member) => {
             let prec = 1;
-            if last_precedence <= prec { printer.print("(") }
+            if last_precedence <= prec {
+                printer.print("(")
+            }
             print_expression_inner(composite, prec + 1, printer);
             printer.print("->");
             printer.print(member);
-            if last_precedence <= prec { printer.print(")") }
-        },
+            if last_precedence <= prec {
+                printer.print(")")
+            }
+        }
         &Expression::AddressOf(ref inner) => {
             let prec = 2;
-            if last_precedence <= prec { printer.print("(") }
+            if last_precedence <= prec {
+                printer.print("(")
+            }
             printer.print("&");
             printer.separator();
             print_expression_inner(inner, prec, printer);
-            if last_precedence <= prec { printer.print(")") }
-        },
+            if last_precedence <= prec {
+                printer.print(")")
+            }
+        }
         &Expression::Call(ref func, ref params) => {
             print_expression_inner(func, 1, printer);
             printer.print("(");
@@ -363,16 +438,20 @@ fn print_expression_inner(expression: &Expression, last_precedence: u32, printer
                 }
             }
             printer.print(")");
-        },
+        }
         &Expression::Cast(ref ty, ref expr) => {
             let prec = 2;
-            if last_precedence <= prec { printer.print("(") }
+            if last_precedence <= prec {
+                printer.print("(")
+            }
             printer.print("(");
             print_typename(ty, printer);
             printer.print(")");
             print_expression_inner(expr, prec + 1, printer);
-            if last_precedence <= prec { printer.print(")") }
-        },
+            if last_precedence <= prec {
+                printer.print(")")
+            }
+        }
         &Expression::Intrinsic(ref intrinsic) => print_intrinsic(intrinsic, printer),
     }
 }
@@ -387,11 +466,11 @@ fn print_vardef(vardef: &VarDef, printer: &mut Printer) {
         Type::Array(ref inner, ref dim) => {
             print_typename(inner, printer);
             Some(dim.clone())
-        },
+        }
         ref ty => {
             print_typename(ty, printer);
             None
-        },
+        }
     };
     printer.space();
     printer.print(&vardef.name);
@@ -406,8 +485,8 @@ fn print_vardef(vardef: &VarDef, printer: &mut Printer) {
             printer.print("=");
             printer.space();
             print_expression(expr, printer);
-        },
-        &None => { },
+        }
+        &None => {}
     };
 }
 
@@ -434,15 +513,15 @@ fn print_statement(statement: &Statement, printer: &mut Printer) {
     match statement {
         &Statement::Empty => {
             printer.print(";");
-        },
+        }
         &Statement::Expression(ref expr) => {
             print_expression(expr, printer);
             printer.print(";");
-        },
+        }
         &Statement::Var(ref vd) => {
             print_vardef(vd, printer);
             printer.print(";");
-        },
+        }
         &Statement::Block(ref statements) => print_block(&statements, printer),
         &Statement::If(ref cond, ref statement) => {
             printer.print("if");
@@ -451,7 +530,7 @@ fn print_statement(statement: &Statement, printer: &mut Printer) {
             print_expression(cond, printer);
             printer.print(")");
             print_statement(statement, printer);
-        },
+        }
         &Statement::For(ref init, ref cond, ref update, ref statement) => {
             printer.print("for");
             printer.space();
@@ -465,7 +544,7 @@ fn print_statement(statement: &Statement, printer: &mut Printer) {
             print_expression(update, printer);
             printer.print(")");
             print_statement(statement, printer);
-        },
+        }
         &Statement::While(ref cond, ref statement) => {
             printer.print("while");
             printer.space();
@@ -473,13 +552,13 @@ fn print_statement(statement: &Statement, printer: &mut Printer) {
             print_expression(cond, printer);
             printer.print(")");
             print_statement(statement, printer);
-        },
+        }
         &Statement::Return(ref expr) => {
             printer.print("return");
             printer.space();
             print_expression(expr, printer);
             printer.print(";");
-        },
+        }
     }
 }
 
@@ -501,8 +580,8 @@ fn print_rootdefinition_globalvariable(gv: &GlobalVariable, printer: &mut Printe
             printer.print("=");
             printer.space();
             print_expression(expr, printer);
-        },
-        &None => { },
+        }
+        &None => {}
     }
     printer.print(";");
 }

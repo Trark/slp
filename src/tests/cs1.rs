@@ -6,11 +6,14 @@ use slp_transform_lexer::lex;
 use slp_transform_htk_to_hst::parse;
 use slp_transform_hst_to_hir::typeparse;
 
-fn token_id(name: &'static str) -> Token { Token::Id(Identifier(name.to_string())) }
+fn token_id(name: &'static str) -> Token {
+    Token::Id(Identifier(name.to_string()))
+}
 
 // Test a small compute shader (A simplified form of one the basic hlsl compute examples)
 const CS1: &'static str = include_str!("cs1.hlsl");
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 #[test]
 fn cs1_lex() {
 

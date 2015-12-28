@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use docopt::Docopt;
 use slp_sequence_hlsl_to_cl::*;
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 const USAGE: &'static str = "
 Slipstream HLSL to OpenCL Compiler
 
@@ -45,7 +46,7 @@ impl IncludeHandler for FileLoader {
         if file_path.is_relative() {
             for path in &self.include_paths {
                 match file_res {
-                    Ok(_) => { },
+                    Ok(_) => {}
                     Err(_) => {
                         let mut p = path.clone();
                         p.push(file_path);
@@ -81,16 +82,16 @@ fn main() {
         Err(_) => {
             println!("Failed to load file '{}'", &arg_source_file);
             return;
-        },
+        }
     };
 
     let mut source_contents = String::new();
     match source_file.read_to_string(&mut source_contents) {
-        Ok(_) => { },
+        Ok(_) => {}
         Err(_) => {
             println!("Failed to read file '{}'", &arg_source_file);
             return;
-        },
+        }
     };
 
     let paths = flag_include_paths.iter().map(|s| PathBuf::from(s)).collect::<Vec<_>>();
@@ -126,13 +127,11 @@ fn main() {
                         }
                     };
                     match file.write(output.code.to_string().as_bytes()) {
-                        Ok(_) => { },
+                        Ok(_) => {}
                         Err(_) => println!("Failed to write to output file"),
                     };
                 }
-                None => {
-                    println!("{}", output.code.to_string())
-                }
+                None => println!("{}", output.code.to_string()),
             }
         }
         Err(err) => println!("Error: {:?}", err),

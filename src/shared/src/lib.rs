@@ -44,8 +44,12 @@ impl<T> Located<T> {
             location: loc,
         }
     }
-    pub fn to_node(self) -> T { self.node }
-    pub fn to_loc(self) -> FileLocation { self.location }
+    pub fn to_node(self) -> T {
+        self.node
+    }
+    pub fn to_loc(self) -> FileLocation {
+        self.location
+    }
     pub fn loc(line: u64, column: u64, node: T) -> Located<T> {
         Located {
             node: node,
@@ -76,7 +80,9 @@ pub trait IncludeHandler {
 pub struct NullIncludeHandler;
 
 impl IncludeHandler for NullIncludeHandler {
-    fn load(&self, _: &str) -> Result<String, ()> { Err(()) }
+    fn load(&self, _: &str) -> Result<String, ()> {
+        Err(())
+    }
 }
 
 pub type KernelParamSlot = u32;

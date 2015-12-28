@@ -49,7 +49,8 @@ pub struct Output {
 
 pub fn hlsl_to_cl(input: Input) -> Result<Output, CompileError> {
 
-    let preprocessed = try!(slp_transform_preprocess::preprocess(&input.main_file, &*input.file_loader));
+    let preprocessed = try!(slp_transform_preprocess::preprocess(&input.main_file,
+                                                                 &*input.file_loader));
 
     let tokens = try!(slp_transform_lexer::lex(&preprocessed));
 
@@ -63,18 +64,27 @@ pub fn hlsl_to_cl(input: Input) -> Result<Output, CompileError> {
 
     let cl_binary = slp_transform_cst_printer::Binary::from_cir(&cst);
 
-    Ok(Output { code: cl_binary, binds: cst.binds })
+    Ok(Output {
+        code: cl_binary,
+        binds: cst.binds,
+    })
 }
 
 impl error::Error for CompileError {
     fn description(&self) -> &str {
         match *self {
-            CompileError::PreprocessError(ref preprocess_error) => error::Error::description(preprocess_error),
+            CompileError::PreprocessError(ref preprocess_error) => {
+                error::Error::description(preprocess_error)
+            }
             CompileError::LexError(ref lexer_error) => error::Error::description(lexer_error),
             CompileError::ParseError(ref parser_error) => error::Error::description(parser_error),
             CompileError::TyperError(ref typer_error) => error::Error::description(typer_error),
-            CompileError::TranspileError(ref transpiler_error) => error::Error::description(transpiler_error),
-            CompileError::UntyperError(ref untyper_error) => error::Error::description(untyper_error),
+            CompileError::TranspileError(ref transpiler_error) => {
+                error::Error::description(transpiler_error)
+            }
+            CompileError::UntyperError(ref untyper_error) => {
+                error::Error::description(untyper_error)
+            }
         }
     }
 }

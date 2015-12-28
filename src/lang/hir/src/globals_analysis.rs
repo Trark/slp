@@ -40,25 +40,38 @@ impl GlobalUsage {
                     assert!(kernel_usage_opt == None, "Multiple kernels");
                     kernel_usage_opt = Some(LocalFunctionGlobalUsage::analyse_kernel(kernel));
                 }
-                _ => { }
+                _ => {}
             }
         }
         let kernel_local_usage = kernel_usage_opt.expect("No kernels");
         let mut image_reads = kernel_local_usage.image_reads.clone();
         let mut image_writes = kernel_local_usage.image_writes.clone();
         for (_, current_usage) in &lfgus {
-            image_reads = image_reads.union(&current_usage.image_reads).cloned().collect::<HashSet<_>>();
-            image_writes = image_writes.union(&current_usage.image_writes).cloned().collect::<HashSet<_>>();
-        };
+            image_reads = image_reads.union(&current_usage.image_reads)
+                                     .cloned()
+                                     .collect::<HashSet<_>>();
+            image_writes = image_writes.union(&current_usage.image_writes)
+                                       .cloned()
+                                       .collect::<HashSet<_>>();
+        }
         let mut prev = lfgus;
         loop {
             let mut next = prev.clone();
             for (_, current_usage) in next.iter_mut() {
                 for (other_id, other_usage) in &prev {
                     if current_usage.functions.contains(&other_id) {
-                        current_usage.globals = current_usage.globals.union(&other_usage.globals).cloned().collect::<HashSet<_>>();
-                        current_usage.cbuffers = current_usage.cbuffers.union(&other_usage.cbuffers).cloned().collect::<HashSet<_>>();
-                        current_usage.functions = current_usage.functions.union(&other_usage.functions).cloned().collect::<HashSet<_>>();
+                        current_usage.globals = current_usage.globals
+                                                             .union(&other_usage.globals)
+                                                             .cloned()
+                                                             .collect::<HashSet<_>>();
+                        current_usage.cbuffers = current_usage.cbuffers
+                                                              .union(&other_usage.cbuffers)
+                                                              .cloned()
+                                                              .collect::<HashSet<_>>();
+                        current_usage.functions = current_usage.functions
+                                                               .union(&other_usage.functions)
+                                                               .cloned()
+                                                               .collect::<HashSet<_>>();
                     }
                 }
             }
@@ -87,11 +100,12 @@ impl GlobalUsage {
             image_writes: image_writes.clone(),
         };
         for (id, local_usage) in global_usages {
-            usage.functions.insert(id, FunctionGlobalUsage {
-                globals: local_usage.globals.clone(),
-                cbuffers: local_usage.cbuffers.clone(),
-                functions: local_usage.functions.clone(),
-            });
+            usage.functions.insert(id,
+                                   FunctionGlobalUsage {
+                                       globals: local_usage.globals.clone(),
+                                       cbuffers: local_usage.cbuffers.clone(),
+                                       functions: local_usage.functions.clone(),
+                                   });
         }
         usage
     }
@@ -126,7 +140,7 @@ impl LocalFunctionGlobalUsage {
 fn search_scope_block(sb: &ScopeBlock, usage: &mut LocalFunctionGlobalUsage) {
     for statement in &sb.0 {
         search_statement(statement, usage);
-    };
+    }
 }
 
 fn search_statement(statement: &Statement, usage: &mut LocalFunctionGlobalUsage) {
@@ -137,13 +151,13 @@ fn search_statement(statement: &Statement, usage: &mut LocalFunctionGlobalUsage)
         Statement::If(ref cond, ref sb) | Statement::While(ref cond, ref sb) => {
             search_expression(cond, usage);
             search_scope_block(sb, usage);
-        },
-        Statement::For(ref init, ref cond, ref update, ref sb)=> {
+        }
+        Statement::For(ref init, ref cond, ref update, ref sb) => {
             search_initexpression(init, usage);
             search_expression(cond, usage);
             search_expression(update, usage);
             search_scope_block(sb, usage);
-        },
+        }
         Statement::Return(ref expr) => search_expression(expr, usage),
     }
 }
@@ -151,45 +165,53 @@ fn search_statement(statement: &Statement, usage: &mut LocalFunctionGlobalUsage)
 fn search_initexpression(init: &ForInit, usage: &mut LocalFunctionGlobalUsage) {
     match *init {
         ForInit::Expression(ref expr) => search_expression(expr, usage),
-        ForInit::Definitions(ref vds) => for vd in vds { search_vardef(vd, usage) },
+        ForInit::Definitions(ref vds) => {
+            for vd in vds {
+                search_vardef(vd, usage)
+            }
+        }
     }
 }
 
 fn search_vardef(vd: &VarDef, usage: &mut LocalFunctionGlobalUsage) {
     match vd.assignment {
         Some(ref expr) => search_expression(expr, usage),
-        None => { },
+        None => {}
     }
 }
 
 fn search_expression(expression: &Expression, usage: &mut LocalFunctionGlobalUsage) {
     match *expression {
-        Expression::Literal(_) | Expression::Variable(_) => { },
-        Expression::Global(ref id) => { usage.globals.insert(id.clone()); },
-        Expression::ConstantVariable(ref id, _) => { usage.cbuffers.insert(id.clone()); },
+        Expression::Literal(_) | Expression::Variable(_) => {}
+        Expression::Global(ref id) => {
+            usage.globals.insert(id.clone());
+        }
+        Expression::ConstantVariable(ref id, _) => {
+            usage.cbuffers.insert(id.clone());
+        }
         Expression::BinaryOperation(_, ref lhs, ref rhs) => {
             search_expression(lhs, usage);
             search_expression(rhs, usage);
-        },
+        }
         Expression::TernaryConditional(ref cond, ref left, ref right) => {
             search_expression(cond, usage);
             search_expression(left, usage);
             search_expression(right, usage);
-        },
+        }
         Expression::Swizzle(ref vec, _) => {
             search_expression(vec, usage);
-        },
+        }
         Expression::ArraySubscript(ref arr, ref index) => {
             search_expression(arr, usage);
             search_expression(index, usage);
-        },
+        }
         Expression::Member(ref expr, _) => search_expression(expr, usage),
         Expression::Call(ref id, ref exprs) => {
             usage.functions.insert(id.clone());
             for expr in exprs {
                 search_expression(expr, usage);
             }
-        },
+        }
         Expression::Cast(_, ref expr) => search_expression(expr, usage),
         Expression::Intrinsic(ref intrinsic) => search_intrinsic(intrinsic, usage),
     }
@@ -202,7 +224,7 @@ fn search_intrinsic(intrinsic: &Intrinsic, usage: &mut LocalFunctionGlobalUsage)
         Intrinsic::DeviceMemoryBarrier |
         Intrinsic::DeviceMemoryBarrierWithGroupSync |
         Intrinsic::GroupMemoryBarrier |
-        Intrinsic::GroupMemoryBarrierWithGroupSync => { },
+        Intrinsic::GroupMemoryBarrierWithGroupSync => {}
 
         Intrinsic::PrefixIncrement(_, ref e1) |
         Intrinsic::PrefixDecrement(_, ref e1) |
@@ -283,7 +305,7 @@ fn search_intrinsic(intrinsic: &Intrinsic, usage: &mut LocalFunctionGlobalUsage)
             match *e1 {
                 Expression::Global(ref id) => {
                     usage.image_reads.insert(id.clone());
-                },
+                }
                 _ => unimplemented!(),
             };
 

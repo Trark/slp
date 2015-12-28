@@ -44,7 +44,6 @@ pub struct StructuredType(pub StructuredLayout, pub TypeModifier);
 /// Hlsl Object Types
 #[derive(PartialEq, Debug, Clone)]
 pub enum ObjectType {
-
     // Data buffers
     Buffer(DataType),
     RWBuffer(DataType),
@@ -92,16 +91,34 @@ pub enum TypeLayout {
 }
 
 impl TypeLayout {
-    pub fn from_scalar(scalar: ScalarType) -> TypeLayout { TypeLayout::Scalar(scalar) }
-    pub fn from_object(object: ObjectType) -> TypeLayout { TypeLayout::Object(object) }
+    pub fn from_scalar(scalar: ScalarType) -> TypeLayout {
+        TypeLayout::Scalar(scalar)
+    }
+    pub fn from_object(object: ObjectType) -> TypeLayout {
+        TypeLayout::Object(object)
+    }
 
-    pub fn uint() -> TypeLayout { TypeLayout::from_scalar(ScalarType::UInt) }
-    pub fn int() -> TypeLayout { TypeLayout::from_scalar(ScalarType::Int) }
-    pub fn long() -> TypeLayout { TypeLayout::from_scalar(ScalarType::Int) }
-    pub fn float() -> TypeLayout { TypeLayout::from_scalar(ScalarType::Float) }
-    pub fn double() -> TypeLayout { TypeLayout::from_scalar(ScalarType::Double) }
-    pub fn float4x4() -> TypeLayout { TypeLayout::Matrix(ScalarType::Float, 4, 4) }
-    pub fn custom(name: &str) -> TypeLayout { TypeLayout::Custom(name.to_string()) }
+    pub fn uint() -> TypeLayout {
+        TypeLayout::from_scalar(ScalarType::UInt)
+    }
+    pub fn int() -> TypeLayout {
+        TypeLayout::from_scalar(ScalarType::Int)
+    }
+    pub fn long() -> TypeLayout {
+        TypeLayout::from_scalar(ScalarType::Int)
+    }
+    pub fn float() -> TypeLayout {
+        TypeLayout::from_scalar(ScalarType::Float)
+    }
+    pub fn double() -> TypeLayout {
+        TypeLayout::from_scalar(ScalarType::Double)
+    }
+    pub fn float4x4() -> TypeLayout {
+        TypeLayout::Matrix(ScalarType::Float, 4, 4)
+    }
+    pub fn custom(name: &str) -> TypeLayout {
+        TypeLayout::Custom(name.to_string())
+    }
 }
 
 impl From<DataLayout> for TypeLayout {
@@ -128,7 +145,7 @@ impl From<StructuredLayout> for TypeLayout {
 #[derive(PartialEq, Debug, Clone)]
 pub enum RowOrder {
     Row,
-    Column
+    Column,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -141,7 +158,12 @@ pub struct TypeModifier {
 
 impl Default for TypeModifier {
     fn default() -> TypeModifier {
-        TypeModifier { is_const: false, row_order: RowOrder::Column, precise: false, volatile: false }
+        TypeModifier {
+            is_const: false,
+            row_order: RowOrder::Column,
+            precise: false,
+            volatile: false,
+        }
     }
 }
 
@@ -162,7 +184,9 @@ pub enum GlobalStorage {
 }
 
 impl Default for GlobalStorage {
-    fn default() -> GlobalStorage { GlobalStorage::Extern }
+    fn default() -> GlobalStorage {
+        GlobalStorage::Extern
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -173,7 +197,9 @@ pub enum InputModifier {
 }
 
 impl Default for InputModifier {
-    fn default() -> InputModifier { InputModifier::In }
+    fn default() -> InputModifier {
+        InputModifier::In
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -183,25 +209,49 @@ pub enum LocalStorage {
 }
 
 impl Default for LocalStorage {
-    fn default() -> LocalStorage { LocalStorage::Local }
+    fn default() -> LocalStorage {
+        LocalStorage::Local
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Type(pub TypeLayout, pub TypeModifier);
 
 impl Type {
-    pub fn void() -> Type { Type::from_layout(TypeLayout::Void) }
-    pub fn from_layout(layout: TypeLayout) -> Type { Type(layout, TypeModifier::default()) }
-    pub fn from_scalar(scalar: ScalarType) -> Type { Type::from_layout(TypeLayout::from_scalar(scalar)) }
-    pub fn from_object(object: ObjectType) -> Type { Type::from_layout(TypeLayout::from_object(object)) }
+    pub fn void() -> Type {
+        Type::from_layout(TypeLayout::Void)
+    }
+    pub fn from_layout(layout: TypeLayout) -> Type {
+        Type(layout, TypeModifier::default())
+    }
+    pub fn from_scalar(scalar: ScalarType) -> Type {
+        Type::from_layout(TypeLayout::from_scalar(scalar))
+    }
+    pub fn from_object(object: ObjectType) -> Type {
+        Type::from_layout(TypeLayout::from_object(object))
+    }
 
-    pub fn uint() -> Type { Type::from_layout(TypeLayout::uint()) }
-    pub fn int()  -> Type { Type::from_layout(TypeLayout::int()) }
-    pub fn long()  -> Type { Type::from_layout(TypeLayout::long()) }
-    pub fn float()  -> Type { Type::from_layout(TypeLayout::float()) }
-    pub fn double()  -> Type { Type::from_layout(TypeLayout::double()) }
-    pub fn float4x4() -> Type { Type::from_layout(TypeLayout::float4x4()) }
-    pub fn custom(name: &str)  -> Type { Type::from_layout(TypeLayout::custom(name)) }
+    pub fn uint() -> Type {
+        Type::from_layout(TypeLayout::uint())
+    }
+    pub fn int() -> Type {
+        Type::from_layout(TypeLayout::int())
+    }
+    pub fn long() -> Type {
+        Type::from_layout(TypeLayout::long())
+    }
+    pub fn float() -> Type {
+        Type::from_layout(TypeLayout::float())
+    }
+    pub fn double() -> Type {
+        Type::from_layout(TypeLayout::double())
+    }
+    pub fn float4x4() -> Type {
+        Type::from_layout(TypeLayout::float4x4())
+    }
+    pub fn custom(name: &str) -> Type {
+        Type::from_layout(TypeLayout::custom(name))
+    }
 }
 
 impl From<DataType> for Type {
@@ -296,7 +346,9 @@ pub enum Expression {
     Variable(String),
     UnaryOperation(UnaryOp, Box<Located<Expression>>),
     BinaryOperation(BinOp, Box<Located<Expression>>, Box<Located<Expression>>),
-    TernaryConditional(Box<Located<Expression>>, Box<Located<Expression>>, Box<Located<Expression>>),
+    TernaryConditional(Box<Located<Expression>>,
+                       Box<Located<Expression>>,
+                       Box<Located<Expression>>),
     ArraySubscript(Box<Located<Expression>>, Box<Located<Expression>>),
     Member(Box<Located<Expression>>, String),
     Call(Box<Located<Expression>>, Vec<Located<Expression>>),
@@ -323,8 +375,18 @@ pub struct VarDef {
 }
 
 impl VarDef {
-    pub fn new(name: String, local_type: LocalType, assignment: Option<Located<Expression>>) -> VarDef {
-        VarDef { local_type: local_type, defs: vec![LocalVariable { name: name, bind: LocalBind::Normal, assignment: assignment }] }
+    pub fn new(name: String,
+               local_type: LocalType,
+               assignment: Option<Located<Expression>>)
+               -> VarDef {
+        VarDef {
+            local_type: local_type,
+            defs: vec![LocalVariable {
+                           name: name,
+                           bind: LocalBind::Normal,
+                           assignment: assignment,
+                       }],
+        }
     }
 }
 

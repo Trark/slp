@@ -90,14 +90,30 @@ pub enum TypeLayout {
 }
 
 impl TypeLayout {
-    pub fn void() -> TypeLayout { TypeLayout::Void }
-    pub fn from_scalar(scalar: ScalarType) -> TypeLayout { TypeLayout::Scalar(scalar) }
-    pub fn from_vector(scalar: ScalarType, x: u32) -> TypeLayout { TypeLayout::Vector(scalar, x) }
-    pub fn from_matrix(scalar: ScalarType, x: u32, y: u32) -> TypeLayout { TypeLayout::Matrix(scalar, x, y) }
-    pub fn from_data(ty: DataLayout) -> TypeLayout { TypeLayout::from(ty) }
-    pub fn from_struct(id: StructId) -> TypeLayout { TypeLayout::Struct(id) }
-    pub fn from_structured(ty: StructuredLayout) -> TypeLayout { TypeLayout::from(ty) }
-    pub fn from_object(ty: ObjectType) -> TypeLayout { TypeLayout::Object(ty) }
+    pub fn void() -> TypeLayout {
+        TypeLayout::Void
+    }
+    pub fn from_scalar(scalar: ScalarType) -> TypeLayout {
+        TypeLayout::Scalar(scalar)
+    }
+    pub fn from_vector(scalar: ScalarType, x: u32) -> TypeLayout {
+        TypeLayout::Vector(scalar, x)
+    }
+    pub fn from_matrix(scalar: ScalarType, x: u32, y: u32) -> TypeLayout {
+        TypeLayout::Matrix(scalar, x, y)
+    }
+    pub fn from_data(ty: DataLayout) -> TypeLayout {
+        TypeLayout::from(ty)
+    }
+    pub fn from_struct(id: StructId) -> TypeLayout {
+        TypeLayout::Struct(id)
+    }
+    pub fn from_structured(ty: StructuredLayout) -> TypeLayout {
+        TypeLayout::from(ty)
+    }
+    pub fn from_object(ty: ObjectType) -> TypeLayout {
+        TypeLayout::Object(ty)
+    }
 }
 
 impl From<DataLayout> for TypeLayout {
@@ -124,7 +140,7 @@ impl From<StructuredLayout> for TypeLayout {
 #[derive(PartialEq, Debug, Clone)]
 pub enum RowOrder {
     Row,
-    Column
+    Column,
 }
 
 /// Modifier for type
@@ -137,20 +153,32 @@ pub struct TypeModifier {
 }
 
 impl TypeModifier {
-    pub fn new() -> TypeModifier { Default::default() }
-
-    pub fn is_empty(&self) -> bool {
-        self.is_const == false && self.row_order == RowOrder::Column && self.precise == false && self.volatile == false
+    pub fn new() -> TypeModifier {
+        Default::default()
     }
 
-    pub fn const_only() -> TypeModifier { TypeModifier { is_const: true, .. TypeModifier::default() } }
+    pub fn is_empty(&self) -> bool {
+        self.is_const == false && self.row_order == RowOrder::Column && self.precise == false &&
+        self.volatile == false
+    }
 
-    pub fn keep_precise(&self) -> TypeModifier { TypeModifier { precise: self.precise, .. TypeModifier::default() } }
+    pub fn const_only() -> TypeModifier {
+        TypeModifier { is_const: true, ..TypeModifier::default() }
+    }
+
+    pub fn keep_precise(&self) -> TypeModifier {
+        TypeModifier { precise: self.precise, ..TypeModifier::default() }
+    }
 }
 
 impl Default for TypeModifier {
     fn default() -> TypeModifier {
-        TypeModifier { is_const: false, row_order: RowOrder::Column, precise: false, volatile: false }
+        TypeModifier {
+            is_const: false,
+            row_order: RowOrder::Column,
+            precise: false,
+            volatile: false,
+        }
     }
 }
 
@@ -167,7 +195,6 @@ pub enum InterpolationModifier {
 /// Storage type for global variables
 #[derive(PartialEq, Debug, Clone)]
 pub enum GlobalStorage {
-
     // Input from outside the kernel (default)
     Extern,
 
@@ -175,14 +202,14 @@ pub enum GlobalStorage {
     Static,
 
     /// Shared between every thread in the work group
-    GroupShared,
-
-    // extern not supported because constant buffers exist
-    // uniform not supported because constant buffers exist
+    GroupShared, /* extern not supported because constant buffers exist
+                  * uniform not supported because constant buffers exist */
 }
 
 impl Default for GlobalStorage {
-    fn default() -> GlobalStorage { GlobalStorage::Static }
+    fn default() -> GlobalStorage {
+        GlobalStorage::Static
+    }
 }
 
 /// Binding type for parameters
@@ -193,13 +220,13 @@ pub enum InputModifier {
     /// Function output (must be written)
     Out,
     /// Function input and output
-    InOut,
-
-    // uniform not supported because constant buffers exist
+    InOut, // uniform not supported because constant buffers exist
 }
 
 impl Default for InputModifier {
-    fn default() -> InputModifier { InputModifier::In }
+    fn default() -> InputModifier {
+        InputModifier::In
+    }
 }
 
 // Storage type for local variables
@@ -214,7 +241,9 @@ pub enum LocalStorage {
 }
 
 impl Default for LocalStorage {
-    fn default() -> LocalStorage { LocalStorage::Local }
+    fn default() -> LocalStorage {
+        LocalStorage::Local
+    }
 }
 
 /// The full type when paired with modifiers
@@ -222,29 +251,71 @@ impl Default for LocalStorage {
 pub struct Type(pub TypeLayout, pub TypeModifier);
 
 impl Type {
-    pub fn void() -> Type { Type(TypeLayout::void(), TypeModifier::new()) }
-    pub fn from_layout(layout_type: TypeLayout) -> Type { Type(layout_type, TypeModifier::new()) }
-    pub fn from_scalar(scalar: ScalarType) -> Type { Type(TypeLayout::from_scalar(scalar), TypeModifier::new()) }
-    pub fn from_vector(scalar: ScalarType, x: u32) -> Type { Type(TypeLayout::from_vector(scalar, x), TypeModifier::new()) }
-    pub fn from_matrix(scalar: ScalarType, x: u32, y: u32) -> Type { Type(TypeLayout::from_matrix(scalar, x, y), TypeModifier::new()) }
-    pub fn from_data(DataType(tyl, tym): DataType) -> Type { Type(TypeLayout::from_data(tyl), tym) }
-    pub fn from_struct(id: StructId) -> Type { Type(TypeLayout::from_struct(id), TypeModifier::new()) }
-    pub fn from_structured(StructuredType(tyl, tym): StructuredType) -> Type { Type(TypeLayout::from_structured(tyl), tym) }
-    pub fn from_object(ty: ObjectType) -> Type { Type(TypeLayout::from_object(ty), TypeModifier::new()) }
+    pub fn void() -> Type {
+        Type(TypeLayout::void(), TypeModifier::new())
+    }
+    pub fn from_layout(layout_type: TypeLayout) -> Type {
+        Type(layout_type, TypeModifier::new())
+    }
+    pub fn from_scalar(scalar: ScalarType) -> Type {
+        Type(TypeLayout::from_scalar(scalar), TypeModifier::new())
+    }
+    pub fn from_vector(scalar: ScalarType, x: u32) -> Type {
+        Type(TypeLayout::from_vector(scalar, x), TypeModifier::new())
+    }
+    pub fn from_matrix(scalar: ScalarType, x: u32, y: u32) -> Type {
+        Type(TypeLayout::from_matrix(scalar, x, y), TypeModifier::new())
+    }
+    pub fn from_data(DataType(tyl, tym): DataType) -> Type {
+        Type(TypeLayout::from_data(tyl), tym)
+    }
+    pub fn from_struct(id: StructId) -> Type {
+        Type(TypeLayout::from_struct(id), TypeModifier::new())
+    }
+    pub fn from_structured(StructuredType(tyl, tym): StructuredType) -> Type {
+        Type(TypeLayout::from_structured(tyl), tym)
+    }
+    pub fn from_object(ty: ObjectType) -> Type {
+        Type(TypeLayout::from_object(ty), TypeModifier::new())
+    }
 
-    pub fn bool() -> Type { Type::from_scalar(ScalarType::Bool) }
-    pub fn booln(dim: u32) -> Type { Type::from_vector(ScalarType::Bool, dim) }
-    pub fn uint() -> Type { Type::from_scalar(ScalarType::UInt) }
-    pub fn uintn(dim: u32) -> Type { Type::from_vector(ScalarType::UInt, dim) }
-    pub fn int() -> Type { Type::from_scalar(ScalarType::Int) }
-    pub fn intn(dim: u32) -> Type { Type::from_vector(ScalarType::Int, dim) }
-    pub fn float() -> Type { Type::from_scalar(ScalarType::Float) }
-    pub fn floatn(dim: u32) -> Type { Type::from_vector(ScalarType::Float, dim) }
-    pub fn double() -> Type { Type::from_scalar(ScalarType::Double) }
-    pub fn doublen(dim: u32) -> Type { Type::from_vector(ScalarType::Double, dim) }
+    pub fn bool() -> Type {
+        Type::from_scalar(ScalarType::Bool)
+    }
+    pub fn booln(dim: u32) -> Type {
+        Type::from_vector(ScalarType::Bool, dim)
+    }
+    pub fn uint() -> Type {
+        Type::from_scalar(ScalarType::UInt)
+    }
+    pub fn uintn(dim: u32) -> Type {
+        Type::from_vector(ScalarType::UInt, dim)
+    }
+    pub fn int() -> Type {
+        Type::from_scalar(ScalarType::Int)
+    }
+    pub fn intn(dim: u32) -> Type {
+        Type::from_vector(ScalarType::Int, dim)
+    }
+    pub fn float() -> Type {
+        Type::from_scalar(ScalarType::Float)
+    }
+    pub fn floatn(dim: u32) -> Type {
+        Type::from_vector(ScalarType::Float, dim)
+    }
+    pub fn double() -> Type {
+        Type::from_scalar(ScalarType::Double)
+    }
+    pub fn doublen(dim: u32) -> Type {
+        Type::from_vector(ScalarType::Double, dim)
+    }
 
-    pub fn long() -> Type { Type::from_scalar(ScalarType::Int) }
-    pub fn float4x4() -> Type { Type::from_matrix(ScalarType::Float, 4, 4) }
+    pub fn long() -> Type {
+        Type::from_scalar(ScalarType::Int)
+    }
+    pub fn float4x4() -> Type {
+        Type::from_matrix(ScalarType::Float, 4, 4)
+    }
 }
 
 impl From<DataType> for Type {
@@ -280,13 +351,21 @@ pub trait ToExpressionType {
 }
 
 impl ToExpressionType for Type {
-    fn to_lvalue(self) -> ExpressionType { ExpressionType(self, ValueType::Lvalue) }
-    fn to_rvalue(self) -> ExpressionType { ExpressionType(self, ValueType::Rvalue) }
+    fn to_lvalue(self) -> ExpressionType {
+        ExpressionType(self, ValueType::Lvalue)
+    }
+    fn to_rvalue(self) -> ExpressionType {
+        ExpressionType(self, ValueType::Rvalue)
+    }
 }
 
 impl<'a> ToExpressionType for &'a Type {
-    fn to_lvalue(self) -> ExpressionType { self.clone().to_lvalue() }
-    fn to_rvalue(self) -> ExpressionType { self.clone().to_rvalue() }
+    fn to_lvalue(self) -> ExpressionType {
+        self.clone().to_lvalue()
+    }
+    fn to_rvalue(self) -> ExpressionType {
+        self.clone().to_rvalue()
+    }
 }
 
 /// The type of any global declaration
@@ -319,11 +398,10 @@ impl From<Type> for LocalType {
     }
 }
 
-pub use slp_lang_hst::BinOp as BinOp;
+pub use slp_lang_hst::BinOp;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Intrinsic {
-
     // Unary operations
     PrefixIncrement(Type, Expression),
     PrefixDecrement(Type, Expression),
@@ -428,7 +506,7 @@ pub enum Intrinsic {
     RWByteAddressBufferStore4(Expression, Expression, Expression),
 }
 
-pub use slp_lang_hst::Literal as Literal;
+pub use slp_lang_hst::Literal;
 
 /// Id to function (in global scope)
 #[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone, Copy)]
@@ -530,8 +608,8 @@ pub struct StructDefinition {
     pub members: Vec<StructMember>,
 }
 
-pub use slp_lang_hst::PackSubOffset as PackSubOffset;
-pub use slp_lang_hst::PackOffset as PackOffset;
+pub use slp_lang_hst::PackSubOffset;
+pub use slp_lang_hst::PackOffset;
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct ConstantVariable {
@@ -553,7 +631,7 @@ pub struct GlobalVariable {
     pub assignment: Option<Expression>,
 }
 
-pub use slp_lang_hst::FunctionAttribute as FunctionAttribute;
+pub use slp_lang_hst::FunctionAttribute;
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct FunctionParam {
@@ -697,7 +775,9 @@ impl error::Error for TypeError {
             TypeError::StructDoesNotExist(_) => "struct does not exist",
             TypeError::StructMemberDoesNotExist(_, _) => "struct member does not exist",
             TypeError::FunctionDoesNotExist(_) => "function does not exist",
-            TypeError::InvalidTypeInEqualityOperation(_) => "invalid numeric type in equality operation",
+            TypeError::InvalidTypeInEqualityOperation(_) => {
+                "invalid numeric type in equality operation"
+            }
             TypeError::InvalidTypeForSwizzle(_) => "swizzle nodes must be used on vectors",
             TypeError::MemberNodeMustBeUsedOnStruct(_, _) => "member used on non-struct type",
             TypeError::ArrayIndexMustBeUsedOnArrayType(_) => "array index used on non-array type",
@@ -706,9 +786,15 @@ impl error::Error for TypeError {
 
             TypeError::WrongObjectForBufferLoad(_) => "Buffer::Load must be called on a buffer",
             TypeError::WrongObjectForRWBufferLoad(_) => "RWBuffer::Load must be called on a buffer",
-            TypeError::WrongObjectForStructuredBufferLoad(_) => "StructuredBuffer::Load must be called on a buffer",
-            TypeError::WrongObjectForRWStructuredBufferLoad(_) => "RWStructuredBuffer::Load must be called on a buffer",
-            TypeError::WrongObjectForRWTexture2DLoad(_) => "RWTexture2DLoad::Load must be called on a buffer",
+            TypeError::WrongObjectForStructuredBufferLoad(_) => {
+                "StructuredBuffer::Load must be called on a buffer"
+            }
+            TypeError::WrongObjectForRWStructuredBufferLoad(_) => {
+                "RWStructuredBuffer::Load must be called on a buffer"
+            }
+            TypeError::WrongObjectForRWTexture2DLoad(_) => {
+                "RWTexture2DLoad::Load must be called on a buffer"
+            }
         }
     }
 }
@@ -755,55 +841,55 @@ impl TypeState {
                     let mut name_map = HashMap::new();
                     for constant in &sd.members {
                         match name_map.insert(constant.name.clone(), constant.typename.clone()) {
-                            None => { },
+                            None => {}
                             Some(_) => return Err(()),
                         }
-                    };
+                    }
                     match context.structs.insert(sd.id, name_map) {
-                        None => { },
+                        None => {}
                         Some(_) => return Err(()),
                     }
-                },
+                }
                 RootDefinition::SamplerState => unimplemented!(),
                 RootDefinition::GlobalVariable(ref gv) => {
                     match context.globals.insert(gv.id.clone(), gv.global_type.0.clone()) {
-                        None => { },
+                        None => {}
                         Some(_) => return Err(()),
                     }
-                },
+                }
                 RootDefinition::ConstantBuffer(ref cb) => {
                     let mut name_map = HashMap::new();
                     for constant in &cb.members {
                         match name_map.insert(constant.name.clone(), constant.typename.clone()) {
-                            None => { },
+                            None => {}
                             Some(_) => return Err(()),
                         }
-                    };
+                    }
                     match context.constants.insert(cb.id, name_map) {
-                        None => { },
+                        None => {}
                         Some(_) => return Err(()),
                     }
-                },
+                }
                 RootDefinition::Function(ref func) => {
                     match context.functions.insert(func.id.clone(), func.returntype.clone()) {
-                        None => { },
+                        None => {}
                         Some(_) => return Err(()),
                     }
-                },
-                RootDefinition::Kernel(_) => { },
+                }
+                RootDefinition::Kernel(_) => {}
             }
-        };
-        Ok (context)
+        }
+        Ok(context)
     }
 
     pub fn push_scope(&mut self, scope_block: &ScopeBlock) {
         let mut scope = HashMap::new();
         for (var_id, &(_, ref ty)) in &scope_block.1.variables {
             match scope.insert(var_id.clone(), ty.clone()) {
-                None => { },
+                None => {}
                 Some(_) => panic!("Multiple locals in block with same id"),
             }
-        };
+        }
         self.locals.push(scope);
     }
 
@@ -817,7 +903,7 @@ impl TypeContext for TypeState {
     fn get_local(&self, var_ref: &VariableRef) -> Result<ExpressionType, TypeError> {
         let up = (var_ref.1).0 as usize;
         if self.locals.len() <= up {
-            return Err(TypeError::LocalScopeInvalid)
+            return Err(TypeError::LocalScopeInvalid);
         } else {
             let level = self.locals.len() - up - 1;
             match self.locals[level].get(&var_ref.0) {
@@ -869,7 +955,6 @@ impl TypeContext for TypeState {
 pub struct TypeParser;
 
 impl TypeParser {
-
     fn get_literal_type(literal: &Literal) -> ExpressionType {
         (match *literal {
             Literal::Bool(_) => Type::bool(),
@@ -880,10 +965,13 @@ impl TypeParser {
             Literal::Half(_) => Type::from_scalar(ScalarType::Half),
             Literal::Float(_) => Type::float(),
             Literal::Double(_) => Type::double(),
-        }).to_rvalue()
+        })
+        .to_rvalue()
     }
 
-    pub fn get_expression_type(expression: &Expression, context: &TypeContext) -> Result<ExpressionType, TypeError> {
+    pub fn get_expression_type(expression: &Expression,
+                               context: &TypeContext)
+                               -> Result<ExpressionType, TypeError> {
         match *expression {
             Expression::Literal(ref lit) => Ok(TypeParser::get_literal_type(lit)),
             Expression::Variable(ref var_ref) => context.get_local(var_ref),
@@ -902,9 +990,7 @@ impl TypeParser {
                         Ok(ExpressionType(base_type, ValueType::Rvalue))
                     }
 
-                    BinOp::Assignment => {
-                        TypeParser::get_expression_type(expr, context)
-                    }
+                    BinOp::Assignment => TypeParser::get_expression_type(expr, context),
 
                     BinOp::LessThan |
                     BinOp::LessEqual |
@@ -912,23 +998,32 @@ impl TypeParser {
                     BinOp::GreaterEqual |
                     BinOp::Equality |
                     BinOp::Inequality => {
-                        let ExpressionType(Type(ref tyl, _), _) = try!(TypeParser::get_expression_type(expr, context));
+                        let ExpressionType(Type(ref tyl, _), _) =
+                            try!(TypeParser::get_expression_type(expr, context));
                         Ok(ExpressionType(Type(match *tyl {
-                            TypeLayout::Scalar(_) => TypeLayout::Scalar(ScalarType::Bool),
-                            TypeLayout::Vector(_, ref x) => TypeLayout::Vector(ScalarType::Bool, *x),
-                            _ => return Err(TypeError::InvalidTypeInEqualityOperation(tyl.clone())),
-                        }, TypeModifier::default()), ValueType::Rvalue))
+                                                   TypeLayout::Scalar(_) => {
+                                                       TypeLayout::Scalar(ScalarType::Bool)
+                                                   }
+                                                   TypeLayout::Vector(_, ref x) => {
+                                                       TypeLayout::Vector(ScalarType::Bool, *x)
+                                                   }
+                                                   _ => return Err(TypeError::InvalidTypeInEqualityOperation(tyl.clone())),
+                                               },
+                                               TypeModifier::default()),
+                                          ValueType::Rvalue))
                     }
                 }
-            },
+            }
             Expression::TernaryConditional(_, ref expr_left, ref expr_right) => {
                 // Ensure the layouts of each side are the same
                 // Value types + modifiers can be different
-                assert_eq!((try!(TypeParser::get_expression_type(expr_left, context)).0).0, (try!(TypeParser::get_expression_type(expr_right, context)).0).0);
+                assert_eq!((try!(TypeParser::get_expression_type(expr_left, context)).0).0,
+                           (try!(TypeParser::get_expression_type(expr_right, context)).0).0);
                 TypeParser::get_expression_type(expr_left, context)
-            },
+            }
             Expression::Swizzle(ref vec, ref swizzle) => {
-                let ExpressionType(Type(vec_tyl, vec_mod), vec_vt) = try!(TypeParser::get_expression_type(vec, context));
+                let ExpressionType(Type(vec_tyl, vec_mod), vec_vt) =
+                    try!(TypeParser::get_expression_type(vec, context));
                 let tyl = match vec_tyl {
                     TypeLayout::Vector(ref scalar, _) => {
                         if swizzle.len() == 1 {
@@ -940,43 +1035,50 @@ impl TypeParser {
                     _ => return Err(TypeError::InvalidTypeForSwizzle(vec_tyl.clone())),
                 };
                 Ok(ExpressionType(Type(tyl, vec_mod), vec_vt))
-            },
+            }
             Expression::ArraySubscript(ref array, _) => {
                 let array_ty = try!(TypeParser::get_expression_type(&array, context));
                 Ok(match (array_ty.0).0 {
                     TypeLayout::Array(ref element, _) => {
                         Type::from_layout(*element.clone()).to_lvalue()
-                    },
+                    }
                     TypeLayout::Object(ObjectType::Buffer(data_type)) => {
                         Type::from_data(data_type).to_lvalue()
-                    },
+                    }
                     TypeLayout::Object(ObjectType::RWBuffer(data_type)) => {
                         Type::from_data(data_type).to_lvalue()
-                    },
+                    }
                     TypeLayout::Object(ObjectType::StructuredBuffer(structured_type)) => {
                         Type::from_structured(structured_type).to_lvalue()
-                    },
+                    }
                     TypeLayout::Object(ObjectType::RWStructuredBuffer(structured_type)) => {
                         Type::from_structured(structured_type).to_lvalue()
-                    },
+                    }
                     tyl => return Err(TypeError::ArrayIndexMustBeUsedOnArrayType(tyl)),
                 })
             }
-            Expression::Member(ref expr, ref name)  => {
+            Expression::Member(ref expr, ref name) => {
                 let expr_type = try!(TypeParser::get_expression_type(&expr, context));
                 let id = match (expr_type.0).0 {
                     TypeLayout::Struct(id) => id,
-                    tyl => return Err(TypeError::MemberNodeMustBeUsedOnStruct(tyl.clone(), name.clone())),
+                    tyl => {
+                        return Err(TypeError::MemberNodeMustBeUsedOnStruct(tyl.clone(),
+                                                                           name.clone()))
+                    }
                 };
                 context.get_struct_member(&id, name)
-            },
+            }
             Expression::Call(ref id, _) => context.get_function_return(id),
             Expression::Cast(ref ty, _) => Ok(ty.to_rvalue()),
-            Expression::Intrinsic(ref intrinsic) => TypeParser::get_intrinsic_type(intrinsic, context),
+            Expression::Intrinsic(ref intrinsic) => {
+                TypeParser::get_intrinsic_type(intrinsic, context)
+            }
         }
     }
 
-    fn get_intrinsic_type(intrinsic: &Intrinsic, context: &TypeContext) -> Result<ExpressionType, TypeError> {
+    fn get_intrinsic_type(intrinsic: &Intrinsic,
+                          context: &TypeContext)
+                          -> Result<ExpressionType, TypeError> {
         Ok(match *intrinsic {
             Intrinsic::PrefixIncrement(ref ty, _) => ty.to_lvalue(),
             Intrinsic::PrefixDecrement(ref ty, _) => ty.to_lvalue(),
@@ -990,7 +1092,7 @@ impl TypeParser {
                     TypeLayout::Vector(_, x) => Type::booln(x).to_rvalue(),
                     _ => return Err(TypeError::InvalidType(ty.clone())),
                 }
-            },
+            }
             Intrinsic::BitwiseNot(ref ty, _) => ty.to_rvalue(),
             Intrinsic::AllMemoryBarrier => Type::void().to_rvalue(),
             Intrinsic::AllMemoryBarrierWithGroupSync => Type::void().to_rvalue(),
@@ -1054,38 +1156,48 @@ impl TypeParser {
             Intrinsic::BufferLoad(ref buffer, _) => {
                 let buffer_ety = try!(TypeParser::get_expression_type(buffer, context));
                 match (buffer_ety.0).0 {
-                    TypeLayout::Object(ObjectType::Buffer(data_type)) => Type::from_data(data_type).to_rvalue(),
+                    TypeLayout::Object(ObjectType::Buffer(data_type)) => {
+                        Type::from_data(data_type).to_rvalue()
+                    }
                     tyl => return Err(TypeError::WrongObjectForBufferLoad(tyl)),
                 }
-            },
+            }
             Intrinsic::RWBufferLoad(ref buffer, _) => {
                 let buffer_ety = try!(TypeParser::get_expression_type(buffer, context));
                 match (buffer_ety.0).0 {
-                    TypeLayout::Object(ObjectType::RWBuffer(data_type)) => Type::from_data(data_type).to_rvalue(),
+                    TypeLayout::Object(ObjectType::RWBuffer(data_type)) => {
+                        Type::from_data(data_type).to_rvalue()
+                    }
                     tyl => return Err(TypeError::WrongObjectForRWBufferLoad(tyl)),
                 }
-            },
+            }
             Intrinsic::StructuredBufferLoad(ref buffer, _) => {
                 let buffer_ety = try!(TypeParser::get_expression_type(buffer, context));
                 match (buffer_ety.0).0 {
-                    TypeLayout::Object(ObjectType::StructuredBuffer(structured_type)) => Type::from_structured(structured_type).to_rvalue(),
+                    TypeLayout::Object(ObjectType::StructuredBuffer(structured_type)) => {
+                        Type::from_structured(structured_type).to_rvalue()
+                    }
                     tyl => return Err(TypeError::WrongObjectForStructuredBufferLoad(tyl)),
                 }
-            },
+            }
             Intrinsic::RWStructuredBufferLoad(ref buffer, _) => {
                 let buffer_ety = try!(TypeParser::get_expression_type(buffer, context));
                 match (buffer_ety.0).0 {
-                    TypeLayout::Object(ObjectType::RWStructuredBuffer(structured_type)) => Type::from_structured(structured_type).to_rvalue(),
+                    TypeLayout::Object(ObjectType::RWStructuredBuffer(structured_type)) => {
+                        Type::from_structured(structured_type).to_rvalue()
+                    }
                     tyl => return Err(TypeError::WrongObjectForRWStructuredBufferLoad(tyl)),
                 }
-            },
+            }
             Intrinsic::RWTexture2DLoad(ref texture, _) => {
                 let texture_ety = try!(TypeParser::get_expression_type(texture, context));
                 match (texture_ety.0).0 {
-                    TypeLayout::Object(ObjectType::RWTexture2D(data_type)) => Type::from_data(data_type).to_rvalue(),
+                    TypeLayout::Object(ObjectType::RWTexture2D(data_type)) => {
+                        Type::from_data(data_type).to_rvalue()
+                    }
                     tyl => return Err(TypeError::WrongObjectForRWTexture2DLoad(tyl)),
                 }
-            },
+            }
             Intrinsic::ByteAddressBufferLoad(_, _) => Type::uint().to_rvalue(),
             Intrinsic::ByteAddressBufferLoad2(_, _) => Type::uintn(2).to_rvalue(),
             Intrinsic::ByteAddressBufferLoad3(_, _) => Type::uintn(3).to_rvalue(),

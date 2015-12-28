@@ -175,7 +175,7 @@ pub enum Expression {
 pub struct VarDef {
     pub name: Identifier,
     pub typename: Type,
-    pub assignment: Option<Expression>
+    pub assignment: Option<Expression>,
 }
 
 #[derive(PartialEq, Debug, Clone)]

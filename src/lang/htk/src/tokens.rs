@@ -26,7 +26,6 @@ pub enum OffsetSlot {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Token {
-
     Eof, // Marks the end of a stream
 
     Id(Identifier),
@@ -131,7 +130,9 @@ pub enum Token {
 pub struct LexToken(pub Token, pub FileLocation);
 
 impl LexToken {
-    pub fn to_loc(self) -> FileLocation { self.1 }
+    pub fn to_loc(self) -> FileLocation {
+        self.1
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]

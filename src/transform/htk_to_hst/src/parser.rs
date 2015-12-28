@@ -3,7 +3,7 @@ use std::fmt;
 use slp_shared::*;
 use slp_lang_htk::*;
 use slp_lang_hst::*;
-use nom::{IResult,Needed,Err,ErrorKind};
+use nom::{IResult, Needed, Err, ErrorKind};
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct ParseError(pub ParseErrorReason, pub Option<Vec<LexToken>>, pub Option<Box<ParseError>>);
@@ -61,7 +61,12 @@ macro_rules! token (
 );
 
 fn parse_variablename(input: &[LexToken]) -> IResult<&[LexToken], Located<String>, ParseErrorReason> {
-    map!(input, token!(Token::Id(_)), |tok| { match tok { LexToken(Token::Id(Identifier(name)), loc) => Located::new(name.clone(), loc), _ => unreachable!() } })
+    map!(input, token!(Token::Id(_)), |tok| {
+        match tok {
+            LexToken(Token::Id(Identifier(name)), loc) => Located::new(name.clone(), loc),
+            _ => unreachable!(),
+        }
+    })
 }
 
 fn parse_datalayout(input: &[LexToken]) -> IResult<&[LexToken], DataLayout, ParseErrorReason> {
@@ -91,16 +96,21 @@ fn parse_datalayout(input: &[LexToken]) -> IResult<&[LexToken], DataLayout, Pars
             match &input[0] {
                 &LexToken(Token::Id(Identifier(ref name)), _) => {
                     match parse_scalartype_str(&name[..].as_bytes()) {
-                        IResult::Done(rest, ty) => if rest.len() == 0 {
-                            IResult::Done(&input[1..], ty)
-                        } else {
-                            IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType), input))
-                        },
+                        IResult::Done(rest, ty) => {
+                            if rest.len() == 0 {
+                                IResult::Done(&input[1..], ty)
+                            } else {
+                                IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType), input))
+                            }
+                        }
                         IResult::Incomplete(rem) => IResult::Incomplete(rem),
                         IResult::Error(_) => IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType), input)),
                     }
-                },
-                _ => IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::WrongToken), input))
+                }
+                _ => {
+                    IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::WrongToken),
+                                                 input))
+                }
             }
         }
     }
@@ -135,10 +145,13 @@ fn parse_datalayout(input: &[LexToken]) -> IResult<&[LexToken], DataLayout, Pars
                                     match preceded!(rest, tag!("x"), digit) {
                                         IResult::Incomplete(rem) => IResult::Incomplete(rem),
                                         IResult::Error(err) => IResult::Error(err),
-                                        IResult::Done(rest, y) => if rest.len() == 0 {
-                                            IResult::Done(&[], DataLayout::Matrix(ty, x, y))
-                                        } else {
-                                            IResult::Error(Err::Position(ErrorKind::Custom(0), input))
+                                        IResult::Done(rest, y) => {
+                                            if rest.len() == 0 {
+                                                IResult::Done(&[], DataLayout::Matrix(ty, x, y))
+                                            } else {
+                                                IResult::Error(Err::Position(ErrorKind::Custom(0),
+                                                                             input))
+                                            }
                                         }
                                     }
                                 }
@@ -150,7 +163,10 @@ fn parse_datalayout(input: &[LexToken]) -> IResult<&[LexToken], DataLayout, Pars
         }
 
         match parse_str(&typename[..].as_bytes()) {
-            IResult::Done(rest, ty) => { assert_eq!(rest.len(), 0); Some(ty) },
+            IResult::Done(rest, ty) => {
+                assert_eq!(rest.len(), 0);
+                Some(ty)
+            }
             IResult::Incomplete(_) | IResult::Error(_) => None,
         }
     }
@@ -170,7 +186,7 @@ fn parse_datalayout(input: &[LexToken]) -> IResult<&[LexToken], DataLayout, Pars
                             token!(Token::RightAngleBracket(_)),
                             || { DataLayout::Vector(scalar, x) }
                         )
-                    },
+                    }
                     "matrix" => {
                         chain!(&input[1..],
                             token!(Token::LeftAngleBracket(_)) ~
@@ -182,14 +198,19 @@ fn parse_datalayout(input: &[LexToken]) -> IResult<&[LexToken], DataLayout, Pars
                             token!(Token::RightAngleBracket(_)),
                             || { DataLayout::Matrix(scalar, x, y) }
                         )
-                    },
-                    _ => match parse_datatype_str(&name[..]) {
-                        Some(ty) => IResult::Done(&input[1..], ty),
-                        None => IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType), input)),
+                    }
+                    _ => {
+                        match parse_datatype_str(&name[..]) {
+                            Some(ty) => IResult::Done(&input[1..], ty),
+                            None => IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType), input)),
+                        }
                     }
                 }
-            },
-            _ => IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::WrongToken), input))
+            }
+            _ => {
+                IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::WrongToken),
+                                             input))
+            }
         }
     }
 }
@@ -203,7 +224,8 @@ fn parse_datatype(input: &[LexToken]) -> IResult<&[LexToken], DataType, ParseErr
     }
 }
 
-fn parse_structuredlayout(input: &[LexToken]) -> IResult<&[LexToken], StructuredLayout, ParseErrorReason> {
+fn parse_structuredlayout(input: &[LexToken])
+                          -> IResult<&[LexToken], StructuredLayout, ParseErrorReason> {
     alt!(input,
         parse_datalayout => { |ty| { match ty {
                 DataLayout::Scalar(scalar) => StructuredLayout::Scalar(scalar),
@@ -218,7 +240,9 @@ fn parse_structuredlayout(input: &[LexToken]) -> IResult<&[LexToken], Structured
 fn parse_structuredtype(input: &[LexToken]) -> IResult<&[LexToken], StructuredType, ParseErrorReason> {
     // Todo: Modifiers
     match parse_structuredlayout(input) {
-        IResult::Done(rest, layout) => IResult::Done(rest, StructuredType(layout, Default::default())),
+        IResult::Done(rest, layout) => {
+            IResult::Done(rest, StructuredType(layout, Default::default()))
+        }
         IResult::Incomplete(i) => IResult::Incomplete(i),
         IResult::Error(err) => IResult::Error(err),
     }
@@ -226,7 +250,7 @@ fn parse_structuredtype(input: &[LexToken]) -> IResult<&[LexToken], StructuredTy
 
 fn parse_objecttype(input: &[LexToken]) -> IResult<&[LexToken], ObjectType, ParseErrorReason> {
     if input.len() == 0 {
-        return IResult::Incomplete(Needed::Size(1))
+        return IResult::Incomplete(Needed::Size(1));
     }
 
     enum ParseType {
@@ -292,10 +316,13 @@ fn parse_objecttype(input: &[LexToken]) -> IResult<&[LexToken], ObjectType, Pars
                 "InputPatch" => ParseType::InputPatch,
                 "OutputPatch" => ParseType::OutputPatch,
 
-                _ => return IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType), input))
+                _ => return IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType), input)),
             }
-        },
-        _ => return IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType), input))
+        }
+        _ => {
+            return IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType),
+                                                input))
+        }
     };
 
     let rest = &input[1..];
@@ -322,52 +349,84 @@ fn parse_objecttype(input: &[LexToken]) -> IResult<&[LexToken], ObjectType, Pars
         ParseType::RWTexture2DArray |
         ParseType::RWTexture3D => {
 
-            let (buffer_arg, rest) = match delimited!(rest, token!(Token::LeftAngleBracket(_)), parse_datatype, token!(Token::RightAngleBracket(_))) {
+            let (buffer_arg, rest) = match delimited!(rest,
+                                                      token!(Token::LeftAngleBracket(_)),
+                                                      parse_datatype,
+                                                      token!(Token::RightAngleBracket(_))) {
                 IResult::Done(rest, ty) => (ty, rest),
                 IResult::Incomplete(rem) => return IResult::Incomplete(rem),
-                IResult::Error(_) => (DataType(DataLayout::Vector(ScalarType::Float, 4), TypeModifier::default()), rest)
+                IResult::Error(_) => {
+                    (DataType(DataLayout::Vector(ScalarType::Float, 4),
+                              TypeModifier::default()),
+                     rest)
+                }
             };
 
-            IResult::Done(rest, match object_type {
-                ParseType::Buffer => ObjectType::Buffer(buffer_arg),
-                ParseType::RWBuffer => ObjectType::RWBuffer(buffer_arg),
-                ParseType::Texture1D => ObjectType::Texture1D(buffer_arg),
-                ParseType::Texture1DArray => ObjectType::Texture1DArray(buffer_arg),
-                ParseType::Texture2D => ObjectType::Texture2D(buffer_arg),
-                ParseType::Texture2DArray => ObjectType::Texture2DArray(buffer_arg),
-                ParseType::Texture2DMS => ObjectType::Texture2DMS(buffer_arg),
-                ParseType::Texture2DMSArray => ObjectType::Texture2DMSArray(buffer_arg),
-                ParseType::Texture3D => ObjectType::Texture3D(buffer_arg),
-                ParseType::TextureCube => ObjectType::TextureCube(buffer_arg),
-                ParseType::TextureCubeArray => ObjectType::TextureCubeArray(buffer_arg),
-                ParseType::RWTexture1D => ObjectType::RWTexture1D(buffer_arg),
-                ParseType::RWTexture1DArray => ObjectType::RWTexture1DArray(buffer_arg),
-                ParseType::RWTexture2D => ObjectType::RWTexture2D(buffer_arg),
-                ParseType::RWTexture2DArray => ObjectType::RWTexture2DArray(buffer_arg),
-                ParseType::RWTexture3D => ObjectType::RWTexture3D(buffer_arg),
-                _ => unreachable!(),
-            })
-        },
+            IResult::Done(rest,
+                          match object_type {
+                              ParseType::Buffer => ObjectType::Buffer(buffer_arg),
+                              ParseType::RWBuffer => ObjectType::RWBuffer(buffer_arg),
+                              ParseType::Texture1D => ObjectType::Texture1D(buffer_arg),
+                              ParseType::Texture1DArray => ObjectType::Texture1DArray(buffer_arg),
+                              ParseType::Texture2D => ObjectType::Texture2D(buffer_arg),
+                              ParseType::Texture2DArray => ObjectType::Texture2DArray(buffer_arg),
+                              ParseType::Texture2DMS => ObjectType::Texture2DMS(buffer_arg),
+                              ParseType::Texture2DMSArray => {
+                                  ObjectType::Texture2DMSArray(buffer_arg)
+                              }
+                              ParseType::Texture3D => ObjectType::Texture3D(buffer_arg),
+                              ParseType::TextureCube => ObjectType::TextureCube(buffer_arg),
+                              ParseType::TextureCubeArray => {
+                                  ObjectType::TextureCubeArray(buffer_arg)
+                              }
+                              ParseType::RWTexture1D => ObjectType::RWTexture1D(buffer_arg),
+                              ParseType::RWTexture1DArray => {
+                                  ObjectType::RWTexture1DArray(buffer_arg)
+                              }
+                              ParseType::RWTexture2D => ObjectType::RWTexture2D(buffer_arg),
+                              ParseType::RWTexture2DArray => {
+                                  ObjectType::RWTexture2DArray(buffer_arg)
+                              }
+                              ParseType::RWTexture3D => ObjectType::RWTexture3D(buffer_arg),
+                              _ => unreachable!(),
+                          })
+        }
 
         ParseType::StructuredBuffer |
         ParseType::RWStructuredBuffer |
         ParseType::AppendStructuredBuffer |
         ParseType::ConsumeStructuredBuffer => {
 
-            let (buffer_arg, rest) = match delimited!(rest, token!(Token::LeftAngleBracket(_)), parse_structuredtype, token!(Token::RightAngleBracket(_))) {
+            let (buffer_arg, rest) = match delimited!(rest,
+                                                      token!(Token::LeftAngleBracket(_)),
+                                                      parse_structuredtype,
+                                                      token!(Token::RightAngleBracket(_))) {
                 IResult::Done(rest, ty) => (ty, rest),
                 IResult::Incomplete(rem) => return IResult::Incomplete(rem),
-                IResult::Error(_) => (StructuredType(StructuredLayout::Vector(ScalarType::Float, 4), TypeModifier::default()), rest)
+                IResult::Error(_) => {
+                    (StructuredType(StructuredLayout::Vector(ScalarType::Float, 4),
+                                    TypeModifier::default()),
+                     rest)
+                }
             };
 
-            IResult::Done(rest, match object_type {
-                ParseType::StructuredBuffer => ObjectType::StructuredBuffer(buffer_arg),
-                ParseType::RWStructuredBuffer => ObjectType::RWStructuredBuffer(buffer_arg),
-                ParseType::AppendStructuredBuffer => ObjectType::AppendStructuredBuffer(buffer_arg),
-                ParseType::ConsumeStructuredBuffer => ObjectType::ConsumeStructuredBuffer(buffer_arg),
-                _ => unreachable!(),
-            })
-        },
+            IResult::Done(rest,
+                          match object_type {
+                              ParseType::StructuredBuffer => {
+                                  ObjectType::StructuredBuffer(buffer_arg)
+                              }
+                              ParseType::RWStructuredBuffer => {
+                                  ObjectType::RWStructuredBuffer(buffer_arg)
+                              }
+                              ParseType::AppendStructuredBuffer => {
+                                  ObjectType::AppendStructuredBuffer(buffer_arg)
+                              }
+                              ParseType::ConsumeStructuredBuffer => {
+                                  ObjectType::ConsumeStructuredBuffer(buffer_arg)
+                              }
+                              _ => unreachable!(),
+                          })
+        }
 
         ParseType::InputPatch => IResult::Done(rest, ObjectType::InputPatch),
         ParseType::OutputPatch => IResult::Done(rest, ObjectType::OutputPatch),
@@ -380,12 +439,18 @@ fn parse_voidtype(input: &[LexToken]) -> IResult<&[LexToken], TypeLayout, ParseE
         IResult::Incomplete(Needed::Size(1))
     } else {
         match &input[0] {
-            &LexToken(Token::Id(Identifier(ref name)), _) => if name == "void" {
-                IResult::Done(&input[1..], TypeLayout::Void)
-            } else {
-                IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType), input))
-            },
-            _ => IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::WrongToken), input)),
+            &LexToken(Token::Id(Identifier(ref name)), _) => {
+                if name == "void" {
+                    IResult::Done(&input[1..], TypeLayout::Void)
+                } else {
+                    IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType),
+                                                 input))
+                }
+            }
+            _ => {
+                IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::WrongToken),
+                                             input))
+            }
         }
     }
 }
@@ -452,7 +517,9 @@ fn parse_paramtype(input: &[LexToken]) -> IResult<&[LexToken], ParamType, ParseE
 fn parse_localtype(input: &[LexToken]) -> IResult<&[LexToken], LocalType, ParseErrorReason> {
     // Todo: input modifiers
     match parse_typename(input) {
-        IResult::Done(rest, ty) => IResult::Done(rest, LocalType(ty, LocalStorage::default(), None)),
+        IResult::Done(rest, ty) => {
+            IResult::Done(rest, LocalType(ty, LocalStorage::default(), None))
+        }
         IResult::Incomplete(i) => IResult::Incomplete(i),
         IResult::Error(err) => IResult::Error(err),
     }
@@ -493,7 +560,8 @@ fn expr_p1(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, Pars
         Member(String),
     }
 
-    fn expr_p1_right(input: &[LexToken]) -> IResult<&[LexToken], Located<Precedence1Postfix>, ParseErrorReason> {
+    fn expr_p1_right(input: &[LexToken])
+                     -> IResult<&[LexToken], Located<Precedence1Postfix>, ParseErrorReason> {
         chain!(input,
             right: alt!(
                 chain!(start: token!(Token::Plus) ~ token!(Token::Plus), || { Located::new(Precedence1Postfix::Increment, start.to_loc()) }) |
@@ -570,12 +638,17 @@ fn expr_p2(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, Pars
     )
 }
 
-fn combine_rights(left: Located<Expression>, rights: Vec<(BinOp, Located<Expression>)>) -> Located<Expression> {
+fn combine_rights(left: Located<Expression>,
+                  rights: Vec<(BinOp, Located<Expression>)>)
+                  -> Located<Expression> {
     let loc = left.location.clone();
     let mut final_expression = left;
     for val in rights.iter() {
         let (ref op, ref exp) = *val;
-        final_expression = Located::new(Expression::BinaryOperation(op.clone(), Box::new(final_expression), Box::new(exp.clone())), loc.clone())
+        final_expression = Located::new(Expression::BinaryOperation(op.clone(),
+                                                                    Box::new(final_expression),
+                                                                    Box::new(exp.clone())),
+                                        loc.clone())
     }
     final_expression
 }
@@ -590,7 +663,8 @@ fn expr_p3(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, Pars
         )
     }
 
-    fn expr_p3_right(input: &[LexToken]) -> IResult<&[LexToken], (BinOp, Located<Expression>), ParseErrorReason> {
+    fn expr_p3_right(input: &[LexToken])
+                     -> IResult<&[LexToken], (BinOp, Located<Expression>), ParseErrorReason> {
         chain!(input,
             op: binop_p3 ~
             right: expr_p2,
@@ -614,7 +688,8 @@ fn expr_p4(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, Pars
         )
     }
 
-    fn expr_p4_right(input: &[LexToken]) -> IResult<&[LexToken], (BinOp, Located<Expression>), ParseErrorReason> {
+    fn expr_p4_right(input: &[LexToken])
+                     -> IResult<&[LexToken], (BinOp, Located<Expression>), ParseErrorReason> {
         chain!(input,
             op: binop_p4 ~
             right: expr_p3,
@@ -638,7 +713,8 @@ fn expr_p5(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, Pars
         )
     }
 
-    fn parse_rights(input: &[LexToken]) -> IResult<&[LexToken], (BinOp, Located<Expression>), ParseErrorReason> {
+    fn parse_rights(input: &[LexToken])
+                    -> IResult<&[LexToken], (BinOp, Located<Expression>), ParseErrorReason> {
         chain!(input,
             op: parse_op ~
             right: expr_p4,
@@ -664,7 +740,8 @@ fn expr_p6(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, Pars
         )
     }
 
-    fn parse_rights(input: &[LexToken]) -> IResult<&[LexToken], (BinOp, Located<Expression>), ParseErrorReason> {
+    fn parse_rights(input: &[LexToken])
+                    -> IResult<&[LexToken], (BinOp, Located<Expression>), ParseErrorReason> {
         chain!(input,
             op: parse_op ~
             right: expr_p5,
@@ -688,7 +765,8 @@ fn expr_p7(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, Pars
         )
     }
 
-    fn parse_rights(input: &[LexToken]) -> IResult<&[LexToken], (BinOp, Located<Expression>), ParseErrorReason> {
+    fn parse_rights(input: &[LexToken])
+                    -> IResult<&[LexToken], (BinOp, Located<Expression>), ParseErrorReason> {
         chain!(input,
             op: parse_op ~
             right: expr_p6,
@@ -780,7 +858,7 @@ fn statement(input: &[LexToken]) -> IResult<&[LexToken], Statement, ParseErrorRe
                     inner_statement: statement,
                     || Statement::If(cond, Box::new(inner_statement))
                 )
-            },
+            }
             LexToken(Token::For, _) => {
                 chain!(tail,
                     token!(Token::LeftParen) ~
@@ -793,7 +871,7 @@ fn statement(input: &[LexToken]) -> IResult<&[LexToken], Statement, ParseErrorRe
                     inner: statement,
                     || Statement::For(init, cond, inc, Box::new(inner))
                 )
-            },
+            }
             LexToken(Token::While, _) => {
                 chain!(tail,
                     token!(Token::LeftParen) ~
@@ -802,14 +880,14 @@ fn statement(input: &[LexToken]) -> IResult<&[LexToken], Statement, ParseErrorRe
                     inner: statement,
                     || Statement::While(cond, Box::new(inner))
                 )
-            },
+            }
             LexToken(Token::Return, _) => {
                 chain!(tail,
                     expression_statement: expr ~
                     token!(Token::Semicolon),
                     || Statement::Return(expression_statement)
                 )
-            },
+            }
             LexToken(Token::LeftBrace, _) => map!(input, statement_block, |s| Statement::Block(s)),
             _ => {
                 // Try parsing a variable definition
@@ -826,7 +904,7 @@ fn statement(input: &[LexToken]) -> IResult<&[LexToken], Statement, ParseErrorRe
                 };
                 // Return the most likely error
                 IResult::Error(err)
-            },
+            }
         }
     }
 }
@@ -847,12 +925,14 @@ fn statement_block(input: &[LexToken]) -> IResult<&[LexToken], Vec<Statement>, P
             return match token!(rest, Token::RightBrace) {
                 IResult::Done(rest, _) => IResult::Done(rest, statements),
                 IResult::Incomplete(rem) => IResult::Incomplete(rem),
-                IResult::Error(_) => match last_def {
-                    IResult::Done(_, _) => unreachable!(),
-                    IResult::Incomplete(rem) => IResult::Incomplete(rem),
-                    IResult::Error(err) => IResult::Error(err),
-                },
-            }
+                IResult::Error(_) => {
+                    match last_def {
+                        IResult::Done(_, _) => unreachable!(),
+                        IResult::Incomplete(rem) => IResult::Incomplete(rem),
+                        IResult::Error(err) => IResult::Error(err),
+                    }
+                }
+            };
         }
     }
 }
@@ -891,13 +971,17 @@ fn constantvariable(input: &[LexToken]) -> IResult<&[LexToken], ConstantVariable
 }
 
 fn cbuffer_register(input: &[LexToken]) -> IResult<&[LexToken], ConstantSlot, ParseErrorReason> {
-    map_res!(input, preceded!(token!(Token::Colon), token!(Token::Register(_))),
-        |reg| { match reg {
-            LexToken(Token::Register(RegisterSlot::B(slot)), _) => Ok(ConstantSlot(slot)) as Result<ConstantSlot, ParseErrorReason>,
-            LexToken(Token::Register(_), _) => Err(ParseErrorReason::WrongSlotType),
-            _ => unreachable!(),
-        } }
-    )
+    map_res!(input,
+             preceded!(token!(Token::Colon), token!(Token::Register(_))),
+             |reg| {
+                 match reg {
+                     LexToken(Token::Register(RegisterSlot::B(slot)), _) => {
+                         Ok(ConstantSlot(slot)) as Result<ConstantSlot, ParseErrorReason>
+                     }
+                     LexToken(Token::Register(_), _) => Err(ParseErrorReason::WrongSlotType),
+                     _ => unreachable!(),
+                 }
+             })
 }
 
 fn cbuffer(input: &[LexToken]) -> IResult<&[LexToken], ConstantBuffer, ParseErrorReason> {
@@ -916,14 +1000,20 @@ fn cbuffer(input: &[LexToken]) -> IResult<&[LexToken], ConstantBuffer, ParseErro
 }
 
 fn globalvariable_register(input: &[LexToken]) -> IResult<&[LexToken], GlobalSlot, ParseErrorReason> {
-    map_res!(input, preceded!(token!(Token::Colon), token!(Token::Register(_))),
-        |reg| { match reg {
-            LexToken(Token::Register(RegisterSlot::T(slot)), _) => Ok(GlobalSlot::ReadSlot(slot)) as Result<GlobalSlot, ParseErrorReason>,
-            LexToken(Token::Register(RegisterSlot::U(slot)), _) => Ok(GlobalSlot::ReadWriteSlot(slot)) as Result<GlobalSlot, ParseErrorReason>,
-            LexToken(Token::Register(_), _) => Err(ParseErrorReason::WrongSlotType),
-            _ => unreachable!(),
-        } }
-    )
+    map_res!(input,
+             preceded!(token!(Token::Colon), token!(Token::Register(_))),
+             |reg| {
+                 match reg {
+                     LexToken(Token::Register(RegisterSlot::T(slot)), _) => {
+                         Ok(GlobalSlot::ReadSlot(slot)) as Result<GlobalSlot, ParseErrorReason>
+                     }
+                     LexToken(Token::Register(RegisterSlot::U(slot)), _) => {
+                         Ok(GlobalSlot::ReadWriteSlot(slot)) as Result<GlobalSlot, ParseErrorReason>
+                     }
+                     LexToken(Token::Register(_), _) => Err(ParseErrorReason::WrongSlotType),
+                     _ => unreachable!(),
+                 }
+             })
 }
 
 fn globalvariable(input: &[LexToken]) -> IResult<&[LexToken], GlobalVariable, ParseErrorReason> {
@@ -989,7 +1079,8 @@ fn functionparam(input: &[LexToken]) -> IResult<&[LexToken], FunctionParam, Pars
     )
 }
 
-fn functiondefinition(input: &[LexToken]) -> IResult<&[LexToken], FunctionDefinition, ParseErrorReason> {
+fn functiondefinition(input: &[LexToken])
+                      -> IResult<&[LexToken], FunctionDefinition, ParseErrorReason> {
     chain!(input,
         attributes: many0!(functionattribute) ~
         ret: parse_typename ~
@@ -1007,25 +1098,33 @@ fn functiondefinition(input: &[LexToken]) -> IResult<&[LexToken], FunctionDefini
 fn rootdefinition(input: &[LexToken]) -> IResult<&[LexToken], RootDefinition, ParseErrorReason> {
 
     let err = match structdefinition(input) {
-        IResult::Done(rest, structdef) => return IResult::Done(rest, RootDefinition::Struct(structdef)),
+        IResult::Done(rest, structdef) => {
+            return IResult::Done(rest, RootDefinition::Struct(structdef))
+        }
         IResult::Incomplete(rem) => return IResult::Incomplete(rem),
         IResult::Error(e) => e,
     };
 
     let err = match cbuffer(input) {
-        IResult::Done(rest, cbuffer) => return IResult::Done(rest, RootDefinition::ConstantBuffer(cbuffer)),
+        IResult::Done(rest, cbuffer) => {
+            return IResult::Done(rest, RootDefinition::ConstantBuffer(cbuffer))
+        }
         IResult::Incomplete(rem) => return IResult::Incomplete(rem),
         IResult::Error(e) => get_most_relevant_error(err, e),
     };
 
     let err = match globalvariable(input) {
-        IResult::Done(rest, globalvariable) => return IResult::Done(rest, RootDefinition::GlobalVariable(globalvariable)),
+        IResult::Done(rest, globalvariable) => {
+            return IResult::Done(rest, RootDefinition::GlobalVariable(globalvariable))
+        }
         IResult::Incomplete(rem) => return IResult::Incomplete(rem),
         IResult::Error(e) => get_most_relevant_error(err, e),
     };
 
     let err = match functiondefinition(input) {
-        IResult::Done(rest, funcdef) => return IResult::Done(rest, RootDefinition::Function(funcdef)),
+        IResult::Done(rest, funcdef) => {
+            return IResult::Done(rest, RootDefinition::Function(funcdef))
+        }
         IResult::Incomplete(rem) => return IResult::Incomplete(rem),
         IResult::Error(e) => get_most_relevant_error(err, e),
     };
@@ -1034,7 +1133,9 @@ fn rootdefinition(input: &[LexToken]) -> IResult<&[LexToken], RootDefinition, Pa
 }
 
 // Find the error with the longest tokens used
-fn get_most_relevant_error<'a: 'c, 'b: 'c, 'c>(lhs: Err<&'a [LexToken], ParseErrorReason>, rhs: Err<&'b [LexToken], ParseErrorReason>) -> Err<&'c [LexToken], ParseErrorReason> {
+fn get_most_relevant_error<'a: 'c, 'b: 'c, 'c>(lhs: Err<&'a [LexToken], ParseErrorReason>,
+                                               rhs: Err<&'b [LexToken], ParseErrorReason>)
+                                               -> Err<&'c [LexToken], ParseErrorReason> {
     let lhs_len = match lhs {
         Err::Code(_) => panic!("expected error position"),
         Err::Node(_, _) => panic!("expected error position"),
@@ -1065,12 +1166,14 @@ pub fn module(input: &[LexToken]) -> IResult<&[LexToken], Vec<RootDefinition>, P
         } else {
             return match rest {
                 a if a.len() == 1 && a[0].0 == Token::Eof => IResult::Done(&[], roots),
-                _ => match last_def {
-                    IResult::Done(_, _) => unreachable!(),
-                    IResult::Incomplete(rem) => IResult::Incomplete(rem),
-                    IResult::Error(err) => IResult::Error(err),
-                },
-            }
+                _ => {
+                    match last_def {
+                        IResult::Done(_, _) => unreachable!(),
+                        IResult::Incomplete(rem) => IResult::Incomplete(rem),
+                        IResult::Error(err) => IResult::Error(err),
+                    }
+                }
+            };
         }
     }
 }
@@ -1085,9 +1188,19 @@ fn errorkind_to_reason(errkind: ErrorKind<ParseErrorReason>) -> ParseErrorReason
 fn iresult_to_error(err: Err<&[LexToken], ParseErrorReason>) -> ParseError {
     match err {
         Err::Code(error) => ParseError(errorkind_to_reason(error), None, None),
-        Err::Node(error, inner_err) => ParseError(errorkind_to_reason(error), None, Some(Box::new(iresult_to_error(*inner_err)))),
-        Err::Position(error, position) => ParseError(errorkind_to_reason(error), Some(position.to_vec()), None),
-        Err::NodePosition(error, position, inner_err) =>  ParseError(errorkind_to_reason(error), Some(position.to_vec()), Some(Box::new(iresult_to_error(*inner_err)))),
+        Err::Node(error, inner_err) => {
+            ParseError(errorkind_to_reason(error),
+                       None,
+                       Some(Box::new(iresult_to_error(*inner_err))))
+        }
+        Err::Position(error, position) => {
+            ParseError(errorkind_to_reason(error), Some(position.to_vec()), None)
+        }
+        Err::NodePosition(error, position, inner_err) => {
+            ParseError(errorkind_to_reason(error),
+                       Some(position.to_vec()),
+                       Some(Box::new(iresult_to_error(*inner_err))))
+        }
     }
 }
 
@@ -1095,21 +1208,38 @@ pub fn parse(entry_point: String, source: &[LexToken]) -> Result<Module, ParseEr
     let parse_result = module(source);
 
     match parse_result {
-        IResult::Done(rest, _) if rest.len() != 0 => Err(ParseError(ParseErrorReason::FailedToParse, Some(rest.to_vec()), None)),
-        IResult::Done(_, hlsl) => Ok(Module { entry_point: entry_point, root_definitions: hlsl }),
+        IResult::Done(rest, _) if rest.len() != 0 => {
+            Err(ParseError(ParseErrorReason::FailedToParse, Some(rest.to_vec()), None))
+        }
+        IResult::Done(_, hlsl) => {
+            Ok(Module {
+                entry_point: entry_point,
+                root_definitions: hlsl,
+            })
+        }
         IResult::Error(err) => Err(iresult_to_error(err)),
-        IResult::Incomplete(_) => Err(ParseError(ParseErrorReason::UnexpectedEndOfStream, None, None)),
+        IResult::Incomplete(_) => {
+            Err(ParseError(ParseErrorReason::UnexpectedEndOfStream, None, None))
+        }
     }
 }
 
 
 #[cfg(test)]
-fn exp_var(var_name: &'static str, line: u64, column: u64) -> Located<Expression> { Located::loc(line, column, Expression::Variable(var_name.to_string())) }
+fn exp_var(var_name: &'static str, line: u64, column: u64) -> Located<Expression> {
+    Located::loc(line, column, Expression::Variable(var_name.to_string()))
+}
 #[cfg(test)]
-fn bexp_var(var_name: &'static str, line: u64, column: u64) -> Box<Located<Expression>> { Box::new(Located::loc(line, column, Expression::Variable(var_name.to_string()))) }
+fn bexp_var(var_name: &'static str, line: u64, column: u64) -> Box<Located<Expression>> {
+    Box::new(Located::loc(line, column, Expression::Variable(var_name.to_string())))
+}
 
 #[cfg(test)]
-fn parse_result_from_str<T>(parse_func: Box<Fn(&[LexToken]) -> IResult<&[LexToken], T, ParseErrorReason>>) -> Box<Fn(&'static str) -> Result<T, ParseErrorReason>> where T: 'static {
+fn parse_result_from_str<T>(parse_func: Box<Fn(&[LexToken])
+                                               -> IResult<&[LexToken], T, ParseErrorReason>>)
+                            -> Box<Fn(&'static str) -> Result<T, ParseErrorReason>>
+    where T: 'static
+{
     use slp_transform_preprocess::preprocess_single;
     use slp_transform_lexer::lex;
     Box::new(move |string: &'static str| {
@@ -1126,18 +1256,21 @@ fn parse_result_from_str<T>(parse_func: Box<Fn(&[LexToken]) -> IResult<&[LexToke
                         } else {
                             Err(ParseErrorReason::FailedToParse)
                         }
-                    },
+                    }
                     IResult::Incomplete(_) => Err(ParseErrorReason::UnexpectedEndOfStream),
                     _ => Err(ParseErrorReason::FailedToParse),
                 }
             }
-            Err(error) => panic!("Failed to lex `{:?}`", error)
+            Err(error) => panic!("Failed to lex `{:?}`", error),
         }
     })
 }
 
 #[cfg(test)]
-fn parse_from_str<T>(parse_func: Box<Fn(&[LexToken]) -> IResult<&[LexToken], T, ParseErrorReason>>) -> Box<Fn(&'static str) -> T> where T: 'static {
+fn parse_from_str<T>(parse_func: Box<Fn(&[LexToken]) -> IResult<&[LexToken], T, ParseErrorReason>>)
+                     -> Box<Fn(&'static str) -> T>
+    where T: 'static
+{
     use slp_transform_preprocess::preprocess_single;
     use slp_transform_lexer::lex;
     Box::new(move |string: &'static str| {
@@ -1154,12 +1287,16 @@ fn parse_from_str<T>(parse_func: Box<Fn(&[LexToken]) -> IResult<&[LexToken], T, 
                         } else {
                             panic!("Tokens remaining while parsing `{:?}`: {:?}", stream, rem)
                         }
-                    },
-                    IResult::Incomplete(needed) => panic!("Failed to parse `{:?}`: Needed {:?} more", stream, needed),
-                    IResult::Error(err) => panic!("Failed to parse `{:?}`: Error: {:?}", err, stream)
+                    }
+                    IResult::Incomplete(needed) => {
+                        panic!("Failed to parse `{:?}`: Needed {:?} more", stream, needed)
+                    }
+                    IResult::Error(err) => {
+                        panic!("Failed to parse `{:?}`: Error: {:?}", err, stream)
+                    }
                 }
             }
-            Err(error) => panic!("Failed to lex `{:?}`", error)
+            Err(error) => panic!("Failed to lex `{:?}`", error),
         }
     })
 }
@@ -1167,7 +1304,7 @@ fn parse_from_str<T>(parse_func: Box<Fn(&[LexToken]) -> IResult<&[LexToken], T, 
 #[test]
 fn test_expr() {
 
-    use slp_shared::{FileLocation,File,Line,Column};
+    use slp_shared::{FileLocation, File, Line, Column};
 
     assert_eq!(expr(&[
             LexToken(Token::Id(Identifier("a".to_string())), FileLocation(File::Unknown, Line(1), Column(1))),
@@ -1186,10 +1323,26 @@ fn test_expr() {
     let expr_str_fail = parse_result_from_str(Box::new(expr));
 
     assert_eq!(expr_str("a"), exp_var("a", 1, 1));
-    assert_eq!(expr_str("4"), Located::loc(1, 1, Expression::Literal(Literal::UntypedInt(4))));
-    assert_eq!(expr_str("a+b"), Located::loc(1, 1, Expression::BinaryOperation(BinOp::Add, bexp_var("a", 1, 1), bexp_var("b", 1, 3))));
-    assert_eq!(expr_str("a*b"), Located::loc(1, 1, Expression::BinaryOperation(BinOp::Multiply, bexp_var("a", 1, 1), bexp_var("b", 1, 3))));
-    assert_eq!(expr_str("a + b"), Located::loc(1, 1, Expression::BinaryOperation(BinOp::Add, bexp_var("a", 1, 1), bexp_var("b", 1, 5))));
+    assert_eq!(expr_str("4"),
+               Located::loc(1, 1, Expression::Literal(Literal::UntypedInt(4))));
+    assert_eq!(expr_str("a+b"),
+               Located::loc(1,
+                            1,
+                            Expression::BinaryOperation(BinOp::Add,
+                                                        bexp_var("a", 1, 1),
+                                                        bexp_var("b", 1, 3))));
+    assert_eq!(expr_str("a*b"),
+               Located::loc(1,
+                            1,
+                            Expression::BinaryOperation(BinOp::Multiply,
+                                                        bexp_var("a", 1, 1),
+                                                        bexp_var("b", 1, 3))));
+    assert_eq!(expr_str("a + b"),
+               Located::loc(1,
+                            1,
+                            Expression::BinaryOperation(BinOp::Add,
+                                                        bexp_var("a", 1, 1),
+                                                        bexp_var("b", 1, 5))));
 
     assert_eq!(expr_str("a-b+c"), Located::loc(1, 1, Expression::BinaryOperation(
         BinOp::Add,
@@ -1237,34 +1390,109 @@ fn test_expr() {
         Box::new(Located::loc(1, 3, Expression::BinaryOperation(BinOp::Divide, bexp_var("b", 1, 4), bexp_var("c", 1, 6))))
     )));
 
-    assert_eq!(expr_str("a++"), Located::loc(1, 1, Expression::UnaryOperation(UnaryOp::PostfixIncrement, bexp_var("a", 1, 1))));
-    assert_eq!(expr_str("a--"), Located::loc(1, 1, Expression::UnaryOperation(UnaryOp::PostfixDecrement, bexp_var("a", 1, 1))));
-    assert_eq!(expr_str("++a"), Located::loc(1, 1, Expression::UnaryOperation(UnaryOp::PrefixIncrement, bexp_var("a", 1, 3))));
-    assert_eq!(expr_str("--a"), Located::loc(1, 1, Expression::UnaryOperation(UnaryOp::PrefixDecrement, bexp_var("a", 1, 3))));
-    assert_eq!(expr_str("+a"), Located::loc(1, 1, Expression::UnaryOperation(UnaryOp::Plus, bexp_var("a", 1, 2))));
-    assert_eq!(expr_str("-a"), Located::loc(1, 1, Expression::UnaryOperation(UnaryOp::Minus, bexp_var("a", 1, 2))));
-    assert_eq!(expr_str("!a"), Located::loc(1, 1, Expression::UnaryOperation(UnaryOp::LogicalNot, bexp_var("a", 1, 2))));
-    assert_eq!(expr_str("~a"), Located::loc(1, 1, Expression::UnaryOperation(UnaryOp::BitwiseNot, bexp_var("a", 1, 2))));
+    assert_eq!(expr_str("a++"),
+               Located::loc(1,
+                            1,
+                            Expression::UnaryOperation(UnaryOp::PostfixIncrement,
+                                                       bexp_var("a", 1, 1))));
+    assert_eq!(expr_str("a--"),
+               Located::loc(1,
+                            1,
+                            Expression::UnaryOperation(UnaryOp::PostfixDecrement,
+                                                       bexp_var("a", 1, 1))));
+    assert_eq!(expr_str("++a"),
+               Located::loc(1,
+                            1,
+                            Expression::UnaryOperation(UnaryOp::PrefixIncrement,
+                                                       bexp_var("a", 1, 3))));
+    assert_eq!(expr_str("--a"),
+               Located::loc(1,
+                            1,
+                            Expression::UnaryOperation(UnaryOp::PrefixDecrement,
+                                                       bexp_var("a", 1, 3))));
+    assert_eq!(expr_str("+a"),
+               Located::loc(1,
+                            1,
+                            Expression::UnaryOperation(UnaryOp::Plus, bexp_var("a", 1, 2))));
+    assert_eq!(expr_str("-a"),
+               Located::loc(1,
+                            1,
+                            Expression::UnaryOperation(UnaryOp::Minus, bexp_var("a", 1, 2))));
+    assert_eq!(expr_str("!a"),
+               Located::loc(1,
+                            1,
+                            Expression::UnaryOperation(UnaryOp::LogicalNot, bexp_var("a", 1, 2))));
+    assert_eq!(expr_str("~a"),
+               Located::loc(1,
+                            1,
+                            Expression::UnaryOperation(UnaryOp::BitwiseNot, bexp_var("a", 1, 2))));
 
-    assert_eq!(expr_str("a << b"), Located::loc(1, 1, Expression::BinaryOperation(BinOp::LeftShift, bexp_var("a", 1, 1), bexp_var("b", 1, 6))));
-    assert_eq!(expr_str("a >> b"), Located::loc(1, 1, Expression::BinaryOperation(BinOp::RightShift, bexp_var("a", 1, 1), bexp_var("b", 1, 6))));
-    assert_eq!(expr_str("a < b"), Located::loc(1, 1, Expression::BinaryOperation(BinOp::LessThan, bexp_var("a", 1, 1), bexp_var("b", 1, 5))));
-    assert_eq!(expr_str("a <= b"), Located::loc(1, 1, Expression::BinaryOperation(BinOp::LessEqual, bexp_var("a", 1, 1), bexp_var("b", 1, 6))));
-    assert_eq!(expr_str("a > b"), Located::loc(1, 1, Expression::BinaryOperation(BinOp::GreaterThan, bexp_var("a", 1, 1), bexp_var("b", 1, 5))));
-    assert_eq!(expr_str("a >= b"), Located::loc(1, 1, Expression::BinaryOperation(BinOp::GreaterEqual, bexp_var("a", 1, 1), bexp_var("b", 1, 6))));
-    assert_eq!(expr_str("a == b"), Located::loc(1, 1, Expression::BinaryOperation(BinOp::Equality, bexp_var("a", 1, 1), bexp_var("b", 1, 6))));
-    assert_eq!(expr_str("a != b"), Located::loc(1, 1, Expression::BinaryOperation(BinOp::Inequality, bexp_var("a", 1, 1), bexp_var("b", 1, 6))));
+    assert_eq!(expr_str("a << b"),
+               Located::loc(1,
+                            1,
+                            Expression::BinaryOperation(BinOp::LeftShift,
+                                                        bexp_var("a", 1, 1),
+                                                        bexp_var("b", 1, 6))));
+    assert_eq!(expr_str("a >> b"),
+               Located::loc(1,
+                            1,
+                            Expression::BinaryOperation(BinOp::RightShift,
+                                                        bexp_var("a", 1, 1),
+                                                        bexp_var("b", 1, 6))));
+    assert_eq!(expr_str("a < b"),
+               Located::loc(1,
+                            1,
+                            Expression::BinaryOperation(BinOp::LessThan,
+                                                        bexp_var("a", 1, 1),
+                                                        bexp_var("b", 1, 5))));
+    assert_eq!(expr_str("a <= b"),
+               Located::loc(1,
+                            1,
+                            Expression::BinaryOperation(BinOp::LessEqual,
+                                                        bexp_var("a", 1, 1),
+                                                        bexp_var("b", 1, 6))));
+    assert_eq!(expr_str("a > b"),
+               Located::loc(1,
+                            1,
+                            Expression::BinaryOperation(BinOp::GreaterThan,
+                                                        bexp_var("a", 1, 1),
+                                                        bexp_var("b", 1, 5))));
+    assert_eq!(expr_str("a >= b"),
+               Located::loc(1,
+                            1,
+                            Expression::BinaryOperation(BinOp::GreaterEqual,
+                                                        bexp_var("a", 1, 1),
+                                                        bexp_var("b", 1, 6))));
+    assert_eq!(expr_str("a == b"),
+               Located::loc(1,
+                            1,
+                            Expression::BinaryOperation(BinOp::Equality,
+                                                        bexp_var("a", 1, 1),
+                                                        bexp_var("b", 1, 6))));
+    assert_eq!(expr_str("a != b"),
+               Located::loc(1,
+                            1,
+                            Expression::BinaryOperation(BinOp::Inequality,
+                                                        bexp_var("a", 1, 1),
+                                                        bexp_var("b", 1, 6))));
 
-    assert_eq!(expr_str_fail("a < < b"), Err(ParseErrorReason::FailedToParse));
-    assert_eq!(expr_str_fail("a > > b"), Err(ParseErrorReason::FailedToParse));
-    assert_eq!(expr_str_fail("a < = b"), Err(ParseErrorReason::FailedToParse));
-    assert_eq!(expr_str_fail("a > = b"), Err(ParseErrorReason::FailedToParse));
-    assert_eq!(expr_str_fail("a = = b"), Err(ParseErrorReason::FailedToParse));
-    assert_eq!(expr_str_fail("a ! = b"), Err(ParseErrorReason::FailedToParse));
+    assert_eq!(expr_str_fail("a < < b"),
+               Err(ParseErrorReason::FailedToParse));
+    assert_eq!(expr_str_fail("a > > b"),
+               Err(ParseErrorReason::FailedToParse));
+    assert_eq!(expr_str_fail("a < = b"),
+               Err(ParseErrorReason::FailedToParse));
+    assert_eq!(expr_str_fail("a > = b"),
+               Err(ParseErrorReason::FailedToParse));
+    assert_eq!(expr_str_fail("a = = b"),
+               Err(ParseErrorReason::FailedToParse));
+    assert_eq!(expr_str_fail("a ! = b"),
+               Err(ParseErrorReason::FailedToParse));
 
-    assert_eq!(expr_str("a[b]"), Located::loc(1, 1,
-        Expression::ArraySubscript(bexp_var("a", 1, 1), bexp_var("b", 1, 3))
-    ));
+    assert_eq!(expr_str("a[b]"),
+               Located::loc(1,
+                            1,
+                            Expression::ArraySubscript(bexp_var("a", 1, 1), bexp_var("b", 1, 3))));
     assert_eq!(expr_str("d+a[b+c]"), Located::loc(1, 1,
         Expression::BinaryOperation(BinOp::Add,
             bexp_var("d", 1, 1),
@@ -1286,9 +1514,10 @@ fn test_expr() {
         )
     ));
 
-    assert_eq!(expr_str("array.Load"), Located::loc(1, 1,
-        Expression::Member(bexp_var("array", 1, 1), "Load".to_string())
-    ));
+    assert_eq!(expr_str("array.Load"),
+               Located::loc(1,
+                            1,
+                            Expression::Member(bexp_var("array", 1, 1), "Load".to_string())));
     assert_eq!(expr_str("array.Load()"), Located::loc(1, 1,
         Expression::Call(Box::new(Located::loc(1, 1, Expression::Member(bexp_var("array", 1, 1), "Load".to_string()))), vec![])
     ));
@@ -1305,11 +1534,15 @@ fn test_expr() {
         Expression::Call(Box::new(Located::loc(1, 1, Expression::Member(bexp_var("array", 1, 1), "Load".to_string()))), vec![exp_var("a", 1, 12), exp_var("b", 1, 15)])
     ));
 
-    assert_eq!(expr_str("(float) b"), Located::loc(1, 1,
-        Expression::Cast(Type::float(), bexp_var("b", 1, 9))
-    ));
+    assert_eq!(expr_str("(float) b"),
+               Located::loc(1, 1, Expression::Cast(Type::float(), bexp_var("b", 1, 9))));
 
-    assert_eq!(expr_str("a = b"), Located::loc(1, 1, Expression::BinaryOperation(BinOp::Assignment, bexp_var("a", 1, 1), bexp_var("b", 1, 5))));
+    assert_eq!(expr_str("a = b"),
+               Located::loc(1,
+                            1,
+                            Expression::BinaryOperation(BinOp::Assignment,
+                                                        bexp_var("a", 1, 1),
+                                                        bexp_var("b", 1, 5))));
     assert_eq!(expr_str("a = b = c"), Located::loc(1, 1, Expression::BinaryOperation(
         BinOp::Assignment,
         bexp_var("a", 1, 1),
@@ -1320,13 +1553,12 @@ fn test_expr() {
         )))
     )));
 
-    assert_eq!(expr_str("a ? b : c"), Located::loc(1, 1,
-        Expression::TernaryConditional(
-            bexp_var("a", 1, 1),
-            bexp_var("b", 1, 5),
-            bexp_var("c", 1, 9)
-        )
-    ));
+    assert_eq!(expr_str("a ? b : c"),
+               Located::loc(1,
+                            1,
+                            Expression::TernaryConditional(bexp_var("a", 1, 1),
+                                                           bexp_var("b", 1, 5),
+                                                           bexp_var("c", 1, 9))));
     assert_eq!(expr_str("a ? b ? c : d : e"), Located::loc(1, 1,
         Expression::TernaryConditional(
             bexp_var("a", 1, 1),
@@ -1376,33 +1608,36 @@ fn test_statement() {
 
     // Expression statements
     assert_eq!(statement_str("func();"),
-        Statement::Expression(Located::loc(1, 1, Expression::Call(bexp_var("func", 1, 1), vec![])))
-    );
+               Statement::Expression(Located::loc(1,
+                                                  1,
+                                                  Expression::Call(bexp_var("func", 1, 1),
+                                                                   vec![]))));
     assert_eq!(statement_str(" func ( ) ; "),
-        Statement::Expression(Located::loc(1, 2, Expression::Call(bexp_var("func", 1, 2), vec![])))
-    );
+               Statement::Expression(Located::loc(1,
+                                                  2,
+                                                  Expression::Call(bexp_var("func", 1, 2),
+                                                                   vec![]))));
 
     // For loop init statement
     let init_statement_str = parse_from_str(Box::new(init_statement));
     let vardef_str = parse_from_str(Box::new(vardef));
 
     assert_eq!(init_statement_str("x"),
-        InitStatement::Expression(exp_var("x", 1, 1))
-    );
+               InitStatement::Expression(exp_var("x", 1, 1)));
     assert_eq!(vardef_str("uint x"),
-        VarDef::new("x".to_string(), Type::uint().into(), None)
-    );
+               VarDef::new("x".to_string(), Type::uint().into(), None));
     assert_eq!(init_statement_str("uint x"),
-        InitStatement::Declaration(VarDef::new("x".to_string(), Type::uint().into(), None))
-    );
+               InitStatement::Declaration(VarDef::new("x".to_string(), Type::uint().into(), None)));
     assert_eq!(init_statement_str("uint x = y"),
-        InitStatement::Declaration(VarDef::new("x".to_string(), Type::uint().into(), Some(exp_var("y", 1, 10))))
-    );
+               InitStatement::Declaration(VarDef::new("x".to_string(),
+                                                      Type::uint().into(),
+                                                      Some(exp_var("y", 1, 10)))));
 
     // Variable declarations
     assert_eq!(statement_str("uint x = y;"),
-        Statement::Var(VarDef::new("x".to_string(), Type::uint().into(), Some(exp_var("y", 1, 10))))
-    );
+               Statement::Var(VarDef::new("x".to_string(),
+                                          Type::uint().into(),
+                                          Some(exp_var("y", 1, 10)))));
     assert_eq!(statement_str("float x[3];"),
         Statement::Var(VarDef {
             local_type: Type::from_layout(TypeLayout::float()).into(),
@@ -1479,36 +1714,53 @@ fn test_rootdefinition() {
         members: vec![
             StructMember { name: "a".to_string(), typename: Type::uint() },
             StructMember { name: "b".to_string(), typename: Type::float() },
-        ]
+        ],
     };
-    assert_eq!(structdefinition_str(test_struct_str), test_struct_ast.clone());
-    assert_eq!(rootdefinition_str(test_struct_str), RootDefinition::Struct(test_struct_ast.clone()));
+    assert_eq!(structdefinition_str(test_struct_str),
+               test_struct_ast.clone());
+    assert_eq!(rootdefinition_str(test_struct_str),
+               RootDefinition::Struct(test_struct_ast.clone()));
 
     let functiondefinition_str = parse_from_str(Box::new(functiondefinition));
 
     let test_func_str = "void func(float x) { }";
-    let test_func_ast = FunctionDefinition { 
+    let test_func_ast = FunctionDefinition {
         name: "func".to_string(),
         returntype: Type::void(),
-        params: vec![FunctionParam { name: "x".to_string(), param_type: Type::float().into(), semantic: None }],
+        params: vec![FunctionParam {
+                         name: "x".to_string(),
+                         param_type: Type::float().into(),
+                         semantic: None,
+                     }],
         body: vec![],
         attributes: vec![],
     };
     assert_eq!(functiondefinition_str(test_func_str), test_func_ast.clone());
-    assert_eq!(rootdefinition_str(test_func_str), RootDefinition::Function(test_func_ast.clone()));
-    assert_eq!(rootdefinition_str("[numthreads(16, 16, 1)] void func(float x) { }"), RootDefinition::Function(FunctionDefinition {
-        name: "func".to_string(),
-        returntype: Type::void(),
-        params: vec![FunctionParam { name: "x".to_string(), param_type: Type::float().into(), semantic: None }],
-        body: vec![],
-        attributes: vec![FunctionAttribute::NumThreads(16, 16, 1)],
-    }));
+    assert_eq!(rootdefinition_str(test_func_str),
+               RootDefinition::Function(test_func_ast.clone()));
+    assert_eq!(rootdefinition_str("[numthreads(16, 16, 1)] void func(float x) { }"),
+               RootDefinition::Function(FunctionDefinition {
+                   name: "func".to_string(),
+                   returntype: Type::void(),
+                   params: vec![FunctionParam {
+                                    name: "x".to_string(),
+                                    param_type: Type::float().into(),
+                                    semantic: None,
+                                }],
+                   body: vec![],
+                   attributes: vec![FunctionAttribute::NumThreads(16, 16, 1)],
+               }));
 
     let constantvariable_str = parse_from_str(Box::new(constantvariable));
 
     let test_cbuffervar_str = "float4x4 wvp;";
-    let test_cbuffervar_ast = ConstantVariable { name: "wvp".to_string(), typename: Type::float4x4(), offset: None };
-    assert_eq!(constantvariable_str(test_cbuffervar_str), test_cbuffervar_ast.clone());
+    let test_cbuffervar_ast = ConstantVariable {
+        name: "wvp".to_string(),
+        typename: Type::float4x4(),
+        offset: None,
+    };
+    assert_eq!(constantvariable_str(test_cbuffervar_str),
+               test_cbuffervar_ast.clone());
 
     let cbuffer_str = parse_from_str(Box::new(cbuffer));
 
@@ -1518,10 +1770,11 @@ fn test_rootdefinition() {
         slot: None,
         members: vec![
             ConstantVariable { name: "wvp".to_string(), typename: Type::float4x4(), offset: None },
-        ]
+        ],
     };
     assert_eq!(cbuffer_str(test_cbuffer1_str), test_cbuffer1_ast.clone());
-    assert_eq!(rootdefinition_str(test_cbuffer1_str), RootDefinition::ConstantBuffer(test_cbuffer1_ast.clone()));
+    assert_eq!(rootdefinition_str(test_cbuffer1_str),
+               RootDefinition::ConstantBuffer(test_cbuffer1_ast.clone()));
 
     let cbuffer_register_str = parse_from_str(Box::new(cbuffer_register));
     assert_eq!(cbuffer_register_str(" : register(b12) "), ConstantSlot(12));
@@ -1532,10 +1785,11 @@ fn test_rootdefinition() {
         slot: Some(ConstantSlot(12)),
         members: vec![
             ConstantVariable { name: "wvp".to_string(), typename: Type::float4x4(), offset: None },
-        ]
+        ],
     };
     assert_eq!(cbuffer_str(test_cbuffer2_str), test_cbuffer2_ast.clone());
-    assert_eq!(rootdefinition_str(test_cbuffer2_str), RootDefinition::ConstantBuffer(test_cbuffer2_ast.clone()));
+    assert_eq!(rootdefinition_str(test_cbuffer2_str),
+               RootDefinition::ConstantBuffer(test_cbuffer2_ast.clone()));
 
     let globalvariable_str = parse_from_str(Box::new(globalvariable));
 
@@ -1546,8 +1800,10 @@ fn test_rootdefinition() {
         slot: Some(GlobalSlot::ReadSlot(1)),
         assignment: None,
     };
-    assert_eq!(globalvariable_str(test_buffersrv_str), test_buffersrv_ast.clone());
-    assert_eq!(rootdefinition_str(test_buffersrv_str), RootDefinition::GlobalVariable(test_buffersrv_ast.clone()));
+    assert_eq!(globalvariable_str(test_buffersrv_str),
+               test_buffersrv_ast.clone());
+    assert_eq!(rootdefinition_str(test_buffersrv_str),
+               RootDefinition::GlobalVariable(test_buffersrv_ast.clone()));
 
     let test_buffersrv2_str = "Buffer<uint4> g_myBuffer : register(t1);";
     let test_buffersrv2_ast = GlobalVariable {
@@ -1556,8 +1812,10 @@ fn test_rootdefinition() {
         slot: Some(GlobalSlot::ReadSlot(1)),
         assignment: None,
     };
-    assert_eq!(globalvariable_str(test_buffersrv2_str), test_buffersrv2_ast.clone());
-    assert_eq!(rootdefinition_str(test_buffersrv2_str), RootDefinition::GlobalVariable(test_buffersrv2_ast.clone()));
+    assert_eq!(globalvariable_str(test_buffersrv2_str),
+               test_buffersrv2_ast.clone());
+    assert_eq!(rootdefinition_str(test_buffersrv2_str),
+               RootDefinition::GlobalVariable(test_buffersrv2_ast.clone()));
 
     let test_buffersrv3_str = "Buffer<vector<int, 4>> g_myBuffer : register(t1);";
     let test_buffersrv3_ast = GlobalVariable {
@@ -1566,8 +1824,10 @@ fn test_rootdefinition() {
         slot: Some(GlobalSlot::ReadSlot(1)),
         assignment: None,
     };
-    assert_eq!(globalvariable_str(test_buffersrv3_str), test_buffersrv3_ast.clone());
-    assert_eq!(rootdefinition_str(test_buffersrv3_str), RootDefinition::GlobalVariable(test_buffersrv3_ast.clone()));
+    assert_eq!(globalvariable_str(test_buffersrv3_str),
+               test_buffersrv3_ast.clone());
+    assert_eq!(rootdefinition_str(test_buffersrv3_str),
+               RootDefinition::GlobalVariable(test_buffersrv3_ast.clone()));
 
     let test_buffersrv4_str = "StructuredBuffer<CustomType> g_myBuffer : register(t1);";
     let test_buffersrv4_ast = GlobalVariable {
@@ -1576,17 +1836,23 @@ fn test_rootdefinition() {
         slot: Some(GlobalSlot::ReadSlot(1)),
         assignment: None,
     };
-    assert_eq!(globalvariable_str(test_buffersrv4_str), test_buffersrv4_ast.clone());
-    assert_eq!(rootdefinition_str(test_buffersrv4_str), RootDefinition::GlobalVariable(test_buffersrv4_ast.clone()));
+    assert_eq!(globalvariable_str(test_buffersrv4_str),
+               test_buffersrv4_ast.clone());
+    assert_eq!(rootdefinition_str(test_buffersrv4_str),
+               RootDefinition::GlobalVariable(test_buffersrv4_ast.clone()));
 
     let test_static_const_str = "static const int c_numElements = 4;";
     let test_static_const_ast = GlobalVariable {
         name: "c_numElements".to_string(),
-        global_type: GlobalType(Type(TypeLayout::int(), TypeModifier { is_const: true, .. TypeModifier::default() }), GlobalStorage::Static, None),
+        global_type: GlobalType(Type(TypeLayout::int(),
+                                     TypeModifier { is_const: true, ..TypeModifier::default() }),
+                                GlobalStorage::Static,
+                                None),
         slot: None,
         assignment: Some(Located::loc(1, 34, Expression::Literal(Literal::UntypedInt(4)))),
     };
-    assert_eq!(globalvariable_str(test_static_const_str), test_static_const_ast.clone());
-    assert_eq!(rootdefinition_str(test_static_const_str), RootDefinition::GlobalVariable(test_static_const_ast.clone()));
+    assert_eq!(globalvariable_str(test_static_const_str),
+               test_static_const_ast.clone());
+    assert_eq!(rootdefinition_str(test_static_const_str),
+               RootDefinition::GlobalVariable(test_static_const_ast.clone()));
 }
-

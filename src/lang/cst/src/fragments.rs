@@ -15,10 +15,17 @@ impl Fragment {
         match *self {
             Fragment::VectorCast(ref from, ref to, ref dim_from, ref dim_to) => {
                 let dim_to_u32 = dim_to.as_u32();
-                assert!(dim_to_u32 <= dim_from.as_u32(), "{} <= {}", dim_to_u32, dim_from.as_u32());
+                assert!(dim_to_u32 <= dim_from.as_u32(),
+                        "{} <= {}",
+                        dim_to_u32,
+                        dim_from.as_u32());
                 let from_param = "from".to_string();
                 let to_local = "to".to_string();
-                let mut body = vec![Statement::Var(VarDef { name: to_local.clone(), typename: Type::Vector(to.clone(), dim_to.clone()), assignment: None } )];
+                let mut body = vec![Statement::Var(VarDef {
+                                        name: to_local.clone(),
+                                        typename: Type::Vector(to.clone(), dim_to.clone()),
+                                        assignment: None,
+                                    })];
                 for i in 0..dim_to_u32 {
                     let index = i as u64;
                     body.push(Statement::Expression(Expression::BinaryOperation(BinOp::Assignment,
@@ -30,14 +37,21 @@ impl Fragment {
                 FunctionDefinition {
                     name: name.to_string(),
                     returntype: Type::Vector(to.clone(), dim_to.clone()),
-                    params: vec![FunctionParam { name: from_param, typename: Type::Vector(from.clone(), dim_from.clone()) }],
+                    params: vec![FunctionParam {
+                                     name: from_param,
+                                     typename: Type::Vector(from.clone(), dim_from.clone()),
+                                 }],
                     body: body,
                 }
             }
             Fragment::ScalarToVectorCast(ref from, ref to, ref dim_to) => {
                 let from_param = "from".to_string();
                 let to_local = "to".to_string();
-                let mut body = vec![Statement::Var(VarDef { name: to_local.clone(), typename: Type::Vector(to.clone(), dim_to.clone()), assignment: None } )];
+                let mut body = vec![Statement::Var(VarDef {
+                                        name: to_local.clone(),
+                                        typename: Type::Vector(to.clone(), dim_to.clone()),
+                                        assignment: None,
+                                    })];
                 for i in 0..(dim_to.as_u32()) {
                     let index = i as u64;
                     body.push(Statement::Expression(Expression::BinaryOperation(BinOp::Assignment,
@@ -49,7 +63,10 @@ impl Fragment {
                 FunctionDefinition {
                     name: name.to_string(),
                     returntype: Type::Vector(to.clone(), dim_to.clone()),
-                    params: vec![FunctionParam { name: from_param, typename: Type::Scalar(from.clone()) }],
+                    params: vec![FunctionParam {
+                                     name: from_param,
+                                     typename: Type::Scalar(from.clone()),
+                                 }],
                     body: body,
                 }
             }
@@ -89,7 +106,11 @@ impl Fragment {
                 let to_str = Fragment::get_type_candidate_name(to);
                 let dim_from_str = Fragment::get_dimension_candidate_name(dim_from);
                 let dim_to_str = Fragment::get_dimension_candidate_name(dim_to);
-                format!("cast_{}{}_to_{}{}", from_str, dim_from_str, to_str, dim_to_str)
+                format!("cast_{}{}_to_{}{}",
+                        from_str,
+                        dim_from_str,
+                        to_str,
+                        dim_to_str)
             }
             Fragment::ScalarToVectorCast(ref from, ref to, ref dim_to) => {
                 let from_str = Fragment::get_type_candidate_name(from);

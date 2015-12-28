@@ -5,9 +5,9 @@ use slp_lang_cst::fragments::Fragment;
 
 pub type Identifier = String;
 
-pub use slp_lang_cst::AccessModifier as AccessModifier;
-pub use slp_lang_cst::Scalar as Scalar;
-pub use slp_lang_cst::VectorDimension as VectorDimension;
+pub use slp_lang_cst::AccessModifier;
+pub use slp_lang_cst::Scalar;
+pub use slp_lang_cst::VectorDimension;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Type {
@@ -42,10 +42,10 @@ pub enum Type {
     MemFenceFlags,
 }
 
-pub use slp_lang_cst::AddressSpace as AddressSpace;
-pub use slp_lang_cst::BinOp as BinOp;
-pub use slp_lang_cst::UnaryOp as UnaryOp;
-pub use slp_lang_cst::Literal as Literal;
+pub use slp_lang_cst::AddressSpace;
+pub use slp_lang_cst::BinOp;
+pub use slp_lang_cst::UnaryOp;
+pub use slp_lang_cst::Literal;
 
 #[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone, Copy)]
 pub struct FunctionId(pub u32);
@@ -113,7 +113,7 @@ pub enum Expression {
 pub struct VarDef {
     pub id: LocalId,
     pub typename: Type,
-    pub assignment: Option<Expression>
+    pub assignment: Option<Expression>,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -169,7 +169,7 @@ pub struct FunctionDefinition {
     pub local_declarations: LocalDeclarations,
 }
 
-pub use slp_lang_cst::Dimension as Dimension;
+pub use slp_lang_cst::Dimension;
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct KernelParam {

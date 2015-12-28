@@ -4,7 +4,7 @@ use std::fmt;
 use slp_shared::*;
 use slp_lang_htk::*;
 use slp_transform_preprocess::PreprocessedText;
-use nom::{IResult,Needed,Err,ErrorKind};
+use nom::{IResult, Needed, Err, ErrorKind};
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum LexError {
@@ -63,7 +63,10 @@ named!(digits<u64>, chain!(
     }
 ));
 
-enum IntType { Uint, Long }
+enum IntType {
+    Uint,
+    Long,
+}
 named!(int_type<IntType>, alt!(
     tag!("u") => { |_| { IntType::Uint } } |
     tag!("U") => { |_| { IntType::Uint } } |
@@ -96,7 +99,11 @@ fn literal_float<'a>(input: &'a [u8]) -> IResult<&'a [u8], Token> {
         chain!(left: digit_sequence ~ tag!("."), || { Fraction(left, vec![]) })
     ));
 
-    enum FloatType { Half, Float, Double };
+    enum FloatType {
+        Half,
+        Float,
+        Double,
+    };
     named!(suffix<FloatType>, alt!(
         tag!("h") => { |_| FloatType::Half } |
         tag!("H") => { |_| FloatType::Half } |
@@ -106,7 +113,10 @@ fn literal_float<'a>(input: &'a [u8]) -> IResult<&'a [u8], Token> {
         tag!("L") => { |_| FloatType::Double }
     ));
 
-    enum Sign { Positive, Negative };
+    enum Sign {
+        Positive,
+        Negative,
+    };
     named!(sign<Sign>, alt!(
         tag!("+") => { |_| Sign::Positive } |
         tag!("-") => { |_| Sign::Negative }
@@ -121,13 +131,17 @@ fn literal_float<'a>(input: &'a [u8]) -> IResult<&'a [u8], Token> {
         || { Exponent(match s_opt { Some(Sign::Negative) => -(exponent as i64), _ => exponent as i64 }) }
     ));
 
-    fn produce(left: DigitSequence, right: DigitSequence, exponent: i64, float_type: Option<FloatType>) -> Token {
+    fn produce(left: DigitSequence,
+               right: DigitSequence,
+               exponent: i64,
+               float_type: Option<FloatType>)
+               -> Token {
 
         let mut left_combined = 0f64;
         for digit in left {
             left_combined = left_combined * 10f64;
             left_combined += digit as f64;
-        };
+        }
         let left_float = left_combined as f64;
 
         let mut right_combined = 0f64;
@@ -135,7 +149,7 @@ fn literal_float<'a>(input: &'a [u8]) -> IResult<&'a [u8], Token> {
         for digit in right {
             right_combined = right_combined * 10f64;
             right_combined += digit as f64;
-        };
+        }
         let mut right_float = right_combined as f64;
         for _ in 0..right_len {
             right_float = right_float / 10f64;
@@ -161,7 +175,7 @@ fn literal_float<'a>(input: &'a [u8]) -> IResult<&'a [u8], Token> {
     }
 
     alt!(input,
-        chain!(
+         chain!(
             fraction: fractional_constant ~
             exponent_opt: opt!(exponent) ~
             suffix_opt: opt!(suffix),
@@ -172,13 +186,12 @@ fn literal_float<'a>(input: &'a [u8]) -> IResult<&'a [u8], Token> {
                 produce(left, right, exp, suffix_opt)
             }
         ) |
-        chain!(
+         chain!(
             digits: digit_sequence ~
             exponent: exponent ~
             suffix_opt: opt!(suffix),
             || { produce(digits, vec![], exponent.0, suffix_opt) }
-        )
-    )
+        ))
 }
 
 fn identifier_firstchar<'a>(input: &'a [u8]) -> IResult<&'a [u8], u8> {
@@ -201,7 +214,8 @@ fn identifier_char<'a>(input: &'a [u8]) -> IResult<&'a [u8], u8> {
     } else {
         let byte = input[0];
         let ch = byte as char;
-        if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch == '_') || (ch >= '0' && ch <= '9') {
+        if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch == '_') ||
+           (ch >= '0' && ch <= '9') {
             IResult::Done(&input[1..], byte)
         } else {
             IResult::Error(Err::Position(ErrorKind::Custom(0), input))
@@ -212,18 +226,24 @@ fn identifier_char<'a>(input: &'a [u8]) -> IResult<&'a [u8], u8> {
 fn identifier<'a>(input: &'a [u8]) -> IResult<&'a [u8], Identifier> {
     let mut chars = Vec::new();
     let first_result = identifier_firstchar(input);
-    
+
     let mut stream = match first_result {
         IResult::Incomplete(needed) => return IResult::Incomplete(needed),
         IResult::Error(err) => return IResult::Error(err),
-        IResult::Done(output, ch) => { chars.push(ch); output },
+        IResult::Done(output, ch) => {
+            chars.push(ch);
+            output
+        }
     };
 
     loop {
         stream = match identifier_char(stream) {
             IResult::Incomplete(_) => break,
             IResult::Error(_) => break,
-            IResult::Done(output, ch) => { chars.push(ch); output },
+            IResult::Done(output, ch) => {
+                chars.push(ch);
+                output
+            }
         }
     }
 
@@ -236,14 +256,17 @@ fn identifier<'a>(input: &'a [u8]) -> IResult<&'a [u8], Identifier> {
     // Maybe just combine the identifier and reserved word parsing?
     if let IResult::Done(slice, _) = reserved_word(&chars[..]) {
         if slice.len() == 0 {
-            return IResult::Error(Err::Code(ErrorKind::Custom(1)))
+            return IResult::Error(Err::Code(ErrorKind::Custom(1)));
         }
     }
 
-    IResult::Done(stream, Identifier(str::from_utf8(&chars[..]).unwrap().to_string()))
+    IResult::Done(stream,
+                  Identifier(str::from_utf8(&chars[..]).unwrap().to_string()))
 }
 
-fn whitespace_ignore(_: Vec<&[u8]>) -> Result<(), ()> { Result::Ok(()) }
+fn whitespace_ignore(_: Vec<&[u8]>) -> Result<(), ()> {
+    Result::Ok(())
+}
 named!(whitespace<()>, map_res!(
     many1!(alt!(
         tag!(" ") | tag!("\n") | tag!("\r") | tag!("\t") |
@@ -382,7 +405,11 @@ named!(reserved_word, alt!(
     reserved_word_s3
 ));
 
-enum RegisterType { T, U, B }
+enum RegisterType {
+    T,
+    U,
+    B,
+}
 named!(register<Token>, chain!(
     reserved_word_register ~
     opt!(whitespace) ~
@@ -518,9 +545,9 @@ named!(token_no_whitespace_intermediate<Token>, alt!(
 ));
 
 fn token_no_whitespace(input: &[u8]) -> IResult<&[u8], IntermediateToken> {
-    map!(input, token_no_whitespace_intermediate, |intermediate| {
-         IntermediateToken(intermediate, IntermediateLocation(input.len() as u64))
-    })
+    map!(input,
+         token_no_whitespace_intermediate,
+         |intermediate| IntermediateToken(intermediate, IntermediateLocation(input.len() as u64)))
 }
 
 named!(token<IntermediateToken>, delimited!(opt!(whitespace), alt!(token_no_whitespace), opt!(whitespace)));
@@ -529,11 +556,14 @@ fn token_stream(input: &[u8]) -> IResult<&[u8], Vec<StreamToken>> {
     let total_length = input.len() as u64;
     match many0!(input, token) {
         IResult::Done(rest, itokens) => {
-            let tokens = itokens.into_iter().map(|itoken|
-                StreamToken(itoken.0, StreamLocation(total_length - (itoken.1).0))
-            ).collect::<Vec<_>>();
+            let tokens = itokens.into_iter()
+                                .map(|itoken| {
+                                    StreamToken(itoken.0,
+                                                StreamLocation(total_length - (itoken.1).0))
+                                })
+                                .collect::<Vec<_>>();
             IResult::Done(rest, tokens)
-        },
+        }
         IResult::Incomplete(rest) => IResult::Incomplete(rest),
         IResult::Error(err) => IResult::Error(err),
     }
@@ -545,7 +575,10 @@ pub fn lex(preprocessed: &PreprocessedText) -> Result<Tokens, LexError> {
     match token_stream(code_bytes) {
         IResult::Done(rest, mut stream) => {
             if rest == [] {
-                let stream = { stream.push(StreamToken(Token::Eof, StreamLocation(total_length))); stream };
+                let stream = {
+                    stream.push(StreamToken(Token::Eof, StreamLocation(total_length)));
+                    stream
+                };
                 let mut lex_tokens = Vec::with_capacity(stream.len());
                 for StreamToken(ref token, ref stream_location) in stream {
                     let loc = match preprocessed.get_file_location(stream_location) {
@@ -558,13 +591,9 @@ pub fn lex(preprocessed: &PreprocessedText) -> Result<Tokens, LexError> {
             } else {
                 Err(LexError::FailedToParse(rest.to_vec()))
             }
-        },
-        IResult::Incomplete(_) => {
-            Err(LexError::UnexpectedEndOfStream)
-        },
-        IResult::Error(_) => {
-            Err(LexError::Unknown)
-        },
+        }
+        IResult::Incomplete(_) => Err(LexError::UnexpectedEndOfStream),
+        IResult::Error(_) => Err(LexError::Unknown),
     }
 }
 
@@ -576,86 +605,157 @@ fn test_token() {
     }
 
     assert_eq!(token(&b""[..]), IResult::Incomplete(Needed::Size(1)));
-    assert_eq!(token(&b";"[..]), IResult::Done(&b""[..], from_end(Token::Semicolon, 1)));
-    assert_eq!(token(&b" ;"[..]), IResult::Done(&b""[..], from_end(Token::Semicolon, 1)));
-    assert_eq!(token(&b"; "[..]), IResult::Done(&b""[..], from_end(Token::Semicolon, 2)));
-    assert_eq!(token(&b" ; "[..]), IResult::Done(&b""[..], from_end(Token::Semicolon, 2)));
-    assert_eq!(token(&b"name"[..]), IResult::Done(&b""[..], from_end(Token::Id(Identifier("name".to_string())), 4)));
+    assert_eq!(token(&b";"[..]),
+               IResult::Done(&b""[..], from_end(Token::Semicolon, 1)));
+    assert_eq!(token(&b" ;"[..]),
+               IResult::Done(&b""[..], from_end(Token::Semicolon, 1)));
+    assert_eq!(token(&b"; "[..]),
+               IResult::Done(&b""[..], from_end(Token::Semicolon, 2)));
+    assert_eq!(token(&b" ; "[..]),
+               IResult::Done(&b""[..], from_end(Token::Semicolon, 2)));
+    assert_eq!(token(&b"name"[..]),
+               IResult::Done(&b""[..],
+                             from_end(Token::Id(Identifier("name".to_string())), 4)));
 
-    assert_eq!(token(&b"12 "[..]), IResult::Done(&b""[..], from_end(Token::LiteralInt(12), 3)));
-    assert_eq!(token(&b"12u"[..]), IResult::Done(&b""[..], from_end(Token::LiteralUint(12), 3)));
-    assert_eq!(token(&b"12l"[..]), IResult::Done(&b""[..], from_end(Token::LiteralLong(12), 3)));
-    assert_eq!(token(&b"12L"[..]), IResult::Done(&b""[..], from_end(Token::LiteralLong(12), 3)));
+    assert_eq!(token(&b"12 "[..]),
+               IResult::Done(&b""[..], from_end(Token::LiteralInt(12), 3)));
+    assert_eq!(token(&b"12u"[..]),
+               IResult::Done(&b""[..], from_end(Token::LiteralUint(12), 3)));
+    assert_eq!(token(&b"12l"[..]),
+               IResult::Done(&b""[..], from_end(Token::LiteralLong(12), 3)));
+    assert_eq!(token(&b"12L"[..]),
+               IResult::Done(&b""[..], from_end(Token::LiteralLong(12), 3)));
 
-    assert_eq!(token(&b"1.0f"[..]), IResult::Done(&b""[..], from_end(Token::LiteralFloat(1.0f32), 4)));
-    assert_eq!(token(&b"2.0 "[..]), IResult::Done(&b""[..], from_end(Token::LiteralFloat(2.0f32), 4)));
-    assert_eq!(token(&b"2.0L"[..]), IResult::Done(&b""[..], from_end(Token::LiteralDouble(2.0f64), 4)));
-    assert_eq!(token(&b"0.5h"[..]), IResult::Done(&b""[..], from_end(Token::LiteralHalf(0.5f32), 4)));
+    assert_eq!(token(&b"1.0f"[..]),
+               IResult::Done(&b""[..], from_end(Token::LiteralFloat(1.0f32), 4)));
+    assert_eq!(token(&b"2.0 "[..]),
+               IResult::Done(&b""[..], from_end(Token::LiteralFloat(2.0f32), 4)));
+    assert_eq!(token(&b"2.0L"[..]),
+               IResult::Done(&b""[..], from_end(Token::LiteralDouble(2.0f64), 4)));
+    assert_eq!(token(&b"0.5h"[..]),
+               IResult::Done(&b""[..], from_end(Token::LiteralHalf(0.5f32), 4)));
 
-    assert_eq!(token(&b"{"[..]), IResult::Done(&b""[..], from_end(Token::LeftBrace, 1)));
-    assert_eq!(token(&b"}"[..]), IResult::Done(&b""[..], from_end(Token::RightBrace, 1)));
-    assert_eq!(token(&b"("[..]), IResult::Done(&b""[..], from_end(Token::LeftParen, 1)));
-    assert_eq!(token(&b")"[..]), IResult::Done(&b""[..], from_end(Token::RightParen, 1)));
-    assert_eq!(token(&b"["[..]), IResult::Done(&b""[..], from_end(Token::LeftSquareBracket, 1)));
-    assert_eq!(token(&b"]"[..]), IResult::Done(&b""[..], from_end(Token::RightSquareBracket, 1)));
+    assert_eq!(token(&b"{"[..]),
+               IResult::Done(&b""[..], from_end(Token::LeftBrace, 1)));
+    assert_eq!(token(&b"}"[..]),
+               IResult::Done(&b""[..], from_end(Token::RightBrace, 1)));
+    assert_eq!(token(&b"("[..]),
+               IResult::Done(&b""[..], from_end(Token::LeftParen, 1)));
+    assert_eq!(token(&b")"[..]),
+               IResult::Done(&b""[..], from_end(Token::RightParen, 1)));
+    assert_eq!(token(&b"["[..]),
+               IResult::Done(&b""[..], from_end(Token::LeftSquareBracket, 1)));
+    assert_eq!(token(&b"]"[..]),
+               IResult::Done(&b""[..], from_end(Token::RightSquareBracket, 1)));
 
-    assert_eq!(token(&b"< "[..]), IResult::Done(&b""[..], from_end(Token::LeftAngleBracket(FollowedBy::Whitespace), 2)));
-    assert_eq!(token(&b"> "[..]), IResult::Done(&b""[..], from_end(Token::RightAngleBracket(FollowedBy::Whitespace), 2)));
-    assert_eq!(token(&b"<< "[..]), IResult::Done(&b"< "[..], from_end(Token::LeftAngleBracket(FollowedBy::Token), 3)));
-    assert_eq!(token(&b">> "[..]), IResult::Done(&b"> "[..], from_end(Token::RightAngleBracket(FollowedBy::Token), 3)));
-    assert_eq!(token(&b"<>"[..]), IResult::Done(&b">"[..], from_end(Token::LeftAngleBracket(FollowedBy::Token), 2)));
-    assert_eq!(token(&b"><"[..]), IResult::Done(&b"<"[..], from_end(Token::RightAngleBracket(FollowedBy::Token), 2)));
+    assert_eq!(token(&b"< "[..]),
+               IResult::Done(&b""[..],
+                             from_end(Token::LeftAngleBracket(FollowedBy::Whitespace), 2)));
+    assert_eq!(token(&b"> "[..]),
+               IResult::Done(&b""[..],
+                             from_end(Token::RightAngleBracket(FollowedBy::Whitespace), 2)));
+    assert_eq!(token(&b"<< "[..]),
+               IResult::Done(&b"< "[..],
+                             from_end(Token::LeftAngleBracket(FollowedBy::Token), 3)));
+    assert_eq!(token(&b">> "[..]),
+               IResult::Done(&b"> "[..],
+                             from_end(Token::RightAngleBracket(FollowedBy::Token), 3)));
+    assert_eq!(token(&b"<>"[..]),
+               IResult::Done(&b">"[..],
+                             from_end(Token::LeftAngleBracket(FollowedBy::Token), 2)));
+    assert_eq!(token(&b"><"[..]),
+               IResult::Done(&b"<"[..],
+                             from_end(Token::RightAngleBracket(FollowedBy::Token), 2)));
 
-    assert_eq!(token(&b";"[..]), IResult::Done(&b""[..], from_end(Token::Semicolon, 1)));
-    assert_eq!(token(&b","[..]), IResult::Done(&b""[..], from_end(Token::Comma, 1)));
+    assert_eq!(token(&b";"[..]),
+               IResult::Done(&b""[..], from_end(Token::Semicolon, 1)));
+    assert_eq!(token(&b","[..]),
+               IResult::Done(&b""[..], from_end(Token::Comma, 1)));
 
-    assert_eq!(token(&b"+ "[..]), IResult::Done(&b""[..], from_end(Token::Plus, 2)));
-    assert_eq!(token(&b"- "[..]), IResult::Done(&b""[..], from_end(Token::Minus, 2)));
-    assert_eq!(token(&b"/ "[..]), IResult::Done(&b""[..], from_end(Token::ForwardSlash, 2)));
-    assert_eq!(token(&b"% "[..]), IResult::Done(&b""[..], from_end(Token::Percent, 2)));
-    assert_eq!(token(&b"* "[..]), IResult::Done(&b""[..], from_end(Token::Asterix, 2)));
-    assert_eq!(token(&b"| "[..]), IResult::Done(&b""[..], from_end(Token::VerticalBar, 2)));
-    assert_eq!(token(&b"& "[..]), IResult::Done(&b""[..], from_end(Token::Ampersand, 2)));
-    assert_eq!(token(&b"^ "[..]), IResult::Done(&b""[..], from_end(Token::Hat, 2)));
-    assert_eq!(token(&b"= "[..]), IResult::Done(&b""[..], from_end(Token::Equals, 2)));
-    assert_eq!(token(&b"#"[..]), IResult::Done(&b""[..], from_end(Token::Hash, 1)));
-    assert_eq!(token(&b"@"[..]), IResult::Done(&b""[..], from_end(Token::At, 1)));
-    assert_eq!(token(&b"! "[..]), IResult::Done(&b""[..], from_end(Token::ExclamationPoint, 2)));
-    assert_eq!(token(&b"~"[..]), IResult::Done(&b""[..], from_end(Token::Tilde, 1)));
-    assert_eq!(token(&b"."[..]), IResult::Done(&b""[..], from_end(Token::Period, 1)));
+    assert_eq!(token(&b"+ "[..]),
+               IResult::Done(&b""[..], from_end(Token::Plus, 2)));
+    assert_eq!(token(&b"- "[..]),
+               IResult::Done(&b""[..], from_end(Token::Minus, 2)));
+    assert_eq!(token(&b"/ "[..]),
+               IResult::Done(&b""[..], from_end(Token::ForwardSlash, 2)));
+    assert_eq!(token(&b"% "[..]),
+               IResult::Done(&b""[..], from_end(Token::Percent, 2)));
+    assert_eq!(token(&b"* "[..]),
+               IResult::Done(&b""[..], from_end(Token::Asterix, 2)));
+    assert_eq!(token(&b"| "[..]),
+               IResult::Done(&b""[..], from_end(Token::VerticalBar, 2)));
+    assert_eq!(token(&b"& "[..]),
+               IResult::Done(&b""[..], from_end(Token::Ampersand, 2)));
+    assert_eq!(token(&b"^ "[..]),
+               IResult::Done(&b""[..], from_end(Token::Hat, 2)));
+    assert_eq!(token(&b"= "[..]),
+               IResult::Done(&b""[..], from_end(Token::Equals, 2)));
+    assert_eq!(token(&b"#"[..]),
+               IResult::Done(&b""[..], from_end(Token::Hash, 1)));
+    assert_eq!(token(&b"@"[..]),
+               IResult::Done(&b""[..], from_end(Token::At, 1)));
+    assert_eq!(token(&b"! "[..]),
+               IResult::Done(&b""[..], from_end(Token::ExclamationPoint, 2)));
+    assert_eq!(token(&b"~"[..]),
+               IResult::Done(&b""[..], from_end(Token::Tilde, 1)));
+    assert_eq!(token(&b"."[..]),
+               IResult::Done(&b""[..], from_end(Token::Period, 1)));
 
-    assert_eq!(token(&b"struct"[..]), IResult::Done(&b""[..], from_end(Token::Struct, 6)));
-    assert_eq!(token(&b"SamplerState"[..]), IResult::Done(&b""[..], from_end(Token::SamplerState, 12)));
-    assert_eq!(token(&b"cbuffer"[..]), IResult::Done(&b""[..], from_end(Token::ConstantBuffer, 7)));
-    assert_eq!(token(&b"register(t4)"[..]), IResult::Done(&b""[..], from_end(Token::Register(RegisterSlot::T(4)), 12)));
-    assert_eq!(token(&b":"[..]), IResult::Done(&b""[..], from_end(Token::Colon, 1)));
-    assert_eq!(token(&b"?"[..]), IResult::Done(&b""[..], from_end(Token::QuestionMark, 1)));
+    assert_eq!(token(&b"struct"[..]),
+               IResult::Done(&b""[..], from_end(Token::Struct, 6)));
+    assert_eq!(token(&b"SamplerState"[..]),
+               IResult::Done(&b""[..], from_end(Token::SamplerState, 12)));
+    assert_eq!(token(&b"cbuffer"[..]),
+               IResult::Done(&b""[..], from_end(Token::ConstantBuffer, 7)));
+    assert_eq!(token(&b"register(t4)"[..]),
+               IResult::Done(&b""[..], from_end(Token::Register(RegisterSlot::T(4)), 12)));
+    assert_eq!(token(&b":"[..]),
+               IResult::Done(&b""[..], from_end(Token::Colon, 1)));
+    assert_eq!(token(&b"?"[..]),
+               IResult::Done(&b""[..], from_end(Token::QuestionMark, 1)));
 
-    assert_eq!(token(&b"in"[..]), IResult::Done(&b""[..], from_end(Token::In, 2)));
-    assert_eq!(token(&b"out"[..]), IResult::Done(&b""[..], from_end(Token::Out, 3)));
-    assert_eq!(token(&b"inout"[..]), IResult::Done(&b""[..], from_end(Token::InOut, 5)));
+    assert_eq!(token(&b"in"[..]),
+               IResult::Done(&b""[..], from_end(Token::In, 2)));
+    assert_eq!(token(&b"out"[..]),
+               IResult::Done(&b""[..], from_end(Token::Out, 3)));
+    assert_eq!(token(&b"inout"[..]),
+               IResult::Done(&b""[..], from_end(Token::InOut, 5)));
 
-    assert_eq!(token(&b"const"[..]), IResult::Done(&b""[..], from_end(Token::Const, 5)));
+    assert_eq!(token(&b"const"[..]),
+               IResult::Done(&b""[..], from_end(Token::Const, 5)));
 
-    assert_eq!(token(&b"extern"[..]), IResult::Done(&b""[..], from_end(Token::Extern, 6)));
-    assert_eq!(token(&b"static"[..]), IResult::Done(&b""[..], from_end(Token::Static, 6)));
-    assert_eq!(token(&b"groupshared"[..]), IResult::Done(&b""[..], from_end(Token::GroupShared, 11)));
+    assert_eq!(token(&b"extern"[..]),
+               IResult::Done(&b""[..], from_end(Token::Extern, 6)));
+    assert_eq!(token(&b"static"[..]),
+               IResult::Done(&b""[..], from_end(Token::Static, 6)));
+    assert_eq!(token(&b"groupshared"[..]),
+               IResult::Done(&b""[..], from_end(Token::GroupShared, 11)));
 
-    assert_eq!(token(&b"structName"[..]), IResult::Done(&b""[..], from_end(Token::Id(Identifier("structName".to_string())), 10)));
+    assert_eq!(token(&b"structName"[..]),
+               IResult::Done(&b""[..],
+                             from_end(Token::Id(Identifier("structName".to_string())), 10)));
 }
 
 #[test]
 fn test_token_stream() {
     assert_eq!(token_stream(&b""[..]), IResult::Done(&b""[..], vec![]));
 
-    fn token_id(name: &'static str, loc: u64) -> StreamToken { StreamToken(Token::Id(Identifier(name.to_string())), StreamLocation(loc)) }
-    fn loc(tok: Token, loc: u64) -> StreamToken { StreamToken(tok, StreamLocation(loc)) }
+    fn token_id(name: &'static str, loc: u64) -> StreamToken {
+        StreamToken(Token::Id(Identifier(name.to_string())), StreamLocation(loc))
+    }
+    fn loc(tok: Token, loc: u64) -> StreamToken {
+        StreamToken(tok, StreamLocation(loc))
+    }
 
-    assert_eq!(token_stream(&b" a "[..]), IResult::Done(&b""[..], vec![
+    assert_eq!(token_stream(&b" a "[..]),
+               IResult::Done(&b""[..],
+                             vec![
         token_id("a", 1),
     ]));
 
-    assert_eq!(token_stream(&b"void func();"[..]), IResult::Done(&b""[..], vec![
+    assert_eq!(token_stream(&b"void func();"[..]),
+               IResult::Done(&b""[..],
+                             vec![
         token_id("void", 0),
         token_id("func", 5),
         loc(Token::LeftParen, 9),
@@ -663,24 +763,34 @@ fn test_token_stream() {
         loc(Token::Semicolon, 11),
     ]));
 
-    assert_eq!(token_stream(&b"-12 "[..]), IResult::Done(&b""[..], vec![
+    assert_eq!(token_stream(&b"-12 "[..]),
+               IResult::Done(&b""[..],
+                             vec![
         loc(Token::Minus, 0),
         loc(Token::LiteralInt(12), 1),
     ]));
-    assert_eq!(token_stream(&b"-12l"[..]), IResult::Done(&b""[..], vec![
+    assert_eq!(token_stream(&b"-12l"[..]),
+               IResult::Done(&b""[..],
+                             vec![
         loc(Token::Minus, 0),
         loc(Token::LiteralLong(12), 1),
     ]));
-    assert_eq!(token_stream(&b"-12L"[..]), IResult::Done(&b""[..], vec![
+    assert_eq!(token_stream(&b"-12L"[..]),
+               IResult::Done(&b""[..],
+                             vec![
         loc(Token::Minus, 0),
         loc(Token::LiteralLong(12), 1),
     ]));
 
-    assert_eq!(token_stream(&b"<<"[..]), IResult::Done(&b""[..], vec![
+    assert_eq!(token_stream(&b"<<"[..]),
+               IResult::Done(&b""[..],
+                             vec![
         loc(Token::LeftAngleBracket(FollowedBy::Token), 0),
         loc(Token::LeftAngleBracket(FollowedBy::Whitespace), 1),
     ]));
-    assert_eq!(token_stream(&b">>"[..]), IResult::Done(&b""[..], vec![
+    assert_eq!(token_stream(&b">>"[..]),
+               IResult::Done(&b""[..],
+                             vec![
         loc(Token::RightAngleBracket(FollowedBy::Token), 0),
         loc(Token::RightAngleBracket(FollowedBy::Whitespace), 1),
     ]));

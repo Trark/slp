@@ -63,7 +63,11 @@ struct ValueTypeCast(Type, ValueType, ValueType);
 struct ModifierCast(TypeModifier);
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct ImplicitConversion(ExpressionType, Option<ValueTypeCast>, Option<DimensionCast>, Option<NumericCast>, Option<ModifierCast>);
+pub struct ImplicitConversion(ExpressionType,
+                              Option<ValueTypeCast>,
+                              Option<DimensionCast>,
+                              Option<NumericCast>,
+                              Option<ModifierCast>);
 
 impl ConversionRank {
     pub fn compare(&self, other: &ConversionRank) -> ConversionPriority {
@@ -91,13 +95,15 @@ impl ConversionRank {
 
 
 impl NumericCast {
-
     fn new(source: &ScalarType, dest: &ScalarType) -> Result<NumericCast, ()> {
         match *dest {
             _ if source == dest => Err(()),
-            ScalarType::Bool | ScalarType::Int | ScalarType::UInt | ScalarType::Half | ScalarType::Float | ScalarType::Double => {
-                Ok(NumericCast(source.clone(), dest.clone()))
-            },
+            ScalarType::Bool |
+            ScalarType::Int |
+            ScalarType::UInt |
+            ScalarType::Half |
+            ScalarType::Float |
+            ScalarType::Double => Ok(NumericCast(source.clone(), dest.clone())),
             ScalarType::UntypedInt => Err(()),
         }
     }
@@ -107,19 +113,23 @@ impl NumericCast {
             NumericCast(ScalarType::Bool, ref dest) => {
                 match *dest {
                     ScalarType::Bool => ConversionRank::Exact,
-                    ScalarType::Int | ScalarType::UInt | ScalarType::Float | ScalarType::Double => ConversionRank::Conversion,
+                    ScalarType::Int | ScalarType::UInt | ScalarType::Float | ScalarType::Double => {
+                        ConversionRank::Conversion
+                    }
                     ScalarType::Half => ConversionRank::HalfIsASecondClassCitizen,
                     ScalarType::UntypedInt => panic!(),
                 }
-            },
+            }
             NumericCast(ScalarType::UntypedInt, ref dest) => {
                 match *dest {
                     ScalarType::Int | ScalarType::UInt => ConversionRank::Promotion,
                     ScalarType::Bool => ConversionRank::IntToBool,
-                    ScalarType::Float | ScalarType::Double | ScalarType::Half => ConversionRank::Conversion,
+                    ScalarType::Float | ScalarType::Double | ScalarType::Half => {
+                        ConversionRank::Conversion
+                    }
                     ScalarType::UntypedInt => panic!(),
                 }
-            },
+            }
             NumericCast(ScalarType::Int, ref dest) => {
                 match *dest {
                     ScalarType::Int => ConversionRank::Exact,
@@ -129,7 +139,7 @@ impl NumericCast {
                     ScalarType::Half => ConversionRank::HalfIsASecondClassCitizen,
                     ScalarType::UntypedInt => panic!(),
                 }
-            },
+            }
             NumericCast(ScalarType::UInt, ref dest) => {
                 match *dest {
                     ScalarType::UInt => ConversionRank::Exact,
@@ -139,30 +149,38 @@ impl NumericCast {
                     ScalarType::Half => ConversionRank::HalfIsASecondClassCitizen,
                     ScalarType::UntypedInt => panic!(),
                 }
-            },
+            }
             NumericCast(ScalarType::Half, ref dest) => {
                 match *dest {
                     ScalarType::Half => ConversionRank::Exact,
                     ScalarType::Float | ScalarType::Double => ConversionRank::Promotion,
-                    ScalarType::Bool | ScalarType::Int | ScalarType::UInt => ConversionRank::Conversion,
+                    ScalarType::Bool | ScalarType::Int | ScalarType::UInt => {
+                        ConversionRank::Conversion
+                    }
                     ScalarType::UntypedInt => panic!(),
                 }
-            },
+            }
             NumericCast(ScalarType::Float, ref dest) => {
                 match *dest {
                     ScalarType::Float => ConversionRank::Exact,
                     ScalarType::Double => ConversionRank::Promotion,
-                    ScalarType::Bool | ScalarType::Int | ScalarType::UInt | ScalarType::Half => ConversionRank::Conversion,
+                    ScalarType::Bool | ScalarType::Int | ScalarType::UInt | ScalarType::Half => {
+                        ConversionRank::Conversion
+                    }
                     ScalarType::UntypedInt => panic!(),
                 }
-            },
+            }
             NumericCast(ScalarType::Double, ref dest) => {
                 match *dest {
                     ScalarType::Double => ConversionRank::Exact,
-                    ScalarType::Bool | ScalarType::Int | ScalarType::UInt | ScalarType::Half | ScalarType::Float => ConversionRank::Conversion,
+                    ScalarType::Bool |
+                    ScalarType::Int |
+                    ScalarType::UInt |
+                    ScalarType::Half |
+                    ScalarType::Float => ConversionRank::Conversion,
                     ScalarType::UntypedInt => panic!(),
                 }
-            },
+            }
         }
     }
 
@@ -171,7 +189,8 @@ impl NumericCast {
             NumericDimension::Scalar => TypeLayout::Scalar(self.1.clone()),
             NumericDimension::Vector(ref x) => TypeLayout::Vector(self.1.clone(), *x),
             NumericDimension::Matrix(ref x, ref y) => TypeLayout::Matrix(self.1.clone(), *x, *y),
-        }).to_rvalue()
+        })
+            .to_rvalue()
     }
 }
 
@@ -189,14 +208,19 @@ impl ModifierCast {
 }
 
 impl ImplicitConversion {
-
     pub fn find(source: &ExpressionType, dest: &ExpressionType) -> Result<ImplicitConversion, ()> {
 
         let source_copy = source.clone();
         let (source_type, dest_type, value_type_cast) = match (&source.1, &dest.1) {
             (&ValueType::Rvalue, &ValueType::Lvalue) => return Err(()),
-            (&ValueType::Rvalue, &ValueType::Rvalue) | (&ValueType::Lvalue, &ValueType::Lvalue) => (&source.0, &dest.0, None),
-            (&ValueType::Lvalue, &ValueType::Rvalue) => (&source.0, &dest.0, Some(ValueTypeCast(source.0.clone(), ValueType::Lvalue, ValueType::Rvalue))),
+            (&ValueType::Rvalue, &ValueType::Rvalue) | (&ValueType::Lvalue, &ValueType::Lvalue) => {
+                (&source.0, &dest.0, None)
+            }
+            (&ValueType::Lvalue, &ValueType::Rvalue) => {
+                (&source.0,
+                 &dest.0,
+                 Some(ValueTypeCast(source.0.clone(), ValueType::Lvalue, ValueType::Rvalue)))
+            }
         };
 
         let &Type(ref source_l, ref mods) = source_type;
@@ -207,29 +231,36 @@ impl ImplicitConversion {
             // Scalar to scalar
             (&TypeLayout::Scalar(_), &TypeLayout::Scalar(_), false) => None,
             // Scalar to vector (mirror)
-            (&TypeLayout::Scalar(_), &TypeLayout::Vector(_, ref x2), false) => {
-                Some(DimensionCast(NumericDimension::Scalar, NumericDimension::Vector(*x2)))
-            },
+            (&TypeLayout::Scalar(_),
+             &TypeLayout::Vector(_, ref x2),
+             false) => Some(DimensionCast(NumericDimension::Scalar, NumericDimension::Vector(*x2))),
             // Single vector to vector (mirror)
-            (&TypeLayout::Vector(_, 1), &TypeLayout::Vector(_, ref x2), false) => {
+            (&TypeLayout::Vector(_, 1),
+             &TypeLayout::Vector(_, ref x2),
+             false) => {
                 Some(DimensionCast(NumericDimension::Vector(1), NumericDimension::Vector(*x2)))
-            },
+            }
             // Vector first element to scalar
-            (&TypeLayout::Vector(_, ref x1), &TypeLayout::Scalar(_), false) => {
-                Some(DimensionCast(NumericDimension::Vector(*x1), NumericDimension::Scalar))
-            },
+            (&TypeLayout::Vector(_, ref x1),
+             &TypeLayout::Scalar(_),
+             false) => Some(DimensionCast(NumericDimension::Vector(*x1), NumericDimension::Scalar)),
             // Vector same dimension
-            (&TypeLayout::Vector(_, ref x1), &TypeLayout::Vector(_, ref x2), false) if x1 == x2 => {
-                None
-            },
+            (&TypeLayout::Vector(_, ref x1),
+             &TypeLayout::Vector(_, ref x2),
+             false)
+                if x1 == x2 => None,
             // Vector cull additional elements
-            (&TypeLayout::Vector(_, ref x1), &TypeLayout::Vector(_, ref x2), false) if x2 < x1 => {
+            (&TypeLayout::Vector(_, ref x1),
+             &TypeLayout::Vector(_, ref x2),
+             false)
+                if x2 < x1 => {
                 Some(DimensionCast(NumericDimension::Vector(*x1), NumericDimension::Vector(*x2)))
-            },
+            }
             // Matrix same dimension
-            (&TypeLayout::Matrix(_, ref x1, ref y1), &TypeLayout::Matrix(_, ref x2, ref y2), false) if x1 == x2 && y1 == y2 => {
-                None
-            },
+            (&TypeLayout::Matrix(_, ref x1, ref y1),
+             &TypeLayout::Matrix(_, ref x2, ref y2),
+             false)
+                if x1 == x2 && y1 == y2 => None,
             // Vector <-> Matrix casts not implemented
             // Struct casts only supported for same type structs
             _ => return Err(()),
@@ -256,7 +287,7 @@ impl ImplicitConversion {
                     let cast = try!(NumericCast::new(source_scalar, dest_scalar));
                     Some(cast)
                 }
-            },
+            }
         };
 
         let modifier_cast = if mods != modd {
@@ -267,10 +298,10 @@ impl ImplicitConversion {
             // typed inputs, but not as out params
             if dest.1 == ValueType::Lvalue {
                 if mods.is_const && !modd.is_const {
-                    return Err(())
+                    return Err(());
                 };
                 if mods.volatile && !modd.volatile {
-                    return Err(())
+                    return Err(());
                 };
             };
             Some(ModifierCast(modd.clone()))
@@ -278,7 +309,11 @@ impl ImplicitConversion {
             None
         };
 
-        Ok(ImplicitConversion(source_copy, value_type_cast, dimension_cast, numeric_cast, modifier_cast))
+        Ok(ImplicitConversion(source_copy,
+                              value_type_cast,
+                              dimension_cast,
+                              numeric_cast,
+                              modifier_cast))
     }
 
     pub fn get_rank(&self) -> ConversionRank {
@@ -286,8 +321,18 @@ impl ImplicitConversion {
             // No type change, most powerful match
             ImplicitConversion(_, _, None, None, _) => ConversionRank::Exact,
             // Only switch between scalar and vector1 of same type, also most powerful
-            ImplicitConversion(_, _, Some(DimensionCast(NumericDimension::Scalar, NumericDimension::Vector(1))), None, _) => ConversionRank::Exact,
-            ImplicitConversion(_, _, Some(DimensionCast(NumericDimension::Vector(1), NumericDimension::Scalar)), None, _) => ConversionRank::Exact,
+            ImplicitConversion(_,
+                               _,
+                               Some(DimensionCast(NumericDimension::Scalar,
+                                                  NumericDimension::Vector(1))),
+                               None,
+                               _) => ConversionRank::Exact,
+            ImplicitConversion(_,
+                               _,
+                               Some(DimensionCast(NumericDimension::Vector(1),
+                                                  NumericDimension::Scalar)),
+                               None,
+                               _) => ConversionRank::Exact,
             // Expanding or reducing vector dimension, stronger than numeric conversions
             ImplicitConversion(_, _, _, None, _) => ConversionRank::VectorExpand,
             // Numeric conversion, rank depends on type
@@ -295,8 +340,12 @@ impl ImplicitConversion {
         }
     }
 
-     pub fn get_target_type(&self) -> ExpressionType {
-        let &ImplicitConversion(ref source_type, ref value_type_cast, ref dimension_cast, ref numeric_cast, ref mod_cast) = self;
+    pub fn get_target_type(&self) -> ExpressionType {
+        let &ImplicitConversion(ref source_type,
+                                ref value_type_cast,
+                                ref dimension_cast,
+                                ref numeric_cast,
+                                ref mod_cast) = self;
         let ty = source_type.clone();
         let ty = match *value_type_cast {
             Some(ref vtc) => vtc.get_target_type(),
@@ -304,15 +353,19 @@ impl ImplicitConversion {
         };
         let dim = match *dimension_cast {
             Some(DimensionCast(_, ref dim)) => Some(dim.clone()),
-            None => match (ty.0).0 {
-                TypeLayout::Scalar(_) => Some(NumericDimension::Scalar),
-                TypeLayout::Vector(_, ref x) => Some(NumericDimension::Vector(*x)),
-                TypeLayout::Matrix(_, ref x, ref y) => Some(NumericDimension::Matrix(*x, *y)),
-                _ => None,
-            },
+            None => {
+                match (ty.0).0 {
+                    TypeLayout::Scalar(_) => Some(NumericDimension::Scalar),
+                    TypeLayout::Vector(_, ref x) => Some(NumericDimension::Vector(*x)),
+                    TypeLayout::Matrix(_, ref x, ref y) => Some(NumericDimension::Matrix(*x, *y)),
+                    _ => None,
+                }
+            }
         };
         let ty = match *numeric_cast {
-            Some(ref nc) => nc.get_target_type(dim.expect("expecting numeric cast to operate on numeric type")),
+            Some(ref nc) => {
+                nc.get_target_type(dim.expect("expecting numeric cast to operate on numeric type"))
+            }
             None => {
                 match dim {
                     Some(dim) => {
@@ -332,7 +385,7 @@ impl ImplicitConversion {
                     }
                     None => ty,
                 }
-            },
+            }
         };
         let ty = match *mod_cast {
             Some(ref mc) => mc.modify(ty),
@@ -344,9 +397,7 @@ impl ImplicitConversion {
     pub fn apply(&self, expr: Expression) -> Expression {
         match *self {
             ImplicitConversion(_, _, None, None, None) => expr,
-            _ => {
-                Expression::Cast(self.get_target_type().0, Box::new(expr))
-            }
+            _ => Expression::Cast(self.get_target_type().0, Box::new(expr)),
         }
     }
 }
@@ -357,27 +408,75 @@ fn test_implicitconversion() {
     let basic_types = &[Type::bool(), Type::int(), Type::uint(), Type::float(), Type::floatn(4)];
 
     for ty in basic_types {
-        assert_eq!(ImplicitConversion::find(&ty.to_rvalue(), &ty.to_rvalue()), Ok(ImplicitConversion(ty.to_rvalue(), None, None, None, None)));
-        assert_eq!(ImplicitConversion::find(&ty.to_lvalue(), &ty.to_rvalue()), Ok(ImplicitConversion(ty.to_lvalue(), Some(ValueTypeCast(ty.clone(), ValueType::Lvalue, ValueType::Rvalue)), None, None, None)));
-        assert_eq!(ImplicitConversion::find(&ty.to_rvalue(), &ty.to_lvalue()), Err(()));
-        assert_eq!(ImplicitConversion::find(&ty.to_lvalue(), &ty.to_lvalue()), Ok(ImplicitConversion(ty.to_lvalue(), None, None, None, None)));
+        assert_eq!(ImplicitConversion::find(&ty.to_rvalue(), &ty.to_rvalue()),
+                   Ok(ImplicitConversion(ty.to_rvalue(), None, None, None, None)));
+        assert_eq!(ImplicitConversion::find(&ty.to_lvalue(), &ty.to_rvalue()),
+                   Ok(ImplicitConversion(ty.to_lvalue(),
+                                         Some(ValueTypeCast(ty.clone(),
+                                                            ValueType::Lvalue,
+                                                            ValueType::Rvalue)),
+                                         None,
+                                         None,
+                                         None)));
+        assert_eq!(ImplicitConversion::find(&ty.to_rvalue(), &ty.to_lvalue()),
+                   Err(()));
+        assert_eq!(ImplicitConversion::find(&ty.to_lvalue(), &ty.to_lvalue()),
+                   Ok(ImplicitConversion(ty.to_lvalue(), None, None, None, None)));
     }
 
-    assert_eq!(ImplicitConversion::find(&Type::from_layout(TypeLayout::SamplerState).to_lvalue(), &Type::uint().to_lvalue()), Err(()));
+    assert_eq!(ImplicitConversion::find(&Type::from_layout(TypeLayout::SamplerState).to_lvalue(),
+                                        &Type::uint().to_lvalue()),
+               Err(()));
     assert_eq!(ImplicitConversion::find(&Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::Float, 4), TypeModifier::default()))).to_lvalue(), &Type::uint().to_lvalue()), Err(()));
 
-    assert_eq!(ImplicitConversion::find(&Type::int().to_rvalue(), &Type::intn(1).to_rvalue()), Ok(ImplicitConversion(Type::int().to_rvalue(), None, Some(DimensionCast(NumericDimension::Scalar, NumericDimension::Vector(1))), None, None)));
-    assert_eq!(ImplicitConversion::find(&Type::intn(1).to_rvalue(), &Type::int().to_rvalue()), Ok(ImplicitConversion(Type::intn(1).to_rvalue(), None, Some(DimensionCast(NumericDimension::Vector(1), NumericDimension::Scalar)), None, None)));
-    assert_eq!(ImplicitConversion::find(&Type::uint().to_rvalue(), &Type::uintn(4).to_rvalue()), Ok(ImplicitConversion(Type::uint().to_rvalue(), None, Some(DimensionCast(NumericDimension::Scalar, NumericDimension::Vector(4))), None, None)));
-    assert_eq!(ImplicitConversion::find(&Type::uintn(1).to_rvalue(), &Type::uintn(4).to_rvalue()), Ok(ImplicitConversion(Type::uintn(1).to_rvalue(), None, Some(DimensionCast(NumericDimension::Vector(1), NumericDimension::Vector(4))), None, None)));
+    assert_eq!(ImplicitConversion::find(&Type::int().to_rvalue(), &Type::intn(1).to_rvalue()),
+               Ok(ImplicitConversion(Type::int().to_rvalue(),
+                                     None,
+                                     Some(DimensionCast(NumericDimension::Scalar,
+                                                        NumericDimension::Vector(1))),
+                                     None,
+                                     None)));
+    assert_eq!(ImplicitConversion::find(&Type::intn(1).to_rvalue(), &Type::int().to_rvalue()),
+               Ok(ImplicitConversion(Type::intn(1).to_rvalue(),
+                                     None,
+                                     Some(DimensionCast(NumericDimension::Vector(1),
+                                                        NumericDimension::Scalar)),
+                                     None,
+                                     None)));
+    assert_eq!(ImplicitConversion::find(&Type::uint().to_rvalue(), &Type::uintn(4).to_rvalue()),
+               Ok(ImplicitConversion(Type::uint().to_rvalue(),
+                                     None,
+                                     Some(DimensionCast(NumericDimension::Scalar,
+                                                        NumericDimension::Vector(4))),
+                                     None,
+                                     None)));
+    assert_eq!(ImplicitConversion::find(&Type::uintn(1).to_rvalue(), &Type::uintn(4).to_rvalue()),
+               Ok(ImplicitConversion(Type::uintn(1).to_rvalue(),
+                                     None,
+                                     Some(DimensionCast(NumericDimension::Vector(1),
+                                                        NumericDimension::Vector(4))),
+                                     None,
+                                     None)));
 }
 
 #[test]
 fn test_get_rank() {
-    assert_eq!(ImplicitConversion::find(&Type::uint().to_rvalue(), &Type::uintn(1).to_rvalue()).unwrap().get_rank(), ConversionRank::Exact);
-    assert_eq!(ImplicitConversion::find(&Type::uintn(1).to_rvalue(), &Type::uint().to_rvalue()).unwrap().get_rank(), ConversionRank::Exact);
-    assert_eq!(ImplicitConversion::find(&Type::uint().to_rvalue(), &Type::uintn(4).to_rvalue()).unwrap().get_rank(), ConversionRank::VectorExpand);
-    assert_eq!(ImplicitConversion::find(&Type::uintn(1).to_rvalue(), &Type::uintn(4).to_rvalue()).unwrap().get_rank(), ConversionRank::VectorExpand);
+    assert_eq!(ImplicitConversion::find(&Type::uint().to_rvalue(), &Type::uintn(1).to_rvalue())
+                   .unwrap()
+                   .get_rank(),
+               ConversionRank::Exact);
+    assert_eq!(ImplicitConversion::find(&Type::uintn(1).to_rvalue(), &Type::uint().to_rvalue())
+                   .unwrap()
+                   .get_rank(),
+               ConversionRank::Exact);
+    assert_eq!(ImplicitConversion::find(&Type::uint().to_rvalue(), &Type::uintn(4).to_rvalue())
+                   .unwrap()
+                   .get_rank(),
+               ConversionRank::VectorExpand);
+    assert_eq!(ImplicitConversion::find(&Type::uintn(1).to_rvalue(), &Type::uintn(4).to_rvalue())
+                   .unwrap()
+                   .get_rank(),
+               ConversionRank::VectorExpand);
 }
 
 #[test]
@@ -485,10 +584,11 @@ fn test_const() {
         ))
     );
     // const to non-const lvalue
-    assert_eq!(ImplicitConversion::find(
-            &(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::const_only()).to_lvalue()),
-            &(Type(TypeLayout::from_scalar(ScalarType::Int), TypeModifier::default()).to_lvalue())
-        ),
-        Err(())
-    );
+    assert_eq!(ImplicitConversion::find(&(Type(TypeLayout::from_scalar(ScalarType::Int),
+                                               TypeModifier::const_only())
+                                              .to_lvalue()),
+                                        &(Type(TypeLayout::from_scalar(ScalarType::Int),
+                                               TypeModifier::default())
+                                              .to_lvalue())),
+               Err(()));
 }
