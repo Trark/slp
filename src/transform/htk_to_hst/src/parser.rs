@@ -1113,9 +1113,15 @@ fn globalvariablename(input: &[LexToken])
                       -> IResult<&[LexToken], GlobalVariableName, ParseErrorReason> {
     chain!(input,
         name: parse_variablename ~
+        array_dim: opt!(parse_arraydim) ~
         slot: opt!(globalvariable_register) ~
         assignment:  opt!(chain!(token!(Token::Equals) ~ expr: expr, || expr)),
-        || { GlobalVariableName { name: name.to_node(), bind: VariableBind::Normal, slot: slot, assignment: assignment } }
+        || { GlobalVariableName {
+            name: name.to_node(),
+            bind: match array_dim { Some(ref expr) => VariableBind::Array(expr.clone()), None => VariableBind::Normal },
+            slot: slot,
+            assignment: assignment
+        } }
     )
 }
 
@@ -2025,4 +2031,19 @@ fn test_rootdefinition() {
                test_static_const_ast.clone());
     assert_eq!(rootdefinition_str(test_static_const_str),
                RootDefinition::GlobalVariable(test_static_const_ast.clone()));
+
+    let test_groupshared_str = "groupshared float4 local_data[32];";
+    let test_groupshared_ast = GlobalVariable {
+        global_type: GlobalType(Type::floatn(4), GlobalStorage::GroupShared, None),
+        defs: vec![GlobalVariableName {
+                       name: "local_data".to_string(),
+                       bind: VariableBind::Array(Located::loc(1, 31, Expression::Literal(Literal::UntypedInt(32)))),
+                       slot: None,
+                       assignment: None,
+                   }],
+    };
+    assert_eq!(globalvariable_str(test_groupshared_str),
+               test_groupshared_ast.clone());
+    assert_eq!(rootdefinition_str(test_groupshared_str),
+               RootDefinition::GlobalVariable(test_groupshared_ast.clone()));
 }
