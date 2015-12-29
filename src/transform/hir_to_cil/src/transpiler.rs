@@ -641,7 +641,8 @@ impl Context {
 fn is_global_lifted(gv: &src::GlobalVariable) -> bool {
     let &src::GlobalType(src::Type(_, ref modifier), ref gs, _) = &gv.global_type;
     let static_const = modifier.is_const && *gs == src::GlobalStorage::Static;
-    !static_const
+    let groupshared = *gs == src::GlobalStorage::GroupShared;
+    !static_const && !groupshared
 }
 
 fn get_cl_global_type(id: &src::GlobalId,
@@ -1500,10 +1501,15 @@ fn transpile_globalvariable(gv: &src::GlobalVariable,
             &Some(ref expr) => Some(try!(transpile_expression(expr, context))),
             &None => None,
         };
+        let address_space = match gv.global_type.1 {
+            src::GlobalStorage::Extern => panic!("extern not lifted"),
+            src::GlobalStorage::Static => dst::AddressSpace::Constant,
+            src::GlobalStorage::GroupShared => dst::AddressSpace::Local,
+        };
         Ok(Some(dst::RootDefinition::GlobalVariable(dst::GlobalVariable {
             id: global_id,
             ty: cl_type,
-            address_space: dst::AddressSpace::Constant,
+            address_space: address_space,
             init: cl_init,
         })))
     }

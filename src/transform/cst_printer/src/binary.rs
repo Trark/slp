@@ -584,11 +584,25 @@ fn print_statements(statements: &[Statement], printer: &mut Printer) {
 }
 
 fn print_rootdefinition_globalvariable(gv: &GlobalVariable, printer: &mut Printer) {
-    print_typename(&gv.ty, printer);
+    let array_dim = match gv.ty {
+        Type::Array(ref inner, ref dim) => {
+            print_typename(inner, printer);
+            Some(dim.clone())
+        }
+        ref ty => {
+            print_typename(ty, printer);
+            None
+        }
+    };
     printer.space();
     print_address_space(&gv.address_space, printer);
     printer.space();
     printer.print(&gv.name);
+    if let Some(dim) = array_dim {
+        printer.print("[");
+        print_literal(&Literal::Int(dim), printer);
+        printer.print("]");
+    };
     match &gv.init {
         &Some(ref expr) => {
             printer.space();

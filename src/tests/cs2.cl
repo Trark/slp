@@ -9,6 +9,8 @@ int2 cast_uint2_to_int2(uint2 from)
 
 int __constant g_myFour = (int)4;
 
+float4 __local sdata[32];
+
 struct myStruct
 {
 	float4 pos;
@@ -87,7 +89,7 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint
 	myFunc_0((uint)g_myFour);
 	uint2 cast_from;
 	int2 cast_t0 = cast_uint2_to_int2(cast_from);
-	float s;
+	float s = sdata[(int)0].x;
 	float t1;
 	float arr1[3];
 	float arr2[4];
