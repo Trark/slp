@@ -1664,12 +1664,15 @@ fn test_transpile() {
         entry_point: "CSMAIN".to_string(),
         root_definitions: vec![
             hst::RootDefinition::GlobalVariable(hst::GlobalVariable {
-                name: "g_myInBuffer".to_string(),
                 global_type: hst::Type::from_object(hst::ObjectType::Buffer(
                     hst::DataType(hst::DataLayout::Scalar(hst::ScalarType::Int), hst::TypeModifier::default())
                 )).into(),
-                slot: Some(hst::GlobalSlot::ReadSlot(0)),
-                assignment: None,
+                defs: vec![hst::GlobalVariableName {
+                    name: "g_myInBuffer".to_string(),
+                    bind: hst::VariableBind::Normal,
+                    slot: Some(hst::GlobalSlot::ReadSlot(0)),
+                    assignment: None,
+                }],
             }),
             hst::RootDefinition::Function(hst::FunctionDefinition {
                 name: "myFunc".to_string(),

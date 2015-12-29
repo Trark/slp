@@ -94,6 +94,9 @@ impl TypeLayout {
     pub fn from_scalar(scalar: ScalarType) -> TypeLayout {
         TypeLayout::Scalar(scalar)
     }
+    pub fn from_vector(scalar: ScalarType, x: u32) -> TypeLayout {
+        TypeLayout::Vector(scalar, x)
+    }
     pub fn from_object(object: ObjectType) -> TypeLayout {
         TypeLayout::Object(object)
     }
@@ -109,6 +112,9 @@ impl TypeLayout {
     }
     pub fn float() -> TypeLayout {
         TypeLayout::from_scalar(ScalarType::Float)
+    }
+    pub fn floatn(x: u32) -> TypeLayout {
+        TypeLayout::from_vector(ScalarType::Float, x)
     }
     pub fn double() -> TypeLayout {
         TypeLayout::from_scalar(ScalarType::Double)
@@ -243,6 +249,9 @@ impl Type {
     pub fn float() -> Type {
         Type::from_layout(TypeLayout::float())
     }
+    pub fn floatn(x: u32) -> Type {
+        Type::from_layout(TypeLayout::floatn(x))
+    }
     pub fn double() -> Type {
         Type::from_layout(TypeLayout::double())
     }
@@ -363,22 +372,22 @@ pub enum Expression {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum LocalBind {
+pub enum VariableBind {
     Normal,
     Array(Located<Expression>),
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct LocalVariable {
+pub struct LocalVariableName {
     pub name: String,
-    pub bind: LocalBind,
+    pub bind: VariableBind,
     pub assignment: Option<Located<Expression>>,
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct VarDef {
     pub local_type: LocalType,
-    pub defs: Vec<LocalVariable>,
+    pub defs: Vec<LocalVariableName>,
 }
 
 impl VarDef {
@@ -388,9 +397,9 @@ impl VarDef {
                -> VarDef {
         VarDef {
             local_type: local_type,
-            defs: vec![LocalVariable {
+            defs: vec![LocalVariableName {
                            name: name,
-                           bind: LocalBind::Normal,
+                           bind: VariableBind::Normal,
                            assignment: assignment,
                        }],
         }
@@ -467,11 +476,17 @@ pub enum GlobalSlot {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct GlobalVariable {
+pub struct GlobalVariableName {
     pub name: String,
-    pub global_type: GlobalType,
+    pub bind: VariableBind,
     pub slot: Option<GlobalSlot>,
     pub assignment: Option<Located<Expression>>,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct GlobalVariable {
+    pub global_type: GlobalType,
+    pub defs: Vec<GlobalVariableName>,
 }
 
 #[derive(PartialEq, Debug, Clone)]

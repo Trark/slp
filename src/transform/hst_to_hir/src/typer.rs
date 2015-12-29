@@ -2083,6 +2083,28 @@ fn parse_expr_value_only(expr: &ast::Expression,
     }
 }
 
+fn apply_variable_bind(ty: ir::Type, bind: &ast::VariableBind) -> Result<ir::Type, TyperError> {
+    match *bind {
+        ast::VariableBind::Array(ref dim) => {
+            let ir::Type(layout, modifiers) = ty;
+
+            // Todo: constant expressions
+            let constant_dim = match **dim {
+                ast::Expression::Literal(ast::Literal::UntypedInt(i)) => i,
+                ast::Expression::Literal(ast::Literal::Int(i)) => i,
+                ast::Expression::Literal(ast::Literal::UInt(i)) => i,
+                _ => {
+                    return Err(TyperError::ArrayDimensionsMustBeConstantExpression((**dim).clone()))
+                }
+            };
+
+            Ok(ir::Type(ir::TypeLayout::Array(Box::new(layout), constant_dim),
+                        modifiers))
+        }
+        ast::VariableBind::Normal => Ok(ty),
+    }
+}
+
 fn parse_vardef(ast: &ast::VarDef,
                 context: ScopeContext)
                 -> Result<(Vec<ir::VarDef>, ScopeContext), TyperError> {
@@ -2111,25 +2133,9 @@ fn parse_vardef(ast: &ast::VarDef,
         };
         let var_name = name.clone();
 
-        let lv_type = match local_variable.bind {
-            ast::LocalBind::Array(ref dim) => {
-                let ir::LocalType(ir::Type(layout, modifiers), ls, interp) = var_type.clone();
-
-                // Todo: constant expressions
-                let constant_dim = match **dim {
-                    ast::Expression::Literal(ast::Literal::UntypedInt(i)) => i,
-                    ast::Expression::Literal(ast::Literal::Int(i)) => i,
-                    ast::Expression::Literal(ast::Literal::UInt(i)) => i,
-                    _ => return Err(TyperError::ArrayDimensionsMustBeConstantExpression((**dim).clone())),
-                };
-
-                ir::LocalType(ir::Type(ir::TypeLayout::Array(Box::new(layout), constant_dim),
-                                       modifiers),
-                              ls,
-                              interp)
-            }
-            ast::LocalBind::Normal => var_type.clone(),
-        };
+        let ir::LocalType(lty, ls, interp) = var_type.clone();
+        let bind = &local_variable.bind;
+        let lv_type = ir::LocalType(try!(apply_variable_bind(lty, bind)), ls, interp);
 
         let var_id = try!(context.insert_variable(var_name.clone(), lv_type.0.clone()));
         vardefs.push(ir::VarDef {
@@ -2344,48 +2350,66 @@ fn parse_rootdefinition_constantbuffer
 fn parse_rootdefinition_globalvariable
     (gv: &ast::GlobalVariable,
      mut context: GlobalContext)
-     -> Result<(ir::RootDefinition, GlobalContext), TyperError> {
-    let var_name = gv.name.clone();
+     -> Result<(Vec<ir::RootDefinition>, GlobalContext), TyperError> {
+
     let var_type = try!(parse_globaltype(&gv.global_type, &context));
-    let input_type = var_type.0.clone();
-    let var_id = try!(context.insert_global(var_name.clone(), input_type.clone()));
-    let var_assign = match &gv.assignment {
-        &Some(ref assign) => {
-            let (uncasted, ty) = match try!(parse_expr(assign, &context)) {
-                TypedExpression::Value(expr, ty) => (expr, ty),
-                TypedExpression::Function(_) => return Err(TyperError::FunctionNotCalled),
-                TypedExpression::Method(_) => return Err(TyperError::FunctionNotCalled),
-            };
-            // Todo: review if we want to purge modifiers for rhs of assignment
-            let cast_to = ir::Type(input_type.0.clone(), ir::TypeModifier::default()).to_rvalue();
-            let cast = match ImplicitConversion::find(&ty, &cast_to) {
-                Ok(cast) => cast,
-                Err(()) => return Err(TyperError::WrongTypeInInitExpression),
-            };
-            let casted = cast.apply(uncasted);
-            Some(casted)
+
+    let mut defs = vec![];
+
+    for def in &gv.defs {
+
+        // Resolve type
+        let ir::GlobalType(lty, gs, interp) = var_type.clone();
+        let bind = &def.bind;
+        let gv_type = ir::GlobalType(try!(apply_variable_bind(lty, bind)), gs, interp);
+
+        // Insert variable
+        let var_name = def.name.clone();
+        let input_type = gv_type.0.clone();
+        let var_id = try!(context.insert_global(var_name.clone(), input_type.clone()));
+
+        let var_assign = match &def.assignment {
+            &Some(ref assign) => {
+                let (uncasted, ty) = match try!(parse_expr(assign, &context)) {
+                    TypedExpression::Value(expr, ty) => (expr, ty),
+                    TypedExpression::Function(_) => return Err(TyperError::FunctionNotCalled),
+                    TypedExpression::Method(_) => return Err(TyperError::FunctionNotCalled),
+                };
+                // Todo: review if we want to purge modifiers for rhs of assignment
+                let cast_to = ir::Type(input_type.0.clone(), ir::TypeModifier::default())
+                                  .to_rvalue();
+                let cast = match ImplicitConversion::find(&ty, &cast_to) {
+                    Ok(cast) => cast,
+                    Err(()) => return Err(TyperError::WrongTypeInInitExpression),
+                };
+                let casted = cast.apply(uncasted);
+                Some(casted)
+            }
+            &None => None,
+        };
+        let gv_ir = ir::GlobalVariable {
+            id: var_id,
+            global_type: gv_type,
+            assignment: var_assign,
+        };
+        let entry = ir::GlobalEntry {
+            id: var_id,
+            ty: gv_ir.global_type.clone(),
+        };
+        match def.slot {
+            Some(ast::GlobalSlot::ReadSlot(slot)) => {
+                context.global_slots_r.push((slot, entry));
+            }
+            Some(ast::GlobalSlot::ReadWriteSlot(slot)) => {
+                context.global_slots_rw.push((slot, entry));
+            }
+            None => {}
         }
-        &None => None,
-    };
-    let gv_ir = ir::GlobalVariable {
-        id: var_id,
-        global_type: var_type,
-        assignment: var_assign,
-    };
-    let entry = ir::GlobalEntry {
-        id: var_id,
-        ty: gv_ir.global_type.clone(),
-    };
-    match gv.slot {
-        Some(ast::GlobalSlot::ReadSlot(slot)) => {
-            context.global_slots_r.push((slot, entry));
-        }
-        Some(ast::GlobalSlot::ReadWriteSlot(slot)) => {
-            context.global_slots_rw.push((slot, entry));
-        }
-        None => {}
+
+        defs.push(ir::RootDefinition::GlobalVariable(gv_ir));
     }
-    Ok((ir::RootDefinition::GlobalVariable(gv_ir), context))
+
+    Ok((defs, context))
 }
 
 fn parse_rootdefinition_function(fd: &ast::FunctionDefinition,
@@ -2476,20 +2500,28 @@ fn parse_rootdefinition_kernel(fd: &ast::FunctionDefinition,
 fn parse_rootdefinition(ast: &ast::RootDefinition,
                         context: GlobalContext,
                         entry_point: &str)
-                        -> Result<(ir::RootDefinition, GlobalContext), TyperError> {
+                        -> Result<(Vec<ir::RootDefinition>, GlobalContext), TyperError> {
     match ast {
-        &ast::RootDefinition::Struct(ref sd) => parse_rootdefinition_struct(sd, context),
-        &ast::RootDefinition::SamplerState => Ok((ir::RootDefinition::SamplerState, context)),
+        &ast::RootDefinition::Struct(ref sd) => {
+            let (def, context) = try!(parse_rootdefinition_struct(sd, context));
+            Ok((vec![def], context))
+        }
+        &ast::RootDefinition::SamplerState => unimplemented!(),
         &ast::RootDefinition::ConstantBuffer(ref cb) => {
-            parse_rootdefinition_constantbuffer(cb, context)
+            let (def, context) = try!(parse_rootdefinition_constantbuffer(cb, context));
+            Ok((vec![def], context))
         }
         &ast::RootDefinition::GlobalVariable(ref gv) => {
             parse_rootdefinition_globalvariable(gv, context)
         }
         &ast::RootDefinition::Function(ref fd) if fd.name == entry_point => {
-            parse_rootdefinition_kernel(fd, context)
+            let (def, context) = try!(parse_rootdefinition_kernel(fd, context));
+            Ok((vec![def], context))
         }
-        &ast::RootDefinition::Function(ref fd) => parse_rootdefinition_function(fd, context),
+        &ast::RootDefinition::Function(ref fd) => {
+            let (def, context) = try!(parse_rootdefinition_function(fd, context));
+            Ok((vec![def], context))
+        }
     }
 }
 
@@ -2501,10 +2533,10 @@ pub fn typeparse(ast: &ast::Module) -> Result<ir::Module, TyperError> {
     let mut root_definitions = vec![];
 
     for def in &ast.root_definitions {
-        let (def_ir, next_context) = try!(parse_rootdefinition(&def,
-                                                               context,
-                                                               &ast.entry_point.clone()));
-        root_definitions.push(def_ir);
+        let (mut def_ir, next_context) = try!(parse_rootdefinition(&def,
+                                                                   context,
+                                                                   &ast.entry_point.clone()));
+        root_definitions.append(&mut def_ir);
         context = next_context;
     }
 
@@ -2673,16 +2705,22 @@ fn test_typeparse() {
         entry_point: "CSMAIN".to_string(),
         root_definitions: vec![
             ast::RootDefinition::GlobalVariable(ast::GlobalVariable {
-                name: "g_myInBuffer".to_string(),
                 global_type: ast::Type::from_object(ast::ObjectType::Buffer(ast::DataType(ast::DataLayout::Scalar(ast::ScalarType::Int), ast::TypeModifier::default()))).into(),
-                slot: Some(ast::GlobalSlot::ReadSlot(0)),
-                assignment: None,
+                defs: vec![ast::GlobalVariableName {
+                    name: "g_myInBuffer".to_string(),
+                    bind: ast::VariableBind::Normal,
+                    slot: Some(ast::GlobalSlot::ReadSlot(0)),
+                    assignment: None,
+                }],
             }),
             ast::RootDefinition::GlobalVariable(ast::GlobalVariable {
-                name: "g_myFour".to_string(),
                 global_type: ast::GlobalType(ast::Type(ast::TypeLayout::from_scalar(ast::ScalarType::Int), ast::TypeModifier { is_const: true, .. ast::TypeModifier::default() }), ast::GlobalStorage::Static, None),
-                slot: None,
-                assignment: Some(Located::none(ast::Expression::Literal(ast::Literal::UntypedInt(4)))),
+                defs: vec![ast::GlobalVariableName {
+                    name: "g_myFour".to_string(),
+                    bind: ast::VariableBind::Normal,
+                    slot: None,
+                    assignment: Some(Located::none(ast::Expression::Literal(ast::Literal::UntypedInt(4)))),
+                }],
             }),
             ast::RootDefinition::Function(ast::FunctionDefinition {
                 name: "myFunc".to_string(),
@@ -2751,9 +2789,9 @@ fn test_typeparse() {
                     ast::Statement::Var(ast::VarDef::new("testOut".to_string(), ast::Type::float().into(), None)),
                     ast::Statement::Var(ast::VarDef {
                         local_type: ast::Type::from_layout(ast::TypeLayout::float()).into(),
-                        defs: vec![ast::LocalVariable {
+                        defs: vec![ast::LocalVariableName {
                             name: "x".to_string(),
-                            bind: ast::LocalBind::Array(Located::none(ast::Expression::Literal(ast::Literal::UntypedInt(3)))),
+                            bind: ast::VariableBind::Array(Located::none(ast::Expression::Literal(ast::Literal::UntypedInt(3)))),
                             assignment: None,
                         }]
                     }),
@@ -2775,10 +2813,13 @@ fn test_typeparse() {
         entry_point: "CSMAIN".to_string(),
         root_definitions: vec![
             ast::RootDefinition::GlobalVariable(ast::GlobalVariable {
-                name: "g_myFour".to_string(),
                 global_type: ast::GlobalType(ast::Type(ast::TypeLayout::from_scalar(ast::ScalarType::Int), ast::TypeModifier { is_const: true, .. ast::TypeModifier::default() }), ast::GlobalStorage::Static, None),
-                slot: None,
-                assignment: Some(Located::none(ast::Expression::Literal(ast::Literal::UntypedInt(4)))),
+                defs: vec![ast::GlobalVariableName {
+                    name: "g_myFour".to_string(),
+                    bind: ast::VariableBind::Normal,
+                    slot: None,
+                    assignment: Some(Located::none(ast::Expression::Literal(ast::Literal::UntypedInt(4)))),
+                }],
             }),
             ast::RootDefinition::Function(ast::FunctionDefinition {
                 name: "CSMAIN".to_string(),

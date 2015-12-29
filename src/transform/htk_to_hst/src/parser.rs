@@ -886,9 +886,9 @@ fn vardef(input: &[LexToken]) -> IResult<&[LexToken], VarDef, ParseErrorReason> 
                         || { assignment_expr }
                     )
                 ),
-                || LocalVariable {
+                || LocalVariableName {
                     name: varname.to_node(),
-                    bind: match array_dim { Some(ref expr) => LocalBind::Array(expr.clone()), None => LocalBind::Normal },
+                    bind: match array_dim { Some(ref expr) => VariableBind::Array(expr.clone()), None => VariableBind::Normal },
                     assignment: assign
                 }
             )
@@ -1109,14 +1109,22 @@ fn globalvariable_register(input: &[LexToken]) -> IResult<&[LexToken], GlobalSlo
              })
 }
 
+fn globalvariablename(input: &[LexToken])
+                      -> IResult<&[LexToken], GlobalVariableName, ParseErrorReason> {
+    chain!(input,
+        name: parse_variablename ~
+        slot: opt!(globalvariable_register) ~
+        assignment:  opt!(chain!(token!(Token::Equals) ~ expr: expr, || expr)),
+        || { GlobalVariableName { name: name.to_node(), bind: VariableBind::Normal, slot: slot, assignment: assignment } }
+    )
+}
+
 fn globalvariable(input: &[LexToken]) -> IResult<&[LexToken], GlobalVariable, ParseErrorReason> {
     chain!(input,
         typename: parse_globaltype ~
-        name: parse_variablename ~
-        slot: opt!(globalvariable_register) ~
-        assignment:  opt!(chain!(token!(Token::Equals) ~ expr: expr, || expr)) ~
+        defs: separated_nonempty_list!(token!(Token::Comma), globalvariablename) ~
         token!(Token::Semicolon),
-        || { GlobalVariable { name: name.to_node(), global_type: typename, slot: slot, assignment: assignment } }
+        || { GlobalVariable { global_type: typename, defs: defs } }
     )
 }
 
@@ -1778,9 +1786,9 @@ fn test_statement() {
     assert_eq!(statement_str("float x[3];"),
         Statement::Var(VarDef {
             local_type: Type::from_layout(TypeLayout::float()).into(),
-            defs: vec![LocalVariable {
+            defs: vec![LocalVariableName {
                 name: "x".to_string(),
-                bind: LocalBind::Array(Located::loc(1, 9, Expression::Literal(Literal::UntypedInt(3)))),
+                bind: VariableBind::Array(Located::loc(1, 9, Expression::Literal(Literal::UntypedInt(3)))),
                 assignment: None,
             }]
         })
@@ -1940,10 +1948,13 @@ fn test_rootdefinition() {
 
     let test_buffersrv_str = "Buffer g_myBuffer : register(t1);";
     let test_buffersrv_ast = GlobalVariable {
-        name: "g_myBuffer".to_string(),
         global_type: Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::Float, 4), TypeModifier::default()))).into(),
-        slot: Some(GlobalSlot::ReadSlot(1)),
-        assignment: None,
+        defs: vec![GlobalVariableName {
+            name: "g_myBuffer".to_string(),
+            bind: VariableBind::Normal,
+            slot: Some(GlobalSlot::ReadSlot(1)),
+            assignment: None,
+        }],
     };
     assert_eq!(globalvariable_str(test_buffersrv_str),
                test_buffersrv_ast.clone());
@@ -1952,10 +1963,13 @@ fn test_rootdefinition() {
 
     let test_buffersrv2_str = "Buffer<uint4> g_myBuffer : register(t1);";
     let test_buffersrv2_ast = GlobalVariable {
-        name: "g_myBuffer".to_string(),
         global_type: Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::UInt, 4), TypeModifier::default()))).into(),
-        slot: Some(GlobalSlot::ReadSlot(1)),
-        assignment: None,
+        defs: vec![GlobalVariableName {
+            name: "g_myBuffer".to_string(),
+            bind: VariableBind::Normal,
+            slot: Some(GlobalSlot::ReadSlot(1)),
+            assignment: None,
+        }],
     };
     assert_eq!(globalvariable_str(test_buffersrv2_str),
                test_buffersrv2_ast.clone());
@@ -1964,10 +1978,13 @@ fn test_rootdefinition() {
 
     let test_buffersrv3_str = "Buffer<vector<int, 4>> g_myBuffer : register(t1);";
     let test_buffersrv3_ast = GlobalVariable {
-        name: "g_myBuffer".to_string(),
         global_type: Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::Int, 4), TypeModifier::default()))).into(),
-        slot: Some(GlobalSlot::ReadSlot(1)),
-        assignment: None,
+        defs: vec![GlobalVariableName {
+            name: "g_myBuffer".to_string(),
+            bind: VariableBind::Normal,
+            slot: Some(GlobalSlot::ReadSlot(1)),
+            assignment: None,
+        }],
     };
     assert_eq!(globalvariable_str(test_buffersrv3_str),
                test_buffersrv3_ast.clone());
@@ -1976,10 +1993,13 @@ fn test_rootdefinition() {
 
     let test_buffersrv4_str = "StructuredBuffer<CustomType> g_myBuffer : register(t1);";
     let test_buffersrv4_ast = GlobalVariable {
-        name: "g_myBuffer".to_string(),
         global_type: Type::from_object(ObjectType::StructuredBuffer(StructuredType(StructuredLayout::Custom("CustomType".to_string()), TypeModifier::default()))).into(),
-        slot: Some(GlobalSlot::ReadSlot(1)),
-        assignment: None,
+        defs: vec![GlobalVariableName {
+            name: "g_myBuffer".to_string(),
+            bind: VariableBind::Normal,
+            slot: Some(GlobalSlot::ReadSlot(1)),
+            assignment: None,
+        }],
     };
     assert_eq!(globalvariable_str(test_buffersrv4_str),
                test_buffersrv4_ast.clone());
@@ -1988,13 +2008,18 @@ fn test_rootdefinition() {
 
     let test_static_const_str = "static const int c_numElements = 4;";
     let test_static_const_ast = GlobalVariable {
-        name: "c_numElements".to_string(),
         global_type: GlobalType(Type(TypeLayout::int(),
                                      TypeModifier { is_const: true, ..TypeModifier::default() }),
                                 GlobalStorage::Static,
                                 None),
-        slot: None,
-        assignment: Some(Located::loc(1, 34, Expression::Literal(Literal::UntypedInt(4)))),
+        defs: vec![GlobalVariableName {
+                       name: "c_numElements".to_string(),
+                       bind: VariableBind::Normal,
+                       slot: None,
+                       assignment: Some(Located::loc(1,
+                                                     34,
+                                                     Expression::Literal(Literal::UntypedInt(4)))),
+                   }],
     };
     assert_eq!(globalvariable_str(test_static_const_str),
                test_static_const_ast.clone());
