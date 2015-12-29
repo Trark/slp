@@ -270,7 +270,8 @@ fn whitespace_ignore(_: Vec<&[u8]>) -> Result<(), ()> {
 named!(whitespace<()>, map_res!(
     many1!(alt!(
         tag!(" ") | tag!("\n") | tag!("\r") | tag!("\t") |
-        chain!(tag!("//") ~ many0!(is_not!("\n")) ~ tag!("\n"), || { &[] as &[u8] })
+        chain!(tag!("//") ~ many0!(is_not!("\n")) ~ tag!("\n"), || { &[] as &[u8] }) |
+        chain!(tag!("/*") ~ many0!(is_not!("*/")) ~ tag!("*/"), || { &[] as &[u8] })
     )),
     whitespace_ignore
 ));
