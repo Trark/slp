@@ -1411,30 +1411,32 @@ fn transpile_params(params: &[src::FunctionParam],
 fn transpile_kernel_input_semantic(param: &src::KernelParam,
                                    context: &mut Context)
                                    -> Result<dst::Statement, TranspileError> {
-    match &param.1 {
-        &src::KernelSemantic::DispatchThreadId => {
-            let typename = try!(transpile_type(&param.1.get_type(), context));
-            let assign = match &param.1 {
-                &src::KernelSemantic::DispatchThreadId => {
-                    let x = dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(Box::new(dst::Expression::Literal(dst::Literal::UInt(0)))));
-                    let y = dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(Box::new(dst::Expression::Literal(dst::Literal::UInt(1)))));
-                    let z = dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(Box::new(dst::Expression::Literal(dst::Literal::UInt(2)))));
-                    dst::Expression::Constructor(dst::Constructor::UInt3(Box::new(x),
-                                                                         Box::new(y),
-                                                                         Box::new(z)))
-                }
-                _ => unimplemented!(),
-            };
-            Ok(dst::Statement::Var(dst::VarDef {
-                id: try!(context.get_variable_id(&param.0)),
-                typename: typename,
-                assignment: Some(assign),
-            }))
+    let typename = try!(transpile_type(&param.1.get_type(), context));
+    let assign = match param.1 {
+        src::KernelSemantic::DispatchThreadId => {
+            let x = dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(Box::new(dst::Expression::Literal(dst::Literal::UInt(0)))));
+            let y = dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(Box::new(dst::Expression::Literal(dst::Literal::UInt(1)))));
+            let z = dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(Box::new(dst::Expression::Literal(dst::Literal::UInt(2)))));
+            dst::Expression::Constructor(dst::Constructor::UInt3(Box::new(x),
+                                                                 Box::new(y),
+                                                                 Box::new(z)))
         }
-        &src::KernelSemantic::GroupId => unimplemented!(),
-        &src::KernelSemantic::GroupIndex => unimplemented!(),
-        &src::KernelSemantic::GroupThreadId => unimplemented!(),
-    }
+        src::KernelSemantic::GroupId => unimplemented!(),
+        src::KernelSemantic::GroupIndex => unimplemented!(),
+        src::KernelSemantic::GroupThreadId => {
+            let x = dst::Expression::Intrinsic(dst::Intrinsic::GetLocalId(Box::new(dst::Expression::Literal(dst::Literal::UInt(0)))));
+            let y = dst::Expression::Intrinsic(dst::Intrinsic::GetLocalId(Box::new(dst::Expression::Literal(dst::Literal::UInt(1)))));
+            let z = dst::Expression::Intrinsic(dst::Intrinsic::GetLocalId(Box::new(dst::Expression::Literal(dst::Literal::UInt(2)))));
+            dst::Expression::Constructor(dst::Constructor::UInt3(Box::new(x),
+                                                                 Box::new(y),
+                                                                 Box::new(z)))
+        }
+    };
+    Ok(dst::Statement::Var(dst::VarDef {
+        id: try!(context.get_variable_id(&param.0)),
+        typename: typename,
+        assignment: Some(assign),
+    }))
 }
 
 fn transpile_kernel_input_semantics(params: &[src::KernelParam],

@@ -1174,6 +1174,9 @@ fn functionparam(input: &[LexToken]) -> IResult<&[LexToken], FunctionParam, Pars
                 if let LexToken(Token::Id(Identifier(name)), _) = tok {
                     match &name[..] {
                         "SV_DispatchThreadID" => Ok(Semantic::DispatchThreadId),
+                        "SV_GroupID" => Ok(Semantic::GroupId),
+                        "SV_GroupIndex" => Ok(Semantic::GroupIndex),
+                        "SV_GroupThreadID" => Ok(Semantic::GroupThreadId),
                         _ => Err(())
                     }
                 } else {

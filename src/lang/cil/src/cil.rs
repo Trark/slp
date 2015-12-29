@@ -85,6 +85,7 @@ pub enum SwizzleSlot {
 #[derive(PartialEq, Debug, Clone)]
 pub enum Intrinsic {
     GetGlobalId(Box<Expression>),
+    GetLocalId(Box<Expression>),
 }
 
 #[derive(PartialEq, Debug, Clone)]

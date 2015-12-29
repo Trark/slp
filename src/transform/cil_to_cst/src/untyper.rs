@@ -265,6 +265,9 @@ fn untype_intrinsic(instrinic: &src::Intrinsic,
         src::Intrinsic::GetGlobalId(ref expr) => {
             dst::Intrinsic::GetGlobalId(Box::new(try!(untype_expression(expr, context))))
         }
+        src::Intrinsic::GetLocalId(ref expr) => {
+            dst::Intrinsic::GetLocalId(Box::new(try!(untype_expression(expr, context))))
+        }
     })
 }
 

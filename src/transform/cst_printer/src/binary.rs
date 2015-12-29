@@ -319,6 +319,12 @@ fn print_intrinsic(intrinsic: &Intrinsic, printer: &mut Printer) {
             print_expression_inner(expr, 15, printer);
             printer.print(")");
         }
+        &Intrinsic::GetLocalId(ref expr) => {
+            printer.print("get_local_id");
+            printer.print("(");
+            print_expression_inner(expr, 15, printer);
+            printer.print(")");
+        }
     }
 }
 
