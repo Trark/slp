@@ -41,6 +41,7 @@ pub enum TyperError {
 
     UnaryOperationWrongTypes(ast::UnaryOp, ErrorType),
     BinaryOperationWrongTypes(ir::BinOp, ErrorType, ErrorType),
+    BinaryOperationNonNumericType,
     TernaryConditionRequiresBoolean(ErrorType),
     TernaryArmsMustHaveSameType(ErrorType, ErrorType),
 
@@ -132,6 +133,7 @@ impl error::Error for TyperError {
             TyperError::BinaryOperationWrongTypes(_, _, _) => {
                 "operation does not support the given types"
             }
+            TyperError::BinaryOperationNonNumericType => "non-numeric type in binary operation",
             TyperError::TernaryConditionRequiresBoolean(_) => "ternary condition must be boolean",
             TyperError::TernaryArmsMustHaveSameType(_, _) => "ternary arms must have the same type",
 
@@ -1748,6 +1750,64 @@ fn parse_expr_binop(op: &ast::BinOp,
         }
         ast::BinOp::LeftShift |
         ast::BinOp::RightShift => Err(TyperError::Unimplemented),
+        ast::BinOp::BitwiseAnd |
+        ast::BinOp::BitwiseOr |
+        ast::BinOp::BitwiseXor |
+        ast::BinOp::BooleanAnd |
+        ast::BinOp::BooleanOr => {
+            let lhs_tyl = &(lhs_type.0).0;
+            let rhs_tyl = &(rhs_type.0).0;
+            let lhs_mod = &(lhs_type.0).1;
+            let rhs_mod = &(rhs_type.0).1;
+            let scalar = if *op == ast::BinOp::BooleanAnd || *op == ast::BinOp::BooleanOr {
+                ir::ScalarType::Bool
+            } else {
+                let lhs_scalar = try!(lhs_tyl.to_scalar()
+                                             .ok_or(TyperError::BinaryOperationNonNumericType));
+                let rhs_scalar = try!(rhs_tyl.to_scalar()
+                                             .ok_or(TyperError::BinaryOperationNonNumericType));
+                match (lhs_scalar, rhs_scalar) {
+                    (ir::ScalarType::Int, ir::ScalarType::Int) => ir::ScalarType::Int,
+                    (ir::ScalarType::Int, ir::ScalarType::UInt) => ir::ScalarType::UInt,
+                    (ir::ScalarType::UInt, ir::ScalarType::Int) => ir::ScalarType::UInt,
+                    (ir::ScalarType::UInt, ir::ScalarType::UInt) => ir::ScalarType::UInt,
+                    _ => {
+                        return Err(TyperError::BinaryOperationWrongTypes(op.clone(),
+                                                                         lhs_pt,
+                                                                         rhs_pt))
+                    }
+                }
+            };
+            let x = ir::TypeLayout::max_dim(lhs_tyl.to_x(), rhs_tyl.to_x());
+            let y = ir::TypeLayout::max_dim(lhs_tyl.to_y(), rhs_tyl.to_y());
+            let tyl = ir::TypeLayout::from_numeric(scalar, x, y);
+            let out_mod = ir::TypeModifier {
+                is_const: false,
+                row_order: ir::RowOrder::Column,
+                precise: lhs_mod.precise || rhs_mod.precise,
+                volatile: false,
+            };
+            let ty = ir::Type(tyl, out_mod).to_rvalue();
+            let lhs_cast = match ImplicitConversion::find(&lhs_type, &ty) {
+                Ok(cast) => cast,
+                Err(()) => {
+                    return Err(TyperError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt))
+                }
+            };
+            let rhs_cast = match ImplicitConversion::find(&rhs_type, &ty) {
+                Ok(cast) => cast,
+                Err(()) => {
+                    return Err(TyperError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt))
+                }
+            };
+            assert_eq!(lhs_cast.get_target_type(), rhs_cast.get_target_type());
+            let lhs_final = lhs_cast.apply(lhs_ir);
+            let rhs_final = rhs_cast.apply(rhs_ir);
+            Ok(TypedExpression::Value(ir::Expression::BinaryOperation(op.clone(),
+                                                                      Box::new(lhs_final),
+                                                                      Box::new(rhs_final)),
+                                      rhs_cast.get_target_type()))
+        }
         ast::BinOp::LessThan |
         ast::BinOp::LessEqual |
         ast::BinOp::GreaterThan |

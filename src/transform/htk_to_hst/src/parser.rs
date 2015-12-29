@@ -781,13 +781,73 @@ fn expr_p7(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, Pars
     )
 }
 
+fn expr_p8(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, ParseErrorReason> {
+    chain!(input,
+        left: expr_p7 ~
+        rights: many0!(chain!(
+            op: token!(LexToken(Token::Ampersand(_), _) => BinOp::BitwiseAnd) ~
+            right: expr_p7,
+            || (op, right)
+        )),
+        || { combine_rights(left, rights) }
+    )
+}
+
+fn expr_p9(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, ParseErrorReason> {
+    chain!(input,
+        left: expr_p8 ~
+        rights: many0!(chain!(
+            op: token!(LexToken(Token::Hat, _) => BinOp::BitwiseXor) ~
+            right: expr_p8,
+            || (op, right)
+        )),
+        || { combine_rights(left, rights) }
+    )
+}
+
+fn expr_p10(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, ParseErrorReason> {
+    chain!(input,
+        left: expr_p9 ~
+        rights: many0!(chain!(
+            op: token!(LexToken(Token::VerticalBar(_), _) => BinOp::BitwiseOr) ~
+            right: expr_p9,
+            || (op, right)
+        )),
+        || { combine_rights(left, rights) }
+    )
+}
+
+fn expr_p11(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, ParseErrorReason> {
+    chain!(input,
+        left: expr_p10 ~
+        rights: many0!(chain!(
+            op: chain!(token!(Token::Ampersand(FollowedBy::Token)) ~ token!(Token::Ampersand(_)), || BinOp::BooleanAnd) ~
+            right: expr_p10,
+            || (op, right)
+        )),
+        || { combine_rights(left, rights) }
+    )
+}
+
+fn expr_p12(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, ParseErrorReason> {
+    chain!(input,
+        left: expr_p11 ~
+        rights: many0!(chain!(
+            op: chain!(token!(Token::VerticalBar(FollowedBy::Token)) ~ token!(Token::VerticalBar(_)), || BinOp::BooleanOr) ~
+            right: expr_p11,
+            || (op, right)
+        )),
+        || { combine_rights(left, rights) }
+    )
+}
+
 fn expr_p13(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, ParseErrorReason> {
     alt!(input,
-        chain!(cond: expr_p7 ~ token!(Token::QuestionMark) ~ lhs: expr_p13 ~ token!(Token::Colon) ~ rhs: expr_p13, || {
+        chain!(cond: expr_p12 ~ token!(Token::QuestionMark) ~ lhs: expr_p13 ~ token!(Token::Colon) ~ rhs: expr_p13, || {
             let loc = cond.location.clone();
             Located::new(Expression::TernaryConditional(Box::new(cond), Box::new(lhs), Box::new(rhs)), loc)
         }) |
-        expr_p7
+        expr_p12
     )
 }
 
@@ -1506,6 +1566,36 @@ fn test_expr() {
                Located::loc(1,
                             1,
                             Expression::BinaryOperation(BinOp::Inequality,
+                                                        bexp_var("a", 1, 1),
+                                                        bexp_var("b", 1, 6))));
+    assert_eq!(expr_str("a & b"),
+               Located::loc(1,
+                            1,
+                            Expression::BinaryOperation(BinOp::BitwiseAnd,
+                                                        bexp_var("a", 1, 1),
+                                                        bexp_var("b", 1, 5))));
+    assert_eq!(expr_str("a | b"),
+               Located::loc(1,
+                            1,
+                            Expression::BinaryOperation(BinOp::BitwiseOr,
+                                                        bexp_var("a", 1, 1),
+                                                        bexp_var("b", 1, 5))));
+    assert_eq!(expr_str("a ^ b"),
+               Located::loc(1,
+                            1,
+                            Expression::BinaryOperation(BinOp::BitwiseXor,
+                                                        bexp_var("a", 1, 1),
+                                                        bexp_var("b", 1, 5))));
+    assert_eq!(expr_str("a && b"),
+               Located::loc(1,
+                            1,
+                            Expression::BinaryOperation(BinOp::BooleanAnd,
+                                                        bexp_var("a", 1, 1),
+                                                        bexp_var("b", 1, 6))));
+    assert_eq!(expr_str("a || b"),
+               Located::loc(1,
+                            1,
+                            Expression::BinaryOperation(BinOp::BooleanOr,
                                                         bexp_var("a", 1, 1),
                                                         bexp_var("b", 1, 6))));
 

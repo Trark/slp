@@ -104,7 +104,7 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
         myFunc(arr2[0]);
         myFunc(arr1[0]);
     }
-    if (true)
+    if (true || false)
     {
         myFunc(1u);
     }
@@ -112,11 +112,11 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     {
         myFunc(2u);
     }
-    if (true)
+    if (true && true)
     {
         myFunc(3u);
     }
-    else if (false)
+    else if (false || true && false)
     {
         myFunc(4u);
     }

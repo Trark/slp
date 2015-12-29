@@ -114,6 +114,44 @@ impl TypeLayout {
     pub fn from_object(ty: ObjectType) -> TypeLayout {
         TypeLayout::Object(ty)
     }
+    pub fn to_scalar(&self) -> Option<ScalarType> {
+        match *self {
+            TypeLayout::Scalar(ref scalar) |
+            TypeLayout::Vector(ref scalar, _) |
+            TypeLayout::Matrix(ref scalar, _, _) => Some(scalar.clone()),
+            _ => None,
+        }
+    }
+    pub fn to_x(&self) -> Option<u32> {
+        match *self {
+            TypeLayout::Vector(_, ref x) => Some(*x),
+            TypeLayout::Matrix(_, ref x, _) => Some(*x),
+            _ => None,
+        }
+    }
+    pub fn to_y(&self) -> Option<u32> {
+        match *self {
+            TypeLayout::Matrix(_, _, ref y) => Some(*y),
+            _ => None,
+        }
+    }
+    pub fn max_dim(r1: Option<u32>, r2: Option<u32>) -> Option<u32> {
+        use std::cmp::max;
+        match (r1, r2) {
+            (Some(x1), Some(x2)) => Some(max(x1, x2)),
+            (Some(x1), None) => Some(x1),
+            (None, Some(x2)) => Some(x2),
+            (None, None) => None,
+        }
+    }
+    pub fn from_numeric(scalar: ScalarType, x_opt: Option<u32>, y_opt: Option<u32>) -> TypeLayout {
+        match (x_opt, y_opt) {
+            (Some(x), Some(y)) => TypeLayout::Matrix(scalar, x, y),
+            (Some(x), None) => TypeLayout::Vector(scalar, x),
+            (None, None) => TypeLayout::Scalar(scalar),
+            _ => panic!("invalid numeric type"),
+        }
+    }
 }
 
 impl From<DataLayout> for TypeLayout {
@@ -986,7 +1024,10 @@ impl TypeParser {
                     BinOp::Divide |
                     BinOp::Modulus |
                     BinOp::LeftShift |
-                    BinOp::RightShift => {
+                    BinOp::RightShift |
+                    BinOp::BitwiseAnd |
+                    BinOp::BitwiseOr |
+                    BinOp::BitwiseXor => {
                         let base_type = try!(TypeParser::get_expression_type(expr, context)).0;
                         Ok(ExpressionType(base_type, ValueType::Rvalue))
                     }
@@ -1000,7 +1041,9 @@ impl TypeParser {
                     BinOp::GreaterThan |
                     BinOp::GreaterEqual |
                     BinOp::Equality |
-                    BinOp::Inequality => {
+                    BinOp::Inequality |
+                    BinOp::BooleanAnd |
+                    BinOp::BooleanOr => {
                         let ExpressionType(Type(ref tyl, _), _) =
                             try!(TypeParser::get_expression_type(expr, context));
                         Ok(ExpressionType(Type(match *tyl {

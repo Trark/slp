@@ -479,6 +479,28 @@ named!(symbol_exclamation<Token>, chain!(
     }
 ));
 
+named!(symbol_ampersand<Token>, chain!(
+    tag!("&") ~
+    next: lookahead_token,
+    || {
+        match next {
+            Some(_) => Token::Ampersand(FollowedBy::Token),
+            _ => Token::Ampersand(FollowedBy::Whitespace)
+        }
+    }
+));
+
+named!(symbol_verticalbar<Token>, chain!(
+    tag!("|") ~
+    next: lookahead_token,
+    || {
+        match next {
+            Some(_) => Token::VerticalBar(FollowedBy::Token),
+            _ => Token::VerticalBar(FollowedBy::Whitespace)
+        }
+    }
+));
+
 named!(token_no_whitespace_symbols<Token>, alt!(
     tag!(";") => { |_| Token::Semicolon } |
     tag!(",") => { |_| Token::Comma } |
@@ -488,8 +510,8 @@ named!(token_no_whitespace_symbols<Token>, alt!(
     tag!("/") => { |_| Token::ForwardSlash } |
     tag!("%") => { |_| Token::Percent } |
     tag!("*") => { |_| Token::Asterix } |
-    tag!("|") => { |_| Token::VerticalBar } |
-    tag!("&") => { |_| Token::Ampersand } |
+    symbol_verticalbar |
+    symbol_ampersand |
     tag!("^") => { |_| Token::Hat } |
     symbol_equals |
     tag!("#") => { |_| Token::Hash } |
@@ -686,9 +708,16 @@ fn test_token() {
     assert_eq!(token(&b"* "[..]),
                IResult::Done(&b""[..], from_end(Token::Asterix, 2)));
     assert_eq!(token(&b"| "[..]),
-               IResult::Done(&b""[..], from_end(Token::VerticalBar, 2)));
+               IResult::Done(&b""[..],
+                             from_end(Token::VerticalBar(FollowedBy::Whitespace), 2)));
+    assert_eq!(token(&b"|| "[..]),
+               IResult::Done(&b"| "[..],
+                             from_end(Token::VerticalBar(FollowedBy::Token), 3)));
     assert_eq!(token(&b"& "[..]),
-               IResult::Done(&b""[..], from_end(Token::Ampersand, 2)));
+               IResult::Done(&b""[..],
+                             from_end(Token::Ampersand(FollowedBy::Whitespace), 2)));
+    assert_eq!(token(&b"&& "[..]),
+               IResult::Done(&b"& "[..], from_end(Token::Ampersand(FollowedBy::Token), 3)));
     assert_eq!(token(&b"^ "[..]),
                IResult::Done(&b""[..], from_end(Token::Hat, 2)));
     assert_eq!(token(&b"= "[..]),

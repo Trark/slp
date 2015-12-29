@@ -101,7 +101,7 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint
 		myFunc_1(arr2[(int)0]);
 		myFunc_0(arr1_0[(int)0]);
 	}
-	if (true)
+	if (true || false)
 	{
 		myFunc_0(1u);
 	}
@@ -109,13 +109,13 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint
 	{
 		myFunc_0(2u);
 	}
-	if (true)
+	if (true && true)
 	{
 		myFunc_0(3u);
 	}
 	else
 	{
-		if (false)
+		if (false || true && false)
 		{
 			myFunc_0(4u);
 		}
