@@ -45,6 +45,10 @@ const T_MOD: TypeModifier = TypeModifier {
 };
 
 const T_VOID_TY: Type = Type(TypeLayout::Void, T_MOD);
+const T_BOOL_TY: Type = Type(TypeLayout::Scalar(ScalarType::Bool), T_MOD);
+const T_BOOL2_TY: Type = Type(TypeLayout::Vector(ScalarType::Bool, 2), T_MOD);
+const T_BOOL3_TY: Type = Type(TypeLayout::Vector(ScalarType::Bool, 3), T_MOD);
+const T_BOOL4_TY: Type = Type(TypeLayout::Vector(ScalarType::Bool, 4), T_MOD);
 const T_INT_TY: Type = Type(TypeLayout::Scalar(ScalarType::Int), T_MOD);
 const T_INT1_TY: Type = Type(TypeLayout::Vector(ScalarType::Int, 1), T_MOD);
 const T_INT2_TY: Type = Type(TypeLayout::Vector(ScalarType::Int, 2), T_MOD);
@@ -148,10 +152,18 @@ const INTRINSICS: &'static [IntrinsicDefinition] = &[
     (T_FLOAT_TY, "dot", &[T_FLOAT3, T_FLOAT3], I2(Intrinsic::DotF3)),
     (T_FLOAT_TY, "dot", &[T_FLOAT4, T_FLOAT4], I2(Intrinsic::DotF4)),
 
+    (T_FLOAT_TY, "f16tof32", &[T_UINT], I1(Intrinsic::F16ToF32)),
+    (T_UINT_TY, "f32tof16", &[T_FLOAT], I1(Intrinsic::F32ToF16)),
+
     (T_FLOAT_TY, "floor", &[T_FLOAT], I1(Intrinsic::Floor)),
     (T_FLOAT2_TY, "floor", &[T_FLOAT2], I1(Intrinsic::Floor2)),
     (T_FLOAT3_TY, "floor", &[T_FLOAT3], I1(Intrinsic::Floor3)),
     (T_FLOAT4_TY, "floor", &[T_FLOAT4], I1(Intrinsic::Floor4)),
+
+    (T_BOOL_TY, "isnan", &[T_FLOAT], I1(Intrinsic::IsNaN)),
+    (T_BOOL2_TY, "isnan", &[T_FLOAT2], I1(Intrinsic::IsNaN2)),
+    (T_BOOL3_TY, "isnan", &[T_FLOAT3], I1(Intrinsic::IsNaN3)),
+    (T_BOOL4_TY, "isnan", &[T_FLOAT4], I1(Intrinsic::IsNaN4)),
 
     (T_INT_TY, "min", &[T_INT, T_INT], I2(Intrinsic::Min)),
     (T_INT2_TY, "min", &[T_INT2, T_INT2], I2(Intrinsic::Min)),

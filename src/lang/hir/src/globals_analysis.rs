@@ -272,10 +272,16 @@ fn search_intrinsic(intrinsic: &Intrinsic, usage: &mut LocalFunctionGlobalUsage)
         Intrinsic::AsFloatF2(ref e1) |
         Intrinsic::AsFloatF3(ref e1) |
         Intrinsic::AsFloatF4(ref e1) |
+        Intrinsic::F16ToF32(ref e1) |
+        Intrinsic::F32ToF16(ref e1) |
         Intrinsic::Floor(ref e1) |
         Intrinsic::Floor2(ref e1) |
         Intrinsic::Floor3(ref e1) |
         Intrinsic::Floor4(ref e1) |
+        Intrinsic::IsNaN(ref e1) |
+        Intrinsic::IsNaN2(ref e1) |
+        Intrinsic::IsNaN3(ref e1) |
+        Intrinsic::IsNaN4(ref e1) |
         Intrinsic::Normalize1(ref e1) |
         Intrinsic::Normalize2(ref e1) |
         Intrinsic::Normalize3(ref e1) |
