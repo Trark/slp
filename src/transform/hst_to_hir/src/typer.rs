@@ -2192,17 +2192,37 @@ fn parse_expr_value_only(expr: &ast::Expression,
     }
 }
 
+fn evaluate_constexpr_int(expr: &ast::Expression) -> Result<u64, ()> {
+    Ok(match *expr {
+        ast::Expression::Literal(ast::Literal::UntypedInt(i)) => i,
+        ast::Expression::Literal(ast::Literal::Int(i)) => i,
+        ast::Expression::Literal(ast::Literal::UInt(i)) => i,
+        ast::Expression::BinaryOperation(ref op, ref left, ref right) => {
+            let lc = try!(evaluate_constexpr_int(left));
+            let rc = try!(evaluate_constexpr_int(right));
+            match *op {
+                ast::BinOp::Add => lc + rc,
+                ast::BinOp::Subtract => lc - rc,
+                ast::BinOp::Multiply => lc * rc,
+                ast::BinOp::Divide => lc / rc,
+                ast::BinOp::Modulus => lc % rc,
+                ast::BinOp::LeftShift => lc << rc,
+                ast::BinOp::RightShift => lc >> rc,
+                _ => return Err(()),
+            }
+        }
+        _ => return Err(()),
+    })
+}
+
 fn apply_variable_bind(ty: ir::Type, bind: &ast::VariableBind) -> Result<ir::Type, TyperError> {
     match *bind {
         ast::VariableBind::Array(ref dim) => {
             let ir::Type(layout, modifiers) = ty;
 
-            // Todo: constant expressions
-            let constant_dim = match **dim {
-                ast::Expression::Literal(ast::Literal::UntypedInt(i)) => i,
-                ast::Expression::Literal(ast::Literal::Int(i)) => i,
-                ast::Expression::Literal(ast::Literal::UInt(i)) => i,
-                _ => {
+            let constant_dim = match evaluate_constexpr_int(&**dim) {
+                Ok(val) => val,
+                Err(()) => {
                     return Err(TyperError::ArrayDimensionsMustBeConstantExpression((**dim).clone()))
                 }
             };
