@@ -238,26 +238,6 @@ fn untype_type(ty: &src::Type, context: &mut Context) -> Result<dst::Type, Untyp
     })
 }
 
-fn untype_constructor(cons: &src::Constructor,
-                      context: &mut Context)
-                      -> Result<dst::Constructor, UntyperError> {
-    Ok(match *cons {
-        src::Constructor::UInt3(ref e1, ref e2, ref e3) => {
-            let u1 = Box::new(try!(untype_expression(e1, context)));
-            let u2 = Box::new(try!(untype_expression(e2, context)));
-            let u3 = Box::new(try!(untype_expression(e3, context)));
-            dst::Constructor::UInt3(u1, u2, u3)
-        }
-        src::Constructor::Float4(ref e1, ref e2, ref e3, ref e4) => {
-            let u1 = Box::new(try!(untype_expression(e1, context)));
-            let u2 = Box::new(try!(untype_expression(e2, context)));
-            let u3 = Box::new(try!(untype_expression(e3, context)));
-            let u4 = Box::new(try!(untype_expression(e4, context)));
-            dst::Constructor::Float4(u1, u2, u3, u4)
-        }
-    })
-}
-
 fn untype_intrinsic(instrinic: &src::Intrinsic,
                     context: &mut Context)
                     -> Result<dst::Intrinsic, UntyperError> {
@@ -276,9 +256,6 @@ fn untype_expression(expression: &src::Expression,
                      -> Result<dst::Expression, UntyperError> {
     Ok(match *expression {
         src::Expression::Literal(ref literal) => dst::Expression::Literal(literal.clone()),
-        src::Expression::Constructor(ref cons) => {
-            dst::Expression::Constructor(try!(untype_constructor(cons, context)))
-        }
         src::Expression::Local(ref id) => {
             dst::Expression::Variable(try!(context.get_local_name(id)))
         }
@@ -334,6 +311,10 @@ fn untype_expression(expression: &src::Expression,
             Box::new(dst::Expression::Variable(try!(context.get_function_name(func)))),
             try!(result_map(untype_expression, params, context))
         ),
+        src::Expression::NumericConstructor(ref scalar, ref dim, ref args) => {
+            let untyped_args = try!(result_map(untype_expression, args, context));
+            dst::Expression::NumericConstructor(scalar.clone(), dim.clone(), untyped_args)
+        }
         src::Expression::Cast(ref ty, ref expr) => {
             dst::Expression::Cast(try!(untype_type(ty, context)),
                                   Box::new(try!(untype_expression(expr, context))))

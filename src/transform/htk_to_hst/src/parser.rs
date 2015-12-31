@@ -69,23 +69,79 @@ fn parse_variablename(input: &[LexToken]) -> IResult<&[LexToken], Located<String
     })
 }
 
+// Parse scalar type as part of a string
+fn parse_scalartype_str(input: &[u8]) -> IResult<&[u8], ScalarType> {
+    alt!(input,
+        complete!(tag!("bool")) => { |_| ScalarType::Bool } |
+        complete!(tag!("int")) => { |_| ScalarType::Int } |
+        complete!(tag!("uint")) => { |_| ScalarType::UInt } |
+        complete!(tag!("dword")) => { |_| ScalarType::UInt } |
+        complete!(tag!("float")) => { |_| ScalarType::Float } |
+        complete!(tag!("double")) => { |_| ScalarType::Double }
+    )
+}
+
+// Parse data type as part of a string
+fn parse_datalayout_str(typename: &str) -> Option<DataLayout> {
+
+    fn digit(input: &[u8]) -> IResult<&[u8], u32> {
+        alt!(input,
+            tag!("1") => { |_| { 1 } } |
+            tag!("2") => { |_| { 2 } } |
+            tag!("3") => { |_| { 3 } } |
+            tag!("4") => { |_| { 4 } }
+        )
+    }
+
+    fn parse_str(input: &[u8]) -> IResult<&[u8], DataLayout> {
+        match parse_scalartype_str(input) {
+            IResult::Incomplete(rem) => IResult::Incomplete(rem),
+            IResult::Error(err) => IResult::Error(err),
+            IResult::Done(rest, ty) => {
+                if rest.len() == 0 {
+                    IResult::Done(&[], DataLayout::Scalar(ty))
+                } else {
+                    match digit(rest) {
+                        IResult::Incomplete(rem) => IResult::Incomplete(rem),
+                        IResult::Error(err) => IResult::Error(err),
+                        IResult::Done(rest, x) => {
+                            if rest.len() == 0 {
+                                IResult::Done(&[], DataLayout::Vector(ty, x))
+                            } else {
+                                match preceded!(rest, tag!("x"), digit) {
+                                    IResult::Incomplete(rem) => IResult::Incomplete(rem),
+                                    IResult::Error(err) => IResult::Error(err),
+                                    IResult::Done(rest, y) => {
+                                        if rest.len() == 0 {
+                                            IResult::Done(&[], DataLayout::Matrix(ty, x, y))
+                                        } else {
+                                            IResult::Error(Err::Position(ErrorKind::Custom(0),
+                                                                         input))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    match parse_str(&typename[..].as_bytes()) {
+        IResult::Done(rest, ty) => {
+            assert_eq!(rest.len(), 0);
+            Some(ty)
+        }
+        IResult::Incomplete(_) | IResult::Error(_) => None,
+    }
+}
+
 fn parse_datalayout(input: &[LexToken]) -> IResult<&[LexToken], DataLayout, ParseErrorReason> {
 
     // Parse a vector dimension as a token
     fn parse_digit(input: &[LexToken]) -> IResult<&[LexToken], u32, ParseErrorReason> {
         token!(input, LexToken(Token::LiteralInt(i), _) => i as u32)
-    }
-
-    // Parse scalar type as part of a string
-    fn parse_scalartype_str(input: &[u8]) -> IResult<&[u8], ScalarType> {
-        alt!(input,
-            complete!(tag!("bool")) => { |_| ScalarType::Bool } |
-            complete!(tag!("int")) => { |_| ScalarType::Int } |
-            complete!(tag!("uint")) => { |_| ScalarType::UInt } |
-            complete!(tag!("dword")) => { |_| ScalarType::UInt } |
-            complete!(tag!("float")) => { |_| ScalarType::Float } |
-            complete!(tag!("double")) => { |_| ScalarType::Double }
-        )
     }
 
     // Parse scalar type as a full token
@@ -112,62 +168,6 @@ fn parse_datalayout(input: &[LexToken]) -> IResult<&[LexToken], DataLayout, Pars
                                                  input))
                 }
             }
-        }
-    }
-
-
-    fn parse_datatype_str(typename: &str) -> Option<DataLayout> {
-
-        fn digit(input: &[u8]) -> IResult<&[u8], u32> {
-            alt!(input,
-                tag!("1") => { |_| { 1 } } |
-                tag!("2") => { |_| { 2 } } |
-                tag!("3") => { |_| { 3 } } |
-                tag!("4") => { |_| { 4 } }
-            )
-        }
-
-        fn parse_str(input: &[u8]) -> IResult<&[u8], DataLayout> {
-            match parse_scalartype_str(input) {
-                IResult::Incomplete(rem) => IResult::Incomplete(rem),
-                IResult::Error(err) => IResult::Error(err),
-                IResult::Done(rest, ty) => {
-                    if rest.len() == 0 {
-                        IResult::Done(&[], DataLayout::Scalar(ty))
-                    } else {
-                        match digit(rest) {
-                            IResult::Incomplete(rem) => IResult::Incomplete(rem),
-                            IResult::Error(err) => IResult::Error(err),
-                            IResult::Done(rest, x) => {
-                                if rest.len() == 0 {
-                                    IResult::Done(&[], DataLayout::Vector(ty, x))
-                                } else {
-                                    match preceded!(rest, tag!("x"), digit) {
-                                        IResult::Incomplete(rem) => IResult::Incomplete(rem),
-                                        IResult::Error(err) => IResult::Error(err),
-                                        IResult::Done(rest, y) => {
-                                            if rest.len() == 0 {
-                                                IResult::Done(&[], DataLayout::Matrix(ty, x, y))
-                                            } else {
-                                                IResult::Error(Err::Position(ErrorKind::Custom(0),
-                                                                             input))
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        match parse_str(&typename[..].as_bytes()) {
-            IResult::Done(rest, ty) => {
-                assert_eq!(rest.len(), 0);
-                Some(ty)
-            }
-            IResult::Incomplete(_) | IResult::Error(_) => None,
         }
     }
 
@@ -200,7 +200,7 @@ fn parse_datalayout(input: &[LexToken]) -> IResult<&[LexToken], DataLayout, Pars
                         )
                     }
                     _ => {
-                        match parse_datatype_str(&name[..]) {
+                        match parse_datalayout_str(&name[..]) {
                             Some(ty) => IResult::Done(&input[1..], ty),
                             None => IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType), input)),
                         }
@@ -609,7 +609,16 @@ fn expr_p1(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, Pars
                 final_expression = Located::new(match val.node.clone() {
                     Precedence1Postfix::Increment => Expression::UnaryOperation(UnaryOp::PostfixIncrement, Box::new(final_expression)),
                     Precedence1Postfix::Decrement => Expression::UnaryOperation(UnaryOp::PostfixDecrement, Box::new(final_expression)),
-                    Precedence1Postfix::Call(params) => Expression::Call(Box::new(final_expression), params),
+                    Precedence1Postfix::Call(params) => {
+                        let ty_opt = match *final_expression {
+                            Expression::Variable(ref name) => parse_datalayout_str(name),
+                            _ => None,
+                        };
+                        match ty_opt {
+                            Some(dty) => Expression::NumericConstructor(dty, params),
+                            None => Expression::Call(Box::new(final_expression), params),
+                        }
+                    },
                     Precedence1Postfix::ArraySubscript(expr) => Expression::ArraySubscript(Box::new(final_expression), Box::new(expr)),
                     Precedence1Postfix::Member(name) => Expression::Member(Box::new(final_expression), name),
                 }, loc.clone())
@@ -1676,6 +1685,13 @@ fn test_expr() {
 
     assert_eq!(expr_str("(float) b"),
                Located::loc(1, 1, Expression::Cast(Type::float(), bexp_var("b", 1, 9))));
+
+    assert_eq!(expr_str("float2(b)"),
+               Located::loc(1,
+                            1,
+                            Expression::NumericConstructor(DataLayout::Vector(ScalarType::Float,
+                                                                              2),
+                                                           vec![exp_var("b", 1, 8)])));
 
     assert_eq!(expr_str("a = b"),
                Located::loc(1,

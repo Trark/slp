@@ -217,6 +217,11 @@ fn search_expression(expression: &Expression, usage: &mut LocalFunctionGlobalUsa
                 search_expression(expr, usage);
             }
         }
+        Expression::NumericConstructor(_, ref elements) => {
+            for element in elements {
+                search_expression(&element.expr, usage);
+            }
+        }
         Expression::Cast(_, ref expr) => search_expression(expr, usage),
         Expression::Intrinsic(ref intrinsic) => search_intrinsic(intrinsic, usage),
     }
@@ -333,13 +338,6 @@ fn search_intrinsic(intrinsic: &Intrinsic, usage: &mut LocalFunctionGlobalUsage)
             search_expression(e1, usage);
             search_expression(e2, usage);
             search_expression(e3, usage);
-        }
-
-        Intrinsic::Float4(ref e1, ref e2, ref e3, ref e4) => {
-            search_expression(e1, usage);
-            search_expression(e2, usage);
-            search_expression(e3, usage);
-            search_expression(e4, usage);
         }
     }
 }

@@ -38,6 +38,7 @@ pub enum TyperError {
 
     FunctionPassedToAnotherFunction(ErrorType, ErrorType),
     FunctionArgumentTypeMismatch(Vec<FunctionOverload>, Vec<ExpressionType>),
+    NumericConstructorWrongArgumentCount,
 
     UnaryOperationWrongTypes(ast::UnaryOp, ErrorType),
     BinaryOperationWrongTypes(ir::BinOp, ErrorType, ErrorType),
@@ -50,6 +51,7 @@ pub enum TyperError {
     InvalidCast(ErrorType, ErrorType),
     FunctionTypeInInitExpression,
     WrongTypeInInitExpression,
+    WrongTypeInConstructor,
     WrongTypeInReturnStatement,
     FunctionNotCalled,
 
@@ -126,6 +128,9 @@ impl error::Error for TyperError {
                 "functions can not be passed to other functions"
             }
             TyperError::FunctionArgumentTypeMismatch(_, _) => "wrong parameters given to function",
+            TyperError::NumericConstructorWrongArgumentCount => {
+                "wrong number of arguments to constructor"
+            }
 
             TyperError::UnaryOperationWrongTypes(_, _) => {
                 "operation does not support the given types"
@@ -142,6 +147,7 @@ impl error::Error for TyperError {
             TyperError::InvalidCast(_, _) => "invalid cast",
             TyperError::FunctionTypeInInitExpression => "function not called",
             TyperError::WrongTypeInInitExpression => "wrong type in variable initialization",
+            TyperError::WrongTypeInConstructor => "wrong type in numeric constructor",
             TyperError::WrongTypeInReturnStatement => "wrong type in return statement",
             TyperError::FunctionNotCalled => "function not called",
 
@@ -2034,6 +2040,48 @@ fn parse_expr_unchecked(ast: &ast::Expression,
                     write_method(unresolved, &params_types, params_ir)
                 }
                 _ => return Err(TyperError::CallOnNonFunction),
+            }
+        }
+        &ast::Expression::NumericConstructor(ref dtyl, ref params) => {
+            let datalayout = try!(parse_datalayout(dtyl));
+            let target_scalar = datalayout.to_scalar();
+            let mut slots: Vec<ir::ConstructorSlot> = vec![];
+            let mut total_arity = 0;
+            for param in params {
+                let expr_texp = try!(parse_expr(param, context));
+                let (expr_base, ety) = match expr_texp {
+                    TypedExpression::Value(expr_ir, expr_ty) => (expr_ir, expr_ty),
+                    _ => return Err(TyperError::FunctionNotCalled),
+                };
+                let &ir::ExpressionType(ir::Type(ref expr_tyl, _), _) = &ety;
+                let arity = expr_tyl.get_num_elements();
+                total_arity = total_arity + arity;
+                let s = target_scalar.clone();
+                let target_tyl = match *expr_tyl {
+                    ir::TypeLayout::Scalar(_) => ir::TypeLayout::Scalar(s),
+                    ir::TypeLayout::Vector(_, ref x) => ir::TypeLayout::Vector(s, *x),
+                    ir::TypeLayout::Matrix(_, ref x, ref y) => ir::TypeLayout::Matrix(s, *x, *y),
+                    _ => return Err(TyperError::WrongTypeInConstructor),
+                };
+                let target_type = ir::Type::from_layout(target_tyl).to_rvalue();
+                let cast = match ImplicitConversion::find(&ety, &target_type) {
+                    Ok(cast) => cast,
+                    Err(()) => return Err(TyperError::WrongTypeInConstructor),
+                };
+                let expr = cast.apply(expr_base);
+                slots.push(ir::ConstructorSlot {
+                    arity: arity,
+                    expr: expr,
+                });
+            }
+            let type_layout = ir::TypeLayout::from_data(datalayout.clone());
+            let expected_layout = type_layout.get_num_elements();
+            let ty = ir::Type::from_layout(type_layout).to_rvalue();
+            if total_arity == expected_layout {
+                let cons = ir::Expression::NumericConstructor(datalayout, slots);
+                Ok(TypedExpression::Value(cons, ty))
+            } else {
+                Err(TyperError::NumericConstructorWrongArgumentCount)
             }
         }
         &ast::Expression::Cast(ref ty, ref expr) => {

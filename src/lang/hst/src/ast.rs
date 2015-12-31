@@ -368,6 +368,7 @@ pub enum Expression {
     ArraySubscript(Box<Located<Expression>>, Box<Located<Expression>>),
     Member(Box<Located<Expression>>, String),
     Call(Box<Located<Expression>>, Vec<Located<Expression>>),
+    NumericConstructor(DataLayout, Vec<Located<Expression>>),
     Cast(Type, Box<Located<Expression>>),
 }
 

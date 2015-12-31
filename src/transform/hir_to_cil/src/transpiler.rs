@@ -957,14 +957,6 @@ fn transpile_intrinsic(intrinsic: &src::Intrinsic,
         src::Intrinsic::DotF4(ref x, ref y) => write_func("dot", &[x, y], context),
         src::Intrinsic::Min(_, _) => Err(TranspileError::IntrinsicUnimplemented),
         src::Intrinsic::Max(_, _) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::Float4(ref x, ref y, ref z, ref w) => {
-            Ok(dst::Expression::Constructor(dst::Constructor::Float4(
-                Box::new(try!(transpile_expression(x, context))),
-                Box::new(try!(transpile_expression(y, context))),
-                Box::new(try!(transpile_expression(z, context))),
-                Box::new(try!(transpile_expression(w, context)))
-            )))
-        }
         src::Intrinsic::BufferLoad(ref buffer, ref loc) |
         src::Intrinsic::RWBufferLoad(ref buffer, ref loc) |
         src::Intrinsic::StructuredBufferLoad(ref buffer, ref loc) |
@@ -1240,6 +1232,38 @@ fn transpile_expression(expression: &src::Expression,
             final_arguments.append(&mut params_exprs);
             Ok(dst::Expression::Call(func_expr, final_arguments))
         }
+        &src::Expression::NumericConstructor(ref dtyl, ref slots) => {
+
+            // Generate target constructor type
+            let tty = src::TypeLayout::from_data(dtyl.clone());
+            let sty = dtyl.to_scalar();
+            // Will fail for bools. TODO: bools -> scalars implementation trivial, vectors very hard
+            match sty {
+                src::ScalarType::Bool => return Err(TranspileError::BoolVectorsNotSupported),
+                _ => {}
+            };
+            let dst_scalar = try!(transpile_scalartype(&sty));
+            let dst_dim = match try!(transpile_typelayout(&tty, context)) {
+                dst::Type::Scalar(ref scalar) => {
+                    assert_eq!(dst_scalar, *scalar);
+                    dst::NumericDimension::Scalar
+                }
+                dst::Type::Vector(ref scalar, ref dim) => {
+                    assert_eq!(dst_scalar, *scalar);
+                    dst::NumericDimension::Vector(dim.clone())
+                }
+                _ => panic!("not numeric type created from data type"),
+            };
+
+            // Transpile arguments
+            let mut arguments: Vec<dst::Expression> = vec![];
+            for cons in slots {
+                let dst_expr = try!(transpile_expression(&cons.expr, context));
+                arguments.push(dst_expr);
+            }
+
+            Ok(dst::Expression::NumericConstructor(dst_scalar, dst_dim, arguments))
+        }
         &src::Expression::Cast(ref cast_type, ref expr) => {
             let dest_cl_type = try!(transpile_type(cast_type, context));
             let cl_expr = try!(transpile_expression(expr, context));
@@ -1417,9 +1441,9 @@ fn transpile_kernel_input_semantic(param: &src::KernelParam,
             let x = dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(Box::new(dst::Expression::Literal(dst::Literal::UInt(0)))));
             let y = dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(Box::new(dst::Expression::Literal(dst::Literal::UInt(1)))));
             let z = dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(Box::new(dst::Expression::Literal(dst::Literal::UInt(2)))));
-            dst::Expression::Constructor(dst::Constructor::UInt3(Box::new(x),
-                                                                 Box::new(y),
-                                                                 Box::new(z)))
+            let sty = dst::Scalar::UInt;
+            let dim = dst::NumericDimension::Vector(dst::VectorDimension::Three);
+            dst::Expression::NumericConstructor(sty, dim, vec![x, y, z])
         }
         src::KernelSemantic::GroupId => unimplemented!(),
         src::KernelSemantic::GroupIndex => unimplemented!(),
@@ -1427,9 +1451,9 @@ fn transpile_kernel_input_semantic(param: &src::KernelParam,
             let x = dst::Expression::Intrinsic(dst::Intrinsic::GetLocalId(Box::new(dst::Expression::Literal(dst::Literal::UInt(0)))));
             let y = dst::Expression::Intrinsic(dst::Intrinsic::GetLocalId(Box::new(dst::Expression::Literal(dst::Literal::UInt(1)))));
             let z = dst::Expression::Intrinsic(dst::Intrinsic::GetLocalId(Box::new(dst::Expression::Literal(dst::Literal::UInt(2)))));
-            dst::Expression::Constructor(dst::Constructor::UInt3(Box::new(x),
-                                                                 Box::new(y),
-                                                                 Box::new(z)))
+            let sty = dst::Scalar::UInt;
+            let dim = dst::NumericDimension::Vector(dst::VectorDimension::Three);
+            dst::Expression::NumericConstructor(sty, dim, vec![x, y, z])
         }
     };
     Ok(dst::Statement::Var(dst::VarDef {

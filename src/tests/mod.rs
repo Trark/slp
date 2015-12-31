@@ -104,6 +104,13 @@ fn swizzle_full() {
 }
 
 #[test]
+fn cons_full() {
+    const HLSL: &'static str = include_str!("cons.hlsl");
+    const CL: &'static str = include_str!("cons.cl");
+    run_full(HLSL, CL, BindMap::new());
+}
+
+#[test]
 fn include() {
     const HLSL_MAIN: &'static str = include_str!("include_main.hlsl");
     const CL: &'static str = include_str!("include.cl");

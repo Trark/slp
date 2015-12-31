@@ -275,42 +275,6 @@ fn print_literal(lit: &Literal, printer: &mut Printer) {
     })[..]);
 }
 
-fn print_constructor(cons: &Constructor, printer: &mut Printer) {
-    match cons {
-        &Constructor::UInt3(ref x, ref y, ref z) => {
-            printer.print("(");
-            print_typename(&Type::Vector(Scalar::UInt, VectorDimension::Three), printer);
-            printer.print(")");
-            printer.print("(");
-            print_expression_inner(x, 15, printer);
-            printer.print(",");
-            printer.space();
-            print_expression_inner(&*y, 15, printer);
-            printer.print(",");
-            printer.space();
-            print_expression_inner(&*z, 15, printer);
-            printer.print(")");
-        }
-        &Constructor::Float4(ref x, ref y, ref z, ref w) => {
-            printer.print("(");
-            print_typename(&Type::Vector(Scalar::Float, VectorDimension::Four), printer);
-            printer.print(")");
-            printer.print("(");
-            print_expression_inner(x, 15, printer);
-            printer.print(",");
-            printer.space();
-            print_expression_inner(&*y, 15, printer);
-            printer.print(",");
-            printer.space();
-            print_expression_inner(&*z, 15, printer);
-            printer.print(",");
-            printer.space();
-            print_expression_inner(&*w, 15, printer);
-            printer.print(")");
-        }
-    }
-}
-
 fn print_intrinsic(intrinsic: &Intrinsic, printer: &mut Printer) {
     match intrinsic {
         &Intrinsic::GetGlobalId(ref expr) => {
@@ -331,7 +295,6 @@ fn print_intrinsic(intrinsic: &Intrinsic, printer: &mut Printer) {
 fn print_expression_inner(expression: &Expression, last_precedence: u32, printer: &mut Printer) {
     match expression {
         &Expression::Literal(ref lit) => print_literal(lit, printer),
-        &Expression::Constructor(ref cons) => print_constructor(cons, printer),
         &Expression::Variable(ref name) => printer.print(name),
         &Expression::UnaryOperation(ref unaryop, ref expr) => {
             print_unaryoperation(unaryop, expr, last_precedence, printer)
@@ -443,6 +406,28 @@ fn print_expression_inner(expression: &Expression, last_precedence: u32, printer
             for (idx, param) in params.iter().enumerate() {
                 print_expression(param, printer);
                 if idx < params.len() - 1 {
+                    printer.print(",");
+                    printer.space();
+                }
+            }
+            printer.print(")");
+        }
+        &Expression::NumericConstructor(ref scalar, ref dim, ref args) => {
+            let ty = match *dim {
+                NumericDimension::Scalar => Type::Scalar(scalar.clone()),
+                NumericDimension::Vector(ref dim) => Type::Vector(scalar.clone(), dim.clone()),
+            };
+
+            // Type name part
+            printer.print("(");
+            print_typename(&ty, printer);
+            printer.print(")");
+
+            // Elements
+            printer.print("(");
+            for (index, arg) in args.iter().enumerate() {
+                print_expression_inner(arg, 15, printer);
+                if index != args.len() - 1 {
                     printer.print(",");
                     printer.space();
                 }

@@ -47,6 +47,12 @@ impl VectorDimension {
 }
 
 #[derive(PartialEq, Debug, Clone)]
+pub enum NumericDimension {
+    Scalar,
+    Vector(VectorDimension),
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum Type {
     Void,
     Bool,
@@ -158,7 +164,6 @@ pub enum Intrinsic {
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
     Literal(Literal),
-    Constructor(Constructor),
     Variable(Identifier),
     UnaryOperation(UnaryOp, Box<Expression>),
     BinaryOperation(BinOp, Box<Expression>, Box<Expression>),
@@ -170,6 +175,7 @@ pub enum Expression {
     MemberDeref(Box<Expression>, Identifier),
     AddressOf(Box<Expression>),
     Call(Box<Expression>, Vec<Expression>),
+    NumericConstructor(Scalar, NumericDimension, Vec<Expression>),
     Cast(Type, Box<Expression>),
     Intrinsic(Intrinsic),
 }

@@ -8,6 +8,7 @@ pub type Identifier = String;
 pub use slp_lang_cst::AccessModifier;
 pub use slp_lang_cst::Scalar;
 pub use slp_lang_cst::VectorDimension;
+pub use slp_lang_cst::NumericDimension;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Type {
@@ -69,12 +70,6 @@ pub struct GlobalDeclarations {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum Constructor {
-    UInt3(Box<Expression>, Box<Expression>, Box<Expression>),
-    Float4(Box<Expression>, Box<Expression>, Box<Expression>, Box<Expression>),
-}
-
-#[derive(PartialEq, Debug, Clone)]
 pub enum SwizzleSlot {
     X,
     Y,
@@ -91,7 +86,6 @@ pub enum Intrinsic {
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
     Literal(Literal),
-    Constructor(Constructor),
     Local(LocalId),
     Global(GlobalId),
     UnaryOperation(UnaryOp, Box<Expression>),
@@ -104,6 +98,7 @@ pub enum Expression {
     MemberDeref(Box<Expression>, Identifier),
     AddressOf(Box<Expression>),
     Call(FunctionId, Vec<Expression>),
+    NumericConstructor(Scalar, NumericDimension, Vec<Expression>),
     Cast(Type, Box<Expression>),
     Intrinsic(Intrinsic),
     UntypedIntrinsic(String, Vec<Expression>),

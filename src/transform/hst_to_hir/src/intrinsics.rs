@@ -8,7 +8,6 @@ pub enum IntrinsicFactory {
     Intrinsic1(fn(Expression) -> Intrinsic),
     Intrinsic2(fn(Expression, Expression) -> Intrinsic),
     Intrinsic3(fn(Expression, Expression, Expression) -> Intrinsic),
-    Intrinsic4(fn(Expression, Expression, Expression, Expression) -> Intrinsic),
 }
 
 impl IntrinsicFactory {
@@ -31,13 +30,6 @@ impl IntrinsicFactory {
                 func(param_values[0].clone(),
                      param_values[1].clone(),
                      param_values[2].clone())
-            }
-            IntrinsicFactory::Intrinsic4(func) => {
-                assert_eq!(param_values.len(), 4);
-                func(param_values[0].clone(),
-                     param_values[1].clone(),
-                     param_values[2].clone(),
-                     param_values[3].clone())
             }
         }
     }
@@ -88,7 +80,6 @@ use self::IntrinsicFactory::Intrinsic0 as I0;
 use self::IntrinsicFactory::Intrinsic1 as I1;
 use self::IntrinsicFactory::Intrinsic2 as I2;
 use self::IntrinsicFactory::Intrinsic3 as I3;
-use self::IntrinsicFactory::Intrinsic4 as I4;
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
 const INTRINSICS: &'static [IntrinsicDefinition] = &[
@@ -174,8 +165,6 @@ const INTRINSICS: &'static [IntrinsicDefinition] = &[
     (T_FLOAT2_TY, "max", &[T_FLOAT2, T_FLOAT2], I2(Intrinsic::Max)),
     (T_FLOAT3_TY, "max", &[T_FLOAT3, T_FLOAT3], I2(Intrinsic::Max)),
     (T_FLOAT4_TY, "max", &[T_FLOAT4, T_FLOAT4], I2(Intrinsic::Max)),
-
-    (T_FLOAT4_TY, "float4", &[T_FLOAT, T_FLOAT, T_FLOAT, T_FLOAT], I4(Intrinsic::Float4)),
 ];
 
 pub fn get_intrinsics() -> &'static [IntrinsicDefinition] {
@@ -288,7 +277,6 @@ fn test_param_count() {
             IntrinsicFactory::Intrinsic1(_) => 1,
             IntrinsicFactory::Intrinsic2(_) => 2,
             IntrinsicFactory::Intrinsic3(_) => 3,
-            IntrinsicFactory::Intrinsic4(_) => 4,
         }
     }
 

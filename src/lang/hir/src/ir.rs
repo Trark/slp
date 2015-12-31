@@ -23,6 +23,16 @@ pub enum DataLayout {
     Matrix(ScalarType, u32, u32),
 }
 
+impl DataLayout {
+    pub fn to_scalar(&self) -> ScalarType {
+        match *self {
+            DataLayout::Scalar(ref scalar) |
+            DataLayout::Vector(ref scalar, _) |
+            DataLayout::Matrix(ref scalar, _, _) => scalar.clone(),
+        }
+    }
+}
+
 /// A type that can be used in data buffers (Buffer / RWBuffer / etc)
 /// These can interpret data in buffers bound with a format
 /// FormatType might be a better name because they can bind resource
@@ -142,6 +152,14 @@ impl TypeLayout {
             (Some(x1), None) => Some(x1),
             (None, Some(x2)) => Some(x2),
             (None, None) => None,
+        }
+    }
+    pub fn get_num_elements(&self) -> u32 {
+        match (self.to_x(), self.to_y()) {
+            (Some(x1), Some(x2)) => x1 * x2,
+            (Some(x1), None) => x1,
+            (None, Some(x2)) => x2,
+            (None, None) => 1,
         }
     }
     pub fn from_numeric(scalar: ScalarType, x_opt: Option<u32>, y_opt: Option<u32>) -> TypeLayout {
@@ -518,11 +536,6 @@ pub enum Intrinsic {
     Min(Expression, Expression),
     Max(Expression, Expression),
 
-    // Constructors are here for the moment but should
-    // probably be their own dedicated node
-    // The varying number of parameters makes them awkward to parse
-    Float4(Expression, Expression, Expression, Expression),
-
     BufferLoad(Expression, Expression),
     RWBufferLoad(Expression, Expression),
     StructuredBufferLoad(Expression, Expression),
@@ -591,6 +604,19 @@ pub enum SwizzleSlot {
     W, // w or a
 }
 
+/// Element passed to a numeric constructor
+/// Constructors can take variable numbers of arguments depending on dimensions
+/// of the types of the input expressions
+#[derive(PartialEq, Debug, Clone)]
+pub struct ConstructorSlot {
+    /// Vector dimension or Matrix total element count or 1 for scalars
+    pub arity: u32,
+    /// The expression argument for this slot
+    /// The type of this expression must be the scalar type of the numeric
+    /// constructor this is used in with the arity above
+    pub expr: Expression,
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
     Literal(Literal),
@@ -603,6 +629,8 @@ pub enum Expression {
     ArraySubscript(Box<Expression>, Box<Expression>),
     Member(Box<Expression>, String),
     Call(FunctionId, Vec<Expression>),
+    /// Constructors for builtin numeric types, such as `float2(1.0, 0.0)`
+    NumericConstructor(DataLayout, Vec<ConstructorSlot>),
     Cast(Type, Box<Expression>),
     Intrinsic(Box<Intrinsic>),
 }
@@ -1115,6 +1143,9 @@ impl TypeParser {
                 context.get_struct_member(&id, name)
             }
             Expression::Call(ref id, _) => context.get_function_return(id),
+            Expression::NumericConstructor(ref dtyl, _) => {
+                Ok(Type::from_layout(TypeLayout::from_data(dtyl.clone())).to_rvalue())
+            }
             Expression::Cast(ref ty, _) => Ok(ty.to_rvalue()),
             Expression::Intrinsic(ref intrinsic) => {
                 TypeParser::get_intrinsic_type(intrinsic, context)
@@ -1198,7 +1229,6 @@ impl TypeParser {
             Intrinsic::DotF4(_, _) => Type::float().to_rvalue(),
             Intrinsic::Min(_, _) => unimplemented!(),
             Intrinsic::Max(_, _) => unimplemented!(),
-            Intrinsic::Float4(_, _, _, _) => Type::floatn(4).to_rvalue(),
             Intrinsic::BufferLoad(ref buffer, _) => {
                 let buffer_ety = try!(TypeParser::get_expression_type(buffer, context));
                 match (buffer_ety.0).0 {
