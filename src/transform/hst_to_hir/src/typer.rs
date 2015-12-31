@@ -1775,7 +1775,22 @@ fn parse_expr_binop(op: &ast::BinOp,
         ast::BinOp::GreaterThan |
         ast::BinOp::GreaterEqual |
         ast::BinOp::Equality |
-        ast::BinOp::Inequality => {
+        ast::BinOp::Inequality |
+        ast::BinOp::LeftShift |
+        ast::BinOp::RightShift => {
+            if *op == ast::BinOp::LeftShift || *op == ast::BinOp::RightShift {
+                fn is_integer(ety: &ExpressionType) -> bool {
+                    let sty = match (ety.0).0.to_scalar() {
+                        Some(sty) => sty,
+                        None => return false,
+                    };
+                    sty == ir::ScalarType::Int || sty == ir::ScalarType::UInt ||
+                    sty == ir::ScalarType::UntypedInt
+                }
+                if !is_integer(&lhs_type) || !is_integer(&rhs_type) {
+                    return Err(TyperError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt));
+                }
+            }
             let types = try!(resolve_arithmetic_types(op, &lhs_type, &rhs_type, context));
             let (lhs_cast, rhs_cast, output_type) = types;
             let lhs_final = Box::new(lhs_cast.apply(lhs_ir));
@@ -1783,8 +1798,6 @@ fn parse_expr_binop(op: &ast::BinOp,
             let node = ir::Expression::BinaryOperation(op.clone(), lhs_final, rhs_final);
             Ok(TypedExpression::Value(node, output_type))
         }
-        ast::BinOp::LeftShift |
-        ast::BinOp::RightShift => Err(TyperError::Unimplemented),
         ast::BinOp::BitwiseAnd |
         ast::BinOp::BitwiseOr |
         ast::BinOp::BitwiseXor |

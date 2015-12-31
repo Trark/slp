@@ -51,7 +51,7 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint
 {
 	uint3 dtid = (uint3)(get_global_id(0u), get_global_id(1u), get_global_id(2u));
 	uint myFunc_1_0;
-	uint alias_var = 2u;
+	uint alias_var = 2u << 1u;
 	int index = (int)(dtid.x + myConstants->g_offset);
 	myFunc_1_0 = g_myInBuffer[index];
 	g_myOutBuffer[index] = myFunc_1_0;

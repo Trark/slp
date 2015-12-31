@@ -57,7 +57,7 @@ void unused_function()
 void CSMAIN(uint3 dtid : SV_DispatchThreadID)
 {
     uint myFunc_1;
-    uint alias_var = 2u;
+    uint alias_var = 2u << 1u;
     int index = dtid.x + g_offset;
     myFunc_1 = g_myInBuffer.Load(index);
     g_myOutBuffer[index] = myFunc_1;
