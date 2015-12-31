@@ -274,10 +274,12 @@ impl Context {
         let usage = globals_analysis::GlobalUsage::analyse(root_defs);
 
         let mut global_type_map: HashMap<src::GlobalId, src::GlobalType> = HashMap::new();
+        let mut lifted_globals: HashSet<src::GlobalId> = HashSet::new();
         for rootdef in root_defs {
             match *rootdef {
                 src::RootDefinition::GlobalVariable(ref gv) => {
                     if is_global_lifted(gv) {
+                        lifted_globals.insert(gv.id);
                         global_type_map.insert(gv.id, gv.global_type.clone());
                         let cl_ty = try!(get_cl_global_type(&gv.id,
                                                             &gv.global_type,
@@ -365,7 +367,9 @@ impl Context {
                                                           .collect::<Vec<&src::GlobalId>>();
                     g_keys.sort();
                     for id in g_keys {
-                        global_args.push(GlobalArgument::Global(id.clone()));
+                        if lifted_globals.contains(id) {
+                            global_args.push(GlobalArgument::Global(id.clone()));
+                        }
                     }
 
                     let decl = FunctionDecl {
