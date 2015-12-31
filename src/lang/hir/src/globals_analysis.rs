@@ -271,7 +271,27 @@ fn search_intrinsic(intrinsic: &Intrinsic, usage: &mut LocalFunctionGlobalUsage)
         Intrinsic::AsFloatF(ref e1) |
         Intrinsic::AsFloatF2(ref e1) |
         Intrinsic::AsFloatF3(ref e1) |
-        Intrinsic::AsFloatF4(ref e1) => {
+        Intrinsic::AsFloatF4(ref e1) |
+        Intrinsic::Floor(ref e1) |
+        Intrinsic::Floor2(ref e1) |
+        Intrinsic::Floor3(ref e1) |
+        Intrinsic::Floor4(ref e1) |
+        Intrinsic::Normalize1(ref e1) |
+        Intrinsic::Normalize2(ref e1) |
+        Intrinsic::Normalize3(ref e1) |
+        Intrinsic::Normalize4(ref e1) |
+        Intrinsic::SignI(ref e1) |
+        Intrinsic::SignI2(ref e1) |
+        Intrinsic::SignI3(ref e1) |
+        Intrinsic::SignI4(ref e1) |
+        Intrinsic::SignF(ref e1) |
+        Intrinsic::SignF2(ref e1) |
+        Intrinsic::SignF3(ref e1) |
+        Intrinsic::SignF4(ref e1) |
+        Intrinsic::Sqrt(ref e1) |
+        Intrinsic::Sqrt2(ref e1) |
+        Intrinsic::Sqrt3(ref e1) |
+        Intrinsic::Sqrt4(ref e1) => {
             search_expression(e1, usage);
         }
 

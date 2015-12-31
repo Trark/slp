@@ -148,6 +148,11 @@ const INTRINSICS: &'static [IntrinsicDefinition] = &[
     (T_FLOAT_TY, "dot", &[T_FLOAT3, T_FLOAT3], I2(Intrinsic::DotF3)),
     (T_FLOAT_TY, "dot", &[T_FLOAT4, T_FLOAT4], I2(Intrinsic::DotF4)),
 
+    (T_FLOAT_TY, "floor", &[T_FLOAT], I1(Intrinsic::Floor)),
+    (T_FLOAT2_TY, "floor", &[T_FLOAT2], I1(Intrinsic::Floor2)),
+    (T_FLOAT3_TY, "floor", &[T_FLOAT3], I1(Intrinsic::Floor3)),
+    (T_FLOAT4_TY, "floor", &[T_FLOAT4], I1(Intrinsic::Floor4)),
+
     (T_INT_TY, "min", &[T_INT, T_INT], I2(Intrinsic::Min)),
     (T_INT2_TY, "min", &[T_INT2, T_INT2], I2(Intrinsic::Min)),
     (T_INT3_TY, "min", &[T_INT3, T_INT3], I2(Intrinsic::Min)),
@@ -165,6 +170,25 @@ const INTRINSICS: &'static [IntrinsicDefinition] = &[
     (T_FLOAT2_TY, "max", &[T_FLOAT2, T_FLOAT2], I2(Intrinsic::Max)),
     (T_FLOAT3_TY, "max", &[T_FLOAT3, T_FLOAT3], I2(Intrinsic::Max)),
     (T_FLOAT4_TY, "max", &[T_FLOAT4, T_FLOAT4], I2(Intrinsic::Max)),
+
+    (T_FLOAT1_TY, "normalize", &[T_FLOAT1], I1(Intrinsic::Normalize1)),
+    (T_FLOAT2_TY, "normalize", &[T_FLOAT2], I1(Intrinsic::Normalize2)),
+    (T_FLOAT3_TY, "normalize", &[T_FLOAT3], I1(Intrinsic::Normalize3)),
+    (T_FLOAT4_TY, "normalize", &[T_FLOAT4], I1(Intrinsic::Normalize4)),
+
+    (T_INT_TY, "sign", &[T_INT], I1(Intrinsic::SignI)),
+    (T_INT2_TY, "sign", &[T_INT2], I1(Intrinsic::SignI2)),
+    (T_INT3_TY, "sign", &[T_INT3], I1(Intrinsic::SignI3)),
+    (T_INT4_TY, "sign", &[T_INT4], I1(Intrinsic::SignI4)),
+    (T_INT_TY, "sign", &[T_FLOAT], I1(Intrinsic::SignF)),
+    (T_INT2_TY, "sign", &[T_FLOAT2], I1(Intrinsic::SignF2)),
+    (T_INT3_TY, "sign", &[T_FLOAT3], I1(Intrinsic::SignF3)),
+    (T_INT4_TY, "sign", &[T_FLOAT4], I1(Intrinsic::SignF4)),
+
+    (T_FLOAT_TY, "sqrt", &[T_FLOAT], I1(Intrinsic::Sqrt)),
+    (T_FLOAT2_TY, "sqrt", &[T_FLOAT2], I1(Intrinsic::Sqrt2)),
+    (T_FLOAT3_TY, "sqrt", &[T_FLOAT3], I1(Intrinsic::Sqrt3)),
+    (T_FLOAT4_TY, "sqrt", &[T_FLOAT4], I1(Intrinsic::Sqrt4)),
 ];
 
 pub fn get_intrinsics() -> &'static [IntrinsicDefinition] {
