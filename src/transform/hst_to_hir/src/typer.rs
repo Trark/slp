@@ -1891,19 +1891,56 @@ fn parse_expr_ternary(cond: &ast::Expression,
                       rhs: &ast::Expression,
                       context: &ExpressionContext)
                       -> Result<TypedExpression, TyperError> {
+    // Generate sub expressions
     let cond_texp = try!(parse_expr(cond, context));
     let lhs_texp = try!(parse_expr(lhs, context));
     let rhs_texp = try!(parse_expr(rhs, context));
     let (cond, cond_ety) = try!(unwrap_value_expr(cond_texp, context));
     let (lhs, lhs_ety) = try!(unwrap_value_expr(lhs_texp, context));
     let (rhs, rhs_ety) = try!(unwrap_value_expr(rhs_texp, context));
+
+    // Remove untyped ints
+    let (purge_left, purge_right) = match ((lhs_ety.0).0.to_scalar(), (rhs_ety.0).0.to_scalar()) {
+        (Some(ir::ScalarType::Int), Some(ir::ScalarType::UntypedInt)) => {
+            (None, Some(ir::ScalarType::Int))
+        }
+        (Some(ir::ScalarType::UInt), Some(ir::ScalarType::UntypedInt)) => {
+            (None, Some(ir::ScalarType::UInt))
+        }
+        (Some(ir::ScalarType::UntypedInt), Some(ir::ScalarType::Int)) => {
+            (Some(ir::ScalarType::Int), None)
+        }
+        (Some(ir::ScalarType::UntypedInt), Some(ir::ScalarType::UInt)) => {
+            (Some(ir::ScalarType::UInt), None)
+        }
+        _ => (None, None),
+    };
+    fn purge_untyped(expr: ir::Expression,
+                     ety: ExpressionType,
+                     purge: Option<ir::ScalarType>)
+                     -> (ir::Expression, ir::Type) {
+        let ty = ety.0;
+        match purge {
+            Some(scalar) => {
+                let ir::Type(tyl, ty_mod) = ty;
+                let new_type = ir::Type(tyl.transform_scalar(scalar), ty_mod);
+                let casted = ir::Expression::Cast(new_type.clone(), Box::new(expr));
+                (casted, new_type)
+            }
+            None => (expr, ty),
+        }
+    }
+    let (lhs, lhs_ty) = purge_untyped(lhs, lhs_ety, purge_left);
+    let (rhs, rhs_ty) = purge_untyped(rhs, rhs_ety, purge_right);
+
+    // Cast the condition
     let cond_cast = match ImplicitConversion::find(&cond_ety, &ir::Type::bool().to_rvalue()) {
         Ok(cast) => cast,
         Err(()) => return Err(TyperError::TernaryConditionRequiresBoolean(context.ir_type_to_error_type(&cond_ety.0))),
     };
     let cond = cond_cast.apply(cond);
-    let ExpressionType(lhs_ty, _) = lhs_ety;
-    let ExpressionType(rhs_ty, _) = rhs_ety;
+
+    // Find final arm type
     let final_type = if lhs_ty == rhs_ty {
         lhs_ty.to_rvalue()
     } else {

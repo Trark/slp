@@ -1207,7 +1207,8 @@ impl TypeParser {
                 // Value types + modifiers can be different
                 assert_eq!((try!(TypeParser::get_expression_type(expr_left, context)).0).0,
                            (try!(TypeParser::get_expression_type(expr_right, context)).0).0);
-                TypeParser::get_expression_type(expr_left, context)
+                let ety = try!(TypeParser::get_expression_type(expr_left, context));
+                Ok(ety.0.to_rvalue())
             }
             Expression::Swizzle(ref vec, ref swizzle) => {
                 let ExpressionType(Type(vec_tyl, vec_mod), vec_vt) =
