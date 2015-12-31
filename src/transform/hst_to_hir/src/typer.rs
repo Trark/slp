@@ -2599,7 +2599,9 @@ fn parse_rootdefinition_kernel(fd: &ast::FunctionDefinition,
             vec.push(ir::KernelParam(var_id,
                 match &param.semantic {
                     &Some(ast::Semantic::DispatchThreadId) => ir::KernelSemantic::DispatchThreadId,
-                    &Some(_) => return Err(TyperError::KernelHasParamWithBadSemantic(param.clone())),
+                    &Some(ast::Semantic::GroupId) => ir::KernelSemantic::GroupId,
+                    &Some(ast::Semantic::GroupIndex) => ir::KernelSemantic::GroupIndex,
+                    &Some(ast::Semantic::GroupThreadId) => ir::KernelSemantic::GroupThreadId,
                     &None => return Err(TyperError::KernelHasParamWithoutSemantic(param.clone())),
                 }
             ));
