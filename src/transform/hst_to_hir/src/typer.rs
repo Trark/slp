@@ -1625,11 +1625,12 @@ fn parse_expr_unaryop(op: &ast::UnaryOp,
     }
 }
 
-fn resolve_arithmetic_types(binop: &ir::BinOp,
-                            left: &ExpressionType,
-                            right: &ExpressionType,
-                            context: &ExpressionContext)
-                            -> Result<(ImplicitConversion, ImplicitConversion), TyperError> {
+fn resolve_arithmetic_types
+    (binop: &ir::BinOp,
+     left: &ExpressionType,
+     right: &ExpressionType,
+     context: &ExpressionContext)
+     -> Result<(ImplicitConversion, ImplicitConversion, ExpressionType), TyperError> {
     use slp_lang_hir::Type;
     use slp_lang_hir::ScalarType;
 
@@ -1668,32 +1669,55 @@ fn resolve_arithmetic_types(binop: &ir::BinOp,
         }
     }
 
-    fn do_noerror(_: &ir::BinOp,
+    // Calculate the output type from the input type and operation
+    fn output_type(left: Type, right: Type, op: &ir::BinOp) -> ExpressionType {
+        // Actually implement this by using the hir's type parser
+        ir::TypeParser::get_binary_operation_output_type(left, right, op)
+    }
+
+    fn do_noerror(op: &ir::BinOp,
                   left: &ExpressionType,
                   right: &ExpressionType)
-                  -> Result<(ImplicitConversion, ImplicitConversion), ()> {
+                  -> Result<(ImplicitConversion, ImplicitConversion, ExpressionType), ()> {
         let &ExpressionType(ir::Type(ref left_l, ref modl), _) = left;
         let &ExpressionType(ir::Type(ref right_l, ref modr), _) = right;
-        let common_layout = match (left_l, right_l) {
+        let (ltl, rtl) = match (left_l, right_l) {
             (&ir::TypeLayout::Scalar(ref ls),
              &ir::TypeLayout::Scalar(ref rs)) => {
                 let common_scalar = try!(common_real_type(ls, rs));
-                let common = ir::TypeLayout::from_scalar(common_scalar);
-                common
+                let common_left = ir::TypeLayout::from_scalar(common_scalar);
+                let common_right = common_left.clone();
+                (common_left, common_right)
+            }
+            (&ir::TypeLayout::Scalar(ref ls),
+             &ir::TypeLayout::Vector(ref rs, ref x2)) => {
+                let common_scalar = try!(common_real_type(ls, rs));
+                let common_left = ir::TypeLayout::from_scalar(common_scalar.clone());
+                let common_right = ir::TypeLayout::from_vector(common_scalar, *x2);
+                (common_left, common_right)
+            }
+            (&ir::TypeLayout::Vector(ref ls, ref x1),
+             &ir::TypeLayout::Scalar(ref rs)) => {
+                let common_scalar = try!(common_real_type(ls, rs));
+                let common_left = ir::TypeLayout::from_vector(common_scalar.clone(), *x1);
+                let common_right = ir::TypeLayout::from_scalar(common_scalar);
+                (common_left, common_right)
             }
             (&ir::TypeLayout::Vector(ref ls, ref x1),
              &ir::TypeLayout::Vector(ref rs, ref x2))
                 if x1 == x2 => {
                 let common_scalar = try!(common_real_type(ls, rs));
-                let common = ir::TypeLayout::from_vector(common_scalar, *x2);
-                common
+                let common_left = ir::TypeLayout::from_vector(common_scalar, *x2);
+                let common_right = common_left.clone();
+                (common_left, common_right)
             }
             (&ir::TypeLayout::Matrix(ref ls, ref x1, ref y1),
              &ir::TypeLayout::Matrix(ref rs, ref x2, ref y2))
                 if x1 == x2 && y1 == y2 => {
                 let common_scalar = try!(common_real_type(ls, rs));
-                let common = ir::TypeLayout::from_matrix(common_scalar, *x2, *y2);
-                common
+                let common_left = ir::TypeLayout::from_matrix(common_scalar, *x2, *y2);
+                let common_right = common_left.clone();
+                (common_left, common_right)
             }
             _ => return Err(()),
         };
@@ -1703,10 +1727,14 @@ fn resolve_arithmetic_types(binop: &ir::BinOp,
             precise: modl.precise || modr.precise,
             volatile: false,
         };
-        let common = ExpressionType(ir::Type(common_layout, out_mod), ir::ValueType::Rvalue);
-        let lc = try!(ImplicitConversion::find(left, &common));
-        let rc = try!(ImplicitConversion::find(right, &common));
-        Ok((lc, rc))
+        let candidate_left = Type(ltl.clone(), out_mod.clone());
+        let candidate_right = Type(rtl.clone(), out_mod.clone());
+        let output_type = output_type(candidate_left, candidate_right, op);
+        let elt = ExpressionType(ir::Type(ltl, out_mod.clone()), ir::ValueType::Rvalue);
+        let lc = try!(ImplicitConversion::find(left, &elt));
+        let ert = ExpressionType(ir::Type(rtl, out_mod), ir::ValueType::Rvalue);
+        let rc = try!(ImplicitConversion::find(right, &ert));
+        Ok((lc, rc, output_type))
     }
 
     match do_noerror(binop, left, right) {
@@ -1741,18 +1769,19 @@ fn parse_expr_binop(op: &ast::BinOp,
         ast::BinOp::Subtract |
         ast::BinOp::Multiply |
         ast::BinOp::Divide |
-        ast::BinOp::Modulus => {
-            let (lhs_cast, rhs_cast) = try!(resolve_arithmetic_types(op,
-                                                                     &lhs_type,
-                                                                     &rhs_type,
-                                                                     context));
-            assert_eq!(lhs_cast.get_target_type(), rhs_cast.get_target_type());
-            let lhs_final = lhs_cast.apply(lhs_ir);
-            let rhs_final = rhs_cast.apply(rhs_ir);
-            Ok(TypedExpression::Value(ir::Expression::BinaryOperation(op.clone(),
-                                                                      Box::new(lhs_final),
-                                                                      Box::new(rhs_final)),
-                                      rhs_cast.get_target_type()))
+        ast::BinOp::Modulus |
+        ast::BinOp::LessThan |
+        ast::BinOp::LessEqual |
+        ast::BinOp::GreaterThan |
+        ast::BinOp::GreaterEqual |
+        ast::BinOp::Equality |
+        ast::BinOp::Inequality => {
+            let types = try!(resolve_arithmetic_types(op, &lhs_type, &rhs_type, context));
+            let (lhs_cast, rhs_cast, output_type) = types;
+            let lhs_final = Box::new(lhs_cast.apply(lhs_ir));
+            let rhs_final = Box::new(rhs_cast.apply(rhs_ir));
+            let node = ir::Expression::BinaryOperation(op.clone(), lhs_final, rhs_final);
+            Ok(TypedExpression::Value(node, output_type))
         }
         ast::BinOp::LeftShift |
         ast::BinOp::RightShift => Err(TyperError::Unimplemented),
@@ -1813,24 +1842,6 @@ fn parse_expr_binop(op: &ast::BinOp,
                                                                       Box::new(lhs_final),
                                                                       Box::new(rhs_final)),
                                       rhs_cast.get_target_type()))
-        }
-        ast::BinOp::LessThan |
-        ast::BinOp::LessEqual |
-        ast::BinOp::GreaterThan |
-        ast::BinOp::GreaterEqual |
-        ast::BinOp::Equality |
-        ast::BinOp::Inequality => {
-            let (lhs_cast, rhs_cast) = try!(resolve_arithmetic_types(op,
-                                                                     &lhs_type,
-                                                                     &rhs_type,
-                                                                     context));
-            assert_eq!(lhs_cast.get_target_type(), rhs_cast.get_target_type());
-            let lhs_final = lhs_cast.apply(lhs_ir);
-            let rhs_final = rhs_cast.apply(rhs_ir);
-            Ok(TypedExpression::Value(ir::Expression::BinaryOperation(op.clone(),
-                                                                      Box::new(lhs_final),
-                                                                      Box::new(rhs_final)),
-                                      ir::Type::bool().to_rvalue()))
         }
         ast::BinOp::Assignment |
         ast::BinOp::SumAssignment |

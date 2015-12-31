@@ -59,8 +59,8 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint
 	bool cond = true;
 	if (cond)
 	{
-		float4 alias_var_0 = (float4)(1.0f, 2.4f, 0.3f, 3.4f);
-		float4 receive = alias_var_0;
+		float4 alias_var_0 = 2.0f * (float4)(1.0f, 2.4f, 0.3f, 3.4f);
+		float4 receive = alias_var_0 * 4.0f;
 		uint testStruct_1 = (uint)1;
 		struct testStruct_0 data;
 	}
