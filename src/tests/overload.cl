@@ -59,6 +59,14 @@ void testIntOrUInt4_1(uint4 x)
 {
 }
 
+void testIntOrInt3_0(int x)
+{
+}
+
+void testIntOrInt3_1(int3 x)
+{
+}
+
 __attribute__((reqd_work_group_size(8, 8, 1)))
 kernel void MyKernel()
 {
@@ -81,4 +89,8 @@ kernel void MyKernel()
 	testIntOrUInt4_1(cast_uint_to_uint4((uint)0));
 	testIntOrUInt4_1(cast_uint_to_uint4((uint)0));
 	testIntOrUInt4_1(cast_int_to_uint4(0));
+	testIntOrInt3_0((int)0);
+	testIntOrInt3_0((int)0u);
+	testIntOrInt3_0((int)0);
+	testIntOrInt3_1((int3)((int)0, (int)1, (int)2));
 }

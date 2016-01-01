@@ -27,13 +27,21 @@ use slp_lang_hir::*;
 // I was going to try to implement nice logic in here, but I honestly have no idea what rules govern these priorities.
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum ConversionRank {
+pub struct ConversionRank(NumericRank, VectorRank);
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum NumericRank {
     Exact,
-    VectorExpand,
     Promotion,
     IntToBool,
     Conversion,
     HalfIsASecondClassCitizen,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum VectorRank {
+    Exact,
+    Expand,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -82,13 +90,27 @@ impl ConversionRank {
     }
 
     fn order(&self) -> u32 {
+        self.0.order() * 2 + self.1.order()
+    }
+}
+
+impl NumericRank {
+    fn order(&self) -> u32 {
         match *self {
-            ConversionRank::Exact => 0,
-            ConversionRank::VectorExpand => 1,
-            ConversionRank::Promotion => 2,
-            ConversionRank::IntToBool => 3,
-            ConversionRank::Conversion => 4,
-            ConversionRank::HalfIsASecondClassCitizen => 5,
+            NumericRank::Exact => 0,
+            NumericRank::Promotion => 1,
+            NumericRank::IntToBool => 2,
+            NumericRank::Conversion => 3,
+            NumericRank::HalfIsASecondClassCitizen => 4,
+        }
+    }
+}
+
+impl VectorRank {
+    fn order(&self) -> u32 {
+        match *self {
+            VectorRank::Exact => 0,
+            VectorRank::Expand => 1,
         }
     }
 }
@@ -108,76 +130,76 @@ impl NumericCast {
         }
     }
 
-    fn get_rank(&self) -> ConversionRank {
+    fn get_rank(&self) -> NumericRank {
         match *self {
             NumericCast(ScalarType::Bool, ref dest) => {
                 match *dest {
-                    ScalarType::Bool => ConversionRank::Exact,
+                    ScalarType::Bool => NumericRank::Exact,
                     ScalarType::Int | ScalarType::UInt | ScalarType::Float | ScalarType::Double => {
-                        ConversionRank::Conversion
+                        NumericRank::Conversion
                     }
-                    ScalarType::Half => ConversionRank::HalfIsASecondClassCitizen,
+                    ScalarType::Half => NumericRank::HalfIsASecondClassCitizen,
                     ScalarType::UntypedInt => panic!(),
                 }
             }
             NumericCast(ScalarType::UntypedInt, ref dest) => {
                 match *dest {
-                    ScalarType::Int | ScalarType::UInt => ConversionRank::Promotion,
-                    ScalarType::Bool => ConversionRank::IntToBool,
+                    ScalarType::Int | ScalarType::UInt => NumericRank::Promotion,
+                    ScalarType::Bool => NumericRank::IntToBool,
                     ScalarType::Float | ScalarType::Double | ScalarType::Half => {
-                        ConversionRank::Conversion
+                        NumericRank::Conversion
                     }
                     ScalarType::UntypedInt => panic!(),
                 }
             }
             NumericCast(ScalarType::Int, ref dest) => {
                 match *dest {
-                    ScalarType::Int => ConversionRank::Exact,
-                    ScalarType::UInt => ConversionRank::Promotion,
-                    ScalarType::Bool => ConversionRank::IntToBool,
-                    ScalarType::Float | ScalarType::Double => ConversionRank::Conversion,
-                    ScalarType::Half => ConversionRank::HalfIsASecondClassCitizen,
+                    ScalarType::Int => NumericRank::Exact,
+                    ScalarType::UInt => NumericRank::Promotion,
+                    ScalarType::Bool => NumericRank::IntToBool,
+                    ScalarType::Float | ScalarType::Double => NumericRank::Conversion,
+                    ScalarType::Half => NumericRank::HalfIsASecondClassCitizen,
                     ScalarType::UntypedInt => panic!(),
                 }
             }
             NumericCast(ScalarType::UInt, ref dest) => {
                 match *dest {
-                    ScalarType::UInt => ConversionRank::Exact,
-                    ScalarType::Int => ConversionRank::Promotion,
-                    ScalarType::Bool => ConversionRank::IntToBool,
-                    ScalarType::Float | ScalarType::Double => ConversionRank::Conversion,
-                    ScalarType::Half => ConversionRank::HalfIsASecondClassCitizen,
+                    ScalarType::UInt => NumericRank::Exact,
+                    ScalarType::Int => NumericRank::Promotion,
+                    ScalarType::Bool => NumericRank::IntToBool,
+                    ScalarType::Float | ScalarType::Double => NumericRank::Conversion,
+                    ScalarType::Half => NumericRank::HalfIsASecondClassCitizen,
                     ScalarType::UntypedInt => panic!(),
                 }
             }
             NumericCast(ScalarType::Half, ref dest) => {
                 match *dest {
-                    ScalarType::Half => ConversionRank::Exact,
-                    ScalarType::Float | ScalarType::Double => ConversionRank::Promotion,
+                    ScalarType::Half => NumericRank::Exact,
+                    ScalarType::Float | ScalarType::Double => NumericRank::Promotion,
                     ScalarType::Bool | ScalarType::Int | ScalarType::UInt => {
-                        ConversionRank::Conversion
+                        NumericRank::Conversion
                     }
                     ScalarType::UntypedInt => panic!(),
                 }
             }
             NumericCast(ScalarType::Float, ref dest) => {
                 match *dest {
-                    ScalarType::Float => ConversionRank::Exact,
-                    ScalarType::Double => ConversionRank::Promotion,
+                    ScalarType::Float => NumericRank::Exact,
+                    ScalarType::Double => NumericRank::Promotion,
                     ScalarType::Bool | ScalarType::Int | ScalarType::UInt | ScalarType::Half => {
-                        ConversionRank::Conversion
+                        NumericRank::Conversion
                     }
                     ScalarType::UntypedInt => panic!(),
                 }
             }
             NumericCast(ScalarType::Double, ref dest) => {
                 match *dest {
-                    ScalarType::Double => ConversionRank::Exact,
+                    ScalarType::Double => NumericRank::Exact,
                     ScalarType::Bool |
                     ScalarType::Int |
                     ScalarType::UInt |
                     ScalarType::Half |
-                    ScalarType::Float => ConversionRank::Conversion,
+                    ScalarType::Float => NumericRank::Conversion,
                     ScalarType::UntypedInt => panic!(),
                 }
             }
@@ -317,27 +339,20 @@ impl ImplicitConversion {
     }
 
     pub fn get_rank(&self) -> ConversionRank {
-        match *self {
-            // No type change, most powerful match
-            ImplicitConversion(_, _, None, None, _) => ConversionRank::Exact,
-            // Only switch between scalar and vector1 of same type, also most powerful
-            ImplicitConversion(_,
-                               _,
-                               Some(DimensionCast(NumericDimension::Scalar,
-                                                  NumericDimension::Vector(1))),
-                               None,
-                               _) => ConversionRank::Exact,
-            ImplicitConversion(_,
-                               _,
-                               Some(DimensionCast(NumericDimension::Vector(1),
-                                                  NumericDimension::Scalar)),
-                               None,
-                               _) => ConversionRank::Exact,
-            // Expanding or reducing vector dimension, stronger than numeric conversions
-            ImplicitConversion(_, _, _, None, _) => ConversionRank::VectorExpand,
-            // Numeric conversion, rank depends on type
-            ImplicitConversion(_, _, _, Some(ref numeric), _) => numeric.get_rank(),
-        }
+        let &ImplicitConversion(_, _, ref dim_cast, ref num_cast, _) = self;
+        let vec = match *dim_cast {
+            None |
+            Some(DimensionCast(NumericDimension::Scalar, NumericDimension::Vector(1))) |
+            Some(DimensionCast(NumericDimension::Vector(1), NumericDimension::Scalar)) => {
+                VectorRank::Exact
+            }
+            _ => VectorRank::Expand,
+        };
+        let num = match *num_cast {
+            Some(ref numeric) => numeric.get_rank(),
+            None => NumericRank::Exact,
+        };
+        ConversionRank(num, vec)
     }
 
     pub fn get_target_type(&self) -> ExpressionType {
@@ -464,19 +479,19 @@ fn test_get_rank() {
     assert_eq!(ImplicitConversion::find(&Type::uint().to_rvalue(), &Type::uintn(1).to_rvalue())
                    .unwrap()
                    .get_rank(),
-               ConversionRank::Exact);
+               ConversionRank(NumericRank::Exact, VectorRank::Exact));
     assert_eq!(ImplicitConversion::find(&Type::uintn(1).to_rvalue(), &Type::uint().to_rvalue())
                    .unwrap()
                    .get_rank(),
-               ConversionRank::Exact);
+               ConversionRank(NumericRank::Exact, VectorRank::Exact));
     assert_eq!(ImplicitConversion::find(&Type::uint().to_rvalue(), &Type::uintn(4).to_rvalue())
                    .unwrap()
                    .get_rank(),
-               ConversionRank::VectorExpand);
+               ConversionRank(NumericRank::Exact, VectorRank::Expand));
     assert_eq!(ImplicitConversion::find(&Type::uintn(1).to_rvalue(), &Type::uintn(4).to_rvalue())
                    .unwrap()
                    .get_rank(),
-               ConversionRank::VectorExpand);
+               ConversionRank(NumericRank::Exact, VectorRank::Expand));
 }
 
 #[test]

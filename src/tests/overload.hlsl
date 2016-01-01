@@ -39,6 +39,14 @@ void testIntOrUInt4(uint4 x)
 {
 }
 
+void testIntOrInt3(int x)
+{
+}
+
+void testIntOrInt3(int3 x)
+{
+}
+
 [numthreads(8, 8, 1)]
 void CSMAIN(uint3 dtid : SV_DispatchThreadID)
 {
@@ -63,4 +71,8 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     testIntOrUInt4((uint)0);
     testIntOrUInt4((uint1)0);
     testIntOrUInt4((uint4)0);
+    testIntOrInt3(0);
+    testIntOrInt3(0u);
+    testIntOrInt3((int)0);
+    testIntOrInt3((int3)(0, 1, 2));
 }
