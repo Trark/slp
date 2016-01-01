@@ -718,6 +718,14 @@ fn print_rootdefinition(rootdef: &RootDefinition, printer: &mut Printer) {
 
 fn print(module: &Module) -> Printer {
     let mut printer = Printer::new();
+
+    let mut extensions = module.required_extensions.iter().collect::<Vec<_>>();
+    extensions.sort();
+    for ext in extensions {
+        printer.print("#pragma OPENCL EXTENSION ");
+        printer.print(ext.get_name());
+        printer.print(" : enable\n");
+    }
     for rootdef in &module.root_definitions {
         print_rootdefinition(&rootdef, &mut printer);
     }

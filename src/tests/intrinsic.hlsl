@@ -226,4 +226,6 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     int2 max_i2 = max(ix2, iy2);
     int3 max_i3 = max(ix3, iy3);
     int4 max_i4 = max(ix4, iy4);
+    uint packed_half = f32tof16(fx);
+    float unpacked_half = f16tof32(packed_half);
 }

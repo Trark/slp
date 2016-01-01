@@ -1,4 +1,5 @@
 
+use std::collections::HashSet;
 use slp_shared::BindMap;
 
 pub type Identifier = String;
@@ -264,8 +265,11 @@ pub enum RootDefinition {
     Kernel(Kernel),
 }
 
+pub use slp_shared::opencl::Extension;
+
 #[derive(PartialEq, Debug, Clone)]
 pub struct Module {
     pub root_definitions: Vec<RootDefinition>,
     pub binds: BindMap,
+    pub required_extensions: HashSet<Extension>,
 }

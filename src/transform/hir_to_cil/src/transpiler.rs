@@ -236,6 +236,7 @@ struct Context {
     type_context: src::TypeState,
     global_type_map: HashMap<src::GlobalId, dst::Type>,
     kernel_arguments: Vec<GlobalArgument>,
+    required_extensions: HashSet<dst::Extension>,
 }
 
 impl Context {
@@ -271,6 +272,7 @@ impl Context {
             },
             global_type_map: HashMap::new(),
             kernel_arguments: vec![],
+            required_extensions: HashSet::new(),
         };
 
         let usage = globals_analysis::GlobalUsage::analyse(root_defs);
@@ -880,8 +882,34 @@ fn transpile_intrinsic1(intrinsic: &src::Intrinsic1,
         I::AsFloatF2 => write_func("as_float2", &[e1]),
         I::AsFloatF3 => write_func("as_float3", &[e1]),
         I::AsFloatF4 => write_func("as_float4", &[e1]),
-        I::F16ToF32 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
-        I::F32ToF16 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
+        I::F16ToF32 => {
+            context.required_extensions.insert(dst::Extension::KhrFp16);
+            let input_16u = try!(write_cast(dst::Type::Scalar(dst::Scalar::UInt),
+                                            dst::Type::Scalar(dst::Scalar::UShort),
+                                            e1,
+                                            false,
+                                            context));
+            let as_half = try!(write_func("as_half", &[input_16u]));
+            write_cast(dst::Type::Scalar(dst::Scalar::Half),
+                       dst::Type::Scalar(dst::Scalar::Float),
+                       as_half,
+                       false,
+                       context)
+        }
+        I::F32ToF16 => {
+            context.required_extensions.insert(dst::Extension::KhrFp16);
+            let as_half = try!(write_cast(dst::Type::Scalar(dst::Scalar::Float),
+                                          dst::Type::Scalar(dst::Scalar::Half),
+                                          e1,
+                                          false,
+                                          context));
+            let as_ushort = try!(write_func("as_ushort", &[as_half]));
+            write_cast(dst::Type::Scalar(dst::Scalar::UShort),
+                       dst::Type::Scalar(dst::Scalar::UInt),
+                       as_ushort,
+                       false,
+                       context)
+        }
         I::Floor |
         I::Floor2 |
         I::Floor3 |
@@ -1746,6 +1774,7 @@ pub fn transpile(module: &src::Module) -> Result<dst::Module, TranspileError> {
 
     let cl_defs = try!(transpile_roots(&module.root_definitions, &mut context));
 
+    let required_extensions = context.required_extensions.clone();
     let (decls, fragments) = context.destruct();
 
     let cl_module = dst::Module {
@@ -1753,6 +1782,7 @@ pub fn transpile(module: &src::Module) -> Result<dst::Module, TranspileError> {
         binds: binds,
         global_declarations: decls,
         fragments: fragments,
+        required_extensions: required_extensions,
     };
 
     Ok(cl_module)

@@ -485,5 +485,6 @@ pub fn untype_module(module: &src::Module) -> Result<dst::Module, UntyperError> 
     Ok(dst::Module {
         root_definitions: final_defs,
         binds: module.binds.clone(),
+        required_extensions: module.required_extensions.clone(),
     })
 }

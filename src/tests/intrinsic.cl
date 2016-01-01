@@ -1,3 +1,4 @@
+#pragma OPENCL EXTENSION cl_khr_fp16 : enable
 
 int2 cast_float2_to_int2(float2 from)
 {
@@ -242,4 +243,6 @@ kernel void MyKernel(__global uint4* g_roBuffer, __global struct testStruct* g_r
 	int2 max_i2 = max(ix2, iy2);
 	int3 max_i3 = max(ix3, iy3);
 	int4 max_i4 = max(ix4, iy4);
+	uint packed_half = (uint)as_ushort((half)fx);
+	float unpacked_half = (float)as_half((ushort)packed_half);
 }
