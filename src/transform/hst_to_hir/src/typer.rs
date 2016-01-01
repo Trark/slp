@@ -1098,9 +1098,19 @@ fn get_intrinsics() -> HashMap<String, UnresolvedFunction> {
     let funcs = intrinsics::get_intrinsics();
 
     let mut strmap: HashMap<String, UnresolvedFunction> = HashMap::new();
-    for &(ref return_type, ref name, ref params, ref factory) in funcs {
+    for &(ref name, ref params, ref factory) in funcs {
+        let return_type_res = match *factory {
+            IntrinsicFactory::Intrinsic0(ref i) => ir::TypeParser::get_intrinsic0_type(i),
+            IntrinsicFactory::Intrinsic1(ref i) => ir::TypeParser::get_intrinsic1_type(i),
+            IntrinsicFactory::Intrinsic2(ref i) => ir::TypeParser::get_intrinsic2_type(i),
+            IntrinsicFactory::Intrinsic3(ref i) => ir::TypeParser::get_intrinsic3_type(i),
+        };
+        let return_type = match return_type_res {
+            Ok(ty) => ty,
+            Err(_) => panic!("bad intrinsic data"),
+        };
         let overload = FunctionOverload(FunctionName::Intrinsic(factory.clone()),
-                                        return_type.clone(),
+                                        return_type.0,
                                         params.to_vec());
         match strmap.entry(name.to_string()) {
             Entry::Occupied(mut occupied) => {
@@ -1449,10 +1459,7 @@ fn write_function(unresolved: UnresolvedFunction,
 
     match name {
         FunctionName::Intrinsic(factory) => {
-            Ok(TypedExpression::Value(
-                ir::Expression::Intrinsic(Box::new(factory.create_intrinsic(&param_values))),
-                return_type
-            ))
+            Ok(TypedExpression::Value(factory.create_intrinsic(&param_values), return_type))
         }
         FunctionName::User(id) => {
             Ok(TypedExpression::Value(ir::Expression::Call(id, param_values), return_type))
@@ -1475,10 +1482,7 @@ fn write_method(unresolved: UnresolvedMethod,
 
     match name {
         FunctionName::Intrinsic(factory) => {
-            Ok(TypedExpression::Value(
-                ir::Expression::Intrinsic(Box::new(factory.create_intrinsic(&param_values))),
-                return_type
-            ))
+            Ok(TypedExpression::Value(factory.create_intrinsic(&param_values), return_type))
         }
         FunctionName::User(_) => panic!("User defined methods should not exist"),
     }
@@ -1555,33 +1559,39 @@ fn parse_expr_unaryop(op: &ast::UnaryOp,
                     _ => Ok(()),
                 }
             }
-            let (intrinsic, ety) = match *op {
+            let (intrinsic, eir, ety) = match *op {
                 ast::UnaryOp::PrefixIncrement => {
                     try!(enforce_increment_type(&expr_ty, op));
-                    (ir::Intrinsic::PrefixIncrement(expr_ty.0.clone(), expr_ir),
+                    (ir::Intrinsic1::PrefixIncrement(expr_ty.0.clone()),
+                     expr_ir,
                      expr_ty)
                 }
                 ast::UnaryOp::PrefixDecrement => {
                     try!(enforce_increment_type(&expr_ty, op));
-                    (ir::Intrinsic::PrefixDecrement(expr_ty.0.clone(), expr_ir),
+                    (ir::Intrinsic1::PrefixDecrement(expr_ty.0.clone()),
+                     expr_ir,
                      expr_ty)
                 }
                 ast::UnaryOp::PostfixIncrement => {
                     try!(enforce_increment_type(&expr_ty, op));
-                    (ir::Intrinsic::PostfixIncrement(expr_ty.0.clone(), expr_ir),
+                    (ir::Intrinsic1::PostfixIncrement(expr_ty.0.clone()),
+                     expr_ir,
                      expr_ty)
                 }
                 ast::UnaryOp::PostfixDecrement => {
                     try!(enforce_increment_type(&expr_ty, op));
-                    (ir::Intrinsic::PostfixDecrement(expr_ty.0.clone(), expr_ir),
+                    (ir::Intrinsic1::PostfixDecrement(expr_ty.0.clone()),
+                     expr_ir,
                      expr_ty)
                 }
                 ast::UnaryOp::Plus => {
-                    (ir::Intrinsic::Plus(expr_ty.0.clone(), expr_ir),
+                    (ir::Intrinsic1::Plus(expr_ty.0.clone()),
+                     expr_ir,
                      expr_ty.0.to_rvalue())
                 }
                 ast::UnaryOp::Minus => {
-                    (ir::Intrinsic::Minus(expr_ty.0.clone(), expr_ir),
+                    (ir::Intrinsic1::Minus(expr_ty.0.clone()),
+                     expr_ir,
                      expr_ty.0.to_rvalue())
                 }
                 ast::UnaryOp::LogicalNot => {
@@ -1603,13 +1613,14 @@ fn parse_expr_unaryop(op: &ast::UnaryOp,
                         }
                     };
                     let ety = ty.clone().to_rvalue();
-                    (ir::Intrinsic::LogicalNot(ty, expr_ir), ety)
+                    (ir::Intrinsic1::LogicalNot(ty), expr_ir, ety)
                 }
                 ast::UnaryOp::BitwiseNot => {
                     match (expr_ty.0).0 {
                         ir::TypeLayout::Scalar(ir::ScalarType::Int) |
                         ir::TypeLayout::Scalar(ir::ScalarType::UInt) => {
-                            (ir::Intrinsic::BitwiseNot(expr_ty.0.clone(), expr_ir),
+                            (ir::Intrinsic1::BitwiseNot(expr_ty.0.clone()),
+                             expr_ir,
                              expr_ty.0.to_rvalue())
                         }
                         _ => {
@@ -1619,7 +1630,7 @@ fn parse_expr_unaryop(op: &ast::UnaryOp,
                     }
                 }
             };
-            Ok(TypedExpression::Value(ir::Expression::Intrinsic(Box::new(intrinsic)), ety))
+            Ok(TypedExpression::Value(ir::Expression::Intrinsic1(intrinsic, Box::new(eir)), ety))
         }
         _ => Err(TyperError::UnaryOperationWrongTypes(op.clone(), ErrorType::Unknown)),
     }
@@ -2058,8 +2069,18 @@ fn parse_expr_unchecked(ast: &ast::Expression,
                 &ir::TypeLayout::Object(ref object_type) => {
                     match intrinsics::get_method(object_type, &member) {
                         Ok(intrinsics::MethodDefinition(object_type, name, method_overloads)) => {
-                            let overloads = method_overloads.iter().map(|&(ref return_type, ref param_types, ref factory)| {
-                                FunctionOverload(FunctionName::Intrinsic(factory.clone()), return_type.clone(), param_types.clone())
+                            let overloads = method_overloads.iter().map(|&(ref param_types, ref factory)| {
+                                let return_type_res = match *factory {
+                                    IntrinsicFactory::Intrinsic0(ref i) => ir::TypeParser::get_intrinsic0_type(i),
+                                    IntrinsicFactory::Intrinsic1(ref i) => ir::TypeParser::get_intrinsic1_type(i),
+                                    IntrinsicFactory::Intrinsic2(ref i) => ir::TypeParser::get_intrinsic2_type(i),
+                                    IntrinsicFactory::Intrinsic3(ref i) => ir::TypeParser::get_intrinsic3_type(i),
+                                };
+                                let return_type = match return_type_res {
+                                    Ok(ty) => ty,
+                                    Err(_) => panic!("bad intrinsic data"),
+                                };
+                                FunctionOverload(FunctionName::Intrinsic(factory.clone()), return_type.0, param_types.clone())
                             }).collect::<Vec<_>>();
                             Ok(
                                 TypedExpression::Method(UnresolvedMethod(

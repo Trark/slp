@@ -819,52 +819,25 @@ fn transpile_literal(lit: &src::Literal) -> Result<dst::Literal, TranspileError>
     }
 }
 
-fn write_unary(op: dst::UnaryOp,
-               expr: &src::Expression,
-               context: &mut Context)
-               -> Result<dst::Expression, TranspileError> {
-    Ok(dst::Expression::UnaryOperation(op, Box::new(try!(transpile_expression(expr, context)))))
+fn write_unary(op: dst::UnaryOp, expr: dst::Expression) -> Result<dst::Expression, TranspileError> {
+    Ok(dst::Expression::UnaryOperation(op, Box::new(expr)))
 }
 
 fn write_func(name: &'static str,
-              args: &[&src::Expression],
-              context: &mut Context)
+              args: &[dst::Expression])
               -> Result<dst::Expression, TranspileError> {
-    Ok(dst::Expression::UntypedIntrinsic(
-        name.to_string(),
-        try!(args.iter().fold(Ok(vec![]), |result: Result<Vec<dst::Expression>, TranspileError>, exp| {
-            let mut vec = try!(result);
-            vec.push(try!(transpile_expression(exp, context)));
-            Ok(vec)
-        }))
-    ))
+    let args_vec = args.into_iter()
+                       .map(|e| e.clone())
+                       .collect::<Vec<dst::Expression>>();
+    Ok(dst::Expression::UntypedIntrinsic(name.to_string(), args_vec))
 }
 
-fn transpile_intrinsic(intrinsic: &src::Intrinsic,
-                       context: &mut Context)
-                       -> Result<dst::Expression, TranspileError> {
+fn transpile_intrinsic0(intrinsic: &src::Intrinsic0,
+                        _: &mut Context)
+                        -> Result<dst::Expression, TranspileError> {
+    use slp_lang_hir::Intrinsic0 as I;
     match *intrinsic {
-        src::Intrinsic::PrefixIncrement(_, ref expr) => {
-            write_unary(dst::UnaryOp::PrefixIncrement, expr, context)
-        }
-        src::Intrinsic::PrefixDecrement(_, ref expr) => {
-            write_unary(dst::UnaryOp::PrefixDecrement, expr, context)
-        }
-        src::Intrinsic::PostfixIncrement(_, ref expr) => {
-            write_unary(dst::UnaryOp::PostfixIncrement, expr, context)
-        }
-        src::Intrinsic::PostfixDecrement(_, ref expr) => {
-            write_unary(dst::UnaryOp::PostfixDecrement, expr, context)
-        }
-        src::Intrinsic::Plus(_, ref expr) => write_unary(dst::UnaryOp::Plus, expr, context),
-        src::Intrinsic::Minus(_, ref expr) => write_unary(dst::UnaryOp::Minus, expr, context),
-        src::Intrinsic::LogicalNot(_, ref expr) => {
-            write_unary(dst::UnaryOp::LogicalNot, expr, context)
-        }
-        src::Intrinsic::BitwiseNot(_, ref expr) => {
-            write_unary(dst::UnaryOp::BitwiseNot, expr, context)
-        }
-        src::Intrinsic::AllMemoryBarrier | src::Intrinsic::AllMemoryBarrierWithGroupSync => {
+        I::AllMemoryBarrier | I::AllMemoryBarrierWithGroupSync => {
             Ok(dst::Expression::UntypedIntrinsic(
                 "barrier".to_string(),
                 vec![dst::Expression::BinaryOperation(dst::BinOp::BitwiseOr,
@@ -873,234 +846,246 @@ fn transpile_intrinsic(intrinsic: &src::Intrinsic,
                 )]
             ))
         }
-        src::Intrinsic::DeviceMemoryBarrier | src::Intrinsic::DeviceMemoryBarrierWithGroupSync => {
+        I::DeviceMemoryBarrier | I::DeviceMemoryBarrierWithGroupSync => {
             Ok(dst::Expression::UntypedIntrinsic(
                 "barrier".to_string(),
                 vec![dst::Expression::UntypedLiteral("CLK_GLOBAL_MEM_FENCE".to_string())]
             ))
         }
-        src::Intrinsic::GroupMemoryBarrier | src::Intrinsic::GroupMemoryBarrierWithGroupSync => {
+        I::GroupMemoryBarrier | I::GroupMemoryBarrierWithGroupSync => {
             Ok(dst::Expression::UntypedIntrinsic(
                 "barrier".to_string(),
                 vec![dst::Expression::UntypedLiteral("CLK_LOCAL_MEM_FENCE".to_string())]
             ))
         }
-        src::Intrinsic::AsIntU(ref e) => write_func("as_int", &[e], context),
-        src::Intrinsic::AsIntU2(ref e) => write_func("as_int2", &[e], context),
-        src::Intrinsic::AsIntU3(ref e) => write_func("as_int3", &[e], context),
-        src::Intrinsic::AsIntU4(ref e) => write_func("as_int4", &[e], context),
-        src::Intrinsic::AsIntF(ref e) => write_func("as_int", &[e], context),
-        src::Intrinsic::AsIntF2(ref e) => write_func("as_int2", &[e], context),
-        src::Intrinsic::AsIntF3(ref e) => write_func("as_int3", &[e], context),
-        src::Intrinsic::AsIntF4(ref e) => write_func("as_int4", &[e], context),
-        src::Intrinsic::AsUIntI(ref e) => write_func("as_uint", &[e], context),
-        src::Intrinsic::AsUIntI2(ref e) => write_func("as_uint2", &[e], context),
-        src::Intrinsic::AsUIntI3(ref e) => write_func("as_uint3", &[e], context),
-        src::Intrinsic::AsUIntI4(ref e) => write_func("as_uint4", &[e], context),
-        src::Intrinsic::AsUIntF(ref e) => write_func("as_uint", &[e], context),
-        src::Intrinsic::AsUIntF2(ref e) => write_func("as_uint2", &[e], context),
-        src::Intrinsic::AsUIntF3(ref e) => write_func("as_uint3", &[e], context),
-        src::Intrinsic::AsUIntF4(ref e) => write_func("as_uint4", &[e], context),
-        src::Intrinsic::AsFloatI(ref e) => write_func("as_float", &[e], context),
-        src::Intrinsic::AsFloatI2(ref e) => write_func("as_float2", &[e], context),
-        src::Intrinsic::AsFloatI3(ref e) => write_func("as_float3", &[e], context),
-        src::Intrinsic::AsFloatI4(ref e) => write_func("as_float4", &[e], context),
-        src::Intrinsic::AsFloatU(ref e) => write_func("as_float", &[e], context),
-        src::Intrinsic::AsFloatU2(ref e) => write_func("as_float2", &[e], context),
-        src::Intrinsic::AsFloatU3(ref e) => write_func("as_float3", &[e], context),
-        src::Intrinsic::AsFloatU4(ref e) => write_func("as_float4", &[e], context),
-        src::Intrinsic::AsFloatF(ref e) => write_func("as_float", &[e], context),
-        src::Intrinsic::AsFloatF2(ref e) => write_func("as_float2", &[e], context),
-        src::Intrinsic::AsFloatF3(ref e) => write_func("as_float3", &[e], context),
-        src::Intrinsic::AsFloatF4(ref e) => write_func("as_float4", &[e], context),
-        src::Intrinsic::AsDouble(_, _) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::ClampI(ref x, ref min, ref max) => {
-            write_func("clamp", &[x, min, max], context)
-        }
-        src::Intrinsic::ClampI2(ref x, ref min, ref max) => {
-            write_func("clamp", &[x, min, max], context)
-        }
-        src::Intrinsic::ClampI3(ref x, ref min, ref max) => {
-            write_func("clamp", &[x, min, max], context)
-        }
-        src::Intrinsic::ClampI4(ref x, ref min, ref max) => {
-            write_func("clamp", &[x, min, max], context)
-        }
-        src::Intrinsic::ClampF(ref x, ref min, ref max) => {
-            write_func("clamp", &[x, min, max], context)
-        }
-        src::Intrinsic::ClampF2(ref x, ref min, ref max) => {
-            write_func("clamp", &[x, min, max], context)
-        }
-        src::Intrinsic::ClampF3(ref x, ref min, ref max) => {
-            write_func("clamp", &[x, min, max], context)
-        }
-        src::Intrinsic::ClampF4(ref x, ref min, ref max) => {
-            write_func("clamp", &[x, min, max], context)
-        }
-        src::Intrinsic::Cross(ref x, ref y) => write_func("cross", &[x, y], context),
-        src::Intrinsic::Distance1(ref x, ref y) |
-        src::Intrinsic::Distance2(ref x, ref y) |
-        src::Intrinsic::Distance3(ref x, ref y) |
-        src::Intrinsic::Distance4(ref x, ref y) => {
+    }
+}
+
+fn transpile_intrinsic1(intrinsic: &src::Intrinsic1,
+                        src_expr_1: &src::Expression,
+                        context: &mut Context)
+                        -> Result<dst::Expression, TranspileError> {
+    use slp_lang_hir::Intrinsic1 as I;
+    let e1 = try!(transpile_expression(src_expr_1, context));
+    match *intrinsic {
+        I::PrefixIncrement(_) => write_unary(dst::UnaryOp::PrefixIncrement, e1),
+        I::PrefixDecrement(_) => write_unary(dst::UnaryOp::PrefixDecrement, e1),
+        I::PostfixIncrement(_) => write_unary(dst::UnaryOp::PostfixIncrement, e1),
+        I::PostfixDecrement(_) => write_unary(dst::UnaryOp::PostfixDecrement, e1),
+        I::Plus(_) => write_unary(dst::UnaryOp::Plus, e1),
+        I::Minus(_) => write_unary(dst::UnaryOp::Minus, e1),
+        I::LogicalNot(_) => write_unary(dst::UnaryOp::LogicalNot, e1),
+        I::BitwiseNot(_) => write_unary(dst::UnaryOp::BitwiseNot, e1),
+        I::AsIntU => write_func("as_int", &[e1]),
+        I::AsIntU2 => write_func("as_int2", &[e1]),
+        I::AsIntU3 => write_func("as_int3", &[e1]),
+        I::AsIntU4 => write_func("as_int4", &[e1]),
+        I::AsIntF => write_func("as_int", &[e1]),
+        I::AsIntF2 => write_func("as_int2", &[e1]),
+        I::AsIntF3 => write_func("as_int3", &[e1]),
+        I::AsIntF4 => write_func("as_int4", &[e1]),
+        I::AsUIntI => write_func("as_uint", &[e1]),
+        I::AsUIntI2 => write_func("as_uint2", &[e1]),
+        I::AsUIntI3 => write_func("as_uint3", &[e1]),
+        I::AsUIntI4 => write_func("as_uint4", &[e1]),
+        I::AsUIntF => write_func("as_uint", &[e1]),
+        I::AsUIntF2 => write_func("as_uint2", &[e1]),
+        I::AsUIntF3 => write_func("as_uint3", &[e1]),
+        I::AsUIntF4 => write_func("as_uint4", &[e1]),
+        I::AsFloatI => write_func("as_float", &[e1]),
+        I::AsFloatI2 => write_func("as_float2", &[e1]),
+        I::AsFloatI3 => write_func("as_float3", &[e1]),
+        I::AsFloatI4 => write_func("as_float4", &[e1]),
+        I::AsFloatU => write_func("as_float", &[e1]),
+        I::AsFloatU2 => write_func("as_float2", &[e1]),
+        I::AsFloatU3 => write_func("as_float3", &[e1]),
+        I::AsFloatU4 => write_func("as_float4", &[e1]),
+        I::AsFloatF => write_func("as_float", &[e1]),
+        I::AsFloatF2 => write_func("as_float2", &[e1]),
+        I::AsFloatF3 => write_func("as_float3", &[e1]),
+        I::AsFloatF4 => write_func("as_float4", &[e1]),
+        I::F16ToF32 => Err(TranspileError::IntrinsicUnimplemented),
+        I::F32ToF16 => Err(TranspileError::IntrinsicUnimplemented),
+        I::Floor => Err(TranspileError::IntrinsicUnimplemented),
+        I::Floor2 => Err(TranspileError::IntrinsicUnimplemented),
+        I::Floor3 => Err(TranspileError::IntrinsicUnimplemented),
+        I::Floor4 => Err(TranspileError::IntrinsicUnimplemented),
+        I::IsNaN => Err(TranspileError::IntrinsicUnimplemented),
+        I::IsNaN2 => Err(TranspileError::IntrinsicUnimplemented),
+        I::IsNaN3 => Err(TranspileError::IntrinsicUnimplemented),
+        I::IsNaN4 => Err(TranspileError::IntrinsicUnimplemented),
+        I::Length1 => Err(TranspileError::IntrinsicUnimplemented),
+        I::Length2 => Err(TranspileError::IntrinsicUnimplemented),
+        I::Length3 => Err(TranspileError::IntrinsicUnimplemented),
+        I::Length4 => Err(TranspileError::IntrinsicUnimplemented),
+        I::Normalize1 => Err(TranspileError::IntrinsicUnimplemented),
+        I::Normalize2 => Err(TranspileError::IntrinsicUnimplemented),
+        I::Normalize3 => Err(TranspileError::IntrinsicUnimplemented),
+        I::Normalize4 => Err(TranspileError::IntrinsicUnimplemented),
+        I::SignI => Err(TranspileError::IntrinsicUnimplemented),
+        I::SignI2 => Err(TranspileError::IntrinsicUnimplemented),
+        I::SignI3 => Err(TranspileError::IntrinsicUnimplemented),
+        I::SignI4 => Err(TranspileError::IntrinsicUnimplemented),
+        I::SignF => Err(TranspileError::IntrinsicUnimplemented),
+        I::SignF2 => Err(TranspileError::IntrinsicUnimplemented),
+        I::SignF3 => Err(TranspileError::IntrinsicUnimplemented),
+        I::SignF4 => Err(TranspileError::IntrinsicUnimplemented),
+        I::Sqrt => Err(TranspileError::IntrinsicUnimplemented),
+        I::Sqrt2 => Err(TranspileError::IntrinsicUnimplemented),
+        I::Sqrt3 => Err(TranspileError::IntrinsicUnimplemented),
+        I::Sqrt4 => Err(TranspileError::IntrinsicUnimplemented),
+    }
+}
+
+fn transpile_intrinsic2(intrinsic: &src::Intrinsic2,
+                        src_expr_1: &src::Expression,
+                        src_expr_2: &src::Expression,
+                        context: &mut Context)
+                        -> Result<dst::Expression, TranspileError> {
+    use slp_lang_hir::Intrinsic2 as I;
+    let e1 = try!(transpile_expression(src_expr_1, context));
+    let e2 = try!(transpile_expression(src_expr_2, context));
+    match *intrinsic {
+        I::AsDouble => Err(TranspileError::IntrinsicUnimplemented),
+        I::Cross => write_func("cross", &[e1, e2]),
+        I::Distance1 |
+        I::Distance2 |
+        I::Distance3 |
+        I::Distance4 => {
             Ok(dst::Expression::UntypedIntrinsic(
                 "length".to_string(),
                 vec![dst::Expression::BinaryOperation(dst::BinOp::Subtract,
-                    Box::new(try!(transpile_expression(x, context))),
-                    Box::new(try!(transpile_expression(y, context)))
+                    Box::new(e1),
+                    Box::new(e2)
                 )]
             ))
         }
-        src::Intrinsic::DotI1(_, _) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::DotI2(_, _) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::DotI3(_, _) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::DotI4(_, _) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::DotF1(ref x, ref y) => write_func("dot", &[x, y], context),
-        src::Intrinsic::DotF2(ref x, ref y) => write_func("dot", &[x, y], context),
-        src::Intrinsic::DotF3(ref x, ref y) => write_func("dot", &[x, y], context),
-        src::Intrinsic::DotF4(ref x, ref y) => write_func("dot", &[x, y], context),
-        src::Intrinsic::F16ToF32(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::F32ToF16(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::Floor(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::Floor2(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::Floor3(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::Floor4(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::IsNaN(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::IsNaN2(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::IsNaN3(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::IsNaN4(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::Length1(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::Length2(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::Length3(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::Length4(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::MinI(_, _) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::MinI2(_, _) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::MinI3(_, _) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::MinI4(_, _) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::MinF(_, _) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::MinF2(_, _) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::MinF3(_, _) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::MinF4(_, _) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::MaxI(_, _) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::MaxI2(_, _) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::MaxI3(_, _) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::MaxI4(_, _) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::MaxF(_, _) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::MaxF2(_, _) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::MaxF3(_, _) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::MaxF4(_, _) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::Normalize1(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::Normalize2(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::Normalize3(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::Normalize4(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::SignI(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::SignI2(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::SignI3(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::SignI4(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::SignF(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::SignF2(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::SignF3(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::SignF4(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::Sqrt(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::Sqrt2(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::Sqrt3(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::Sqrt4(_) => Err(TranspileError::IntrinsicUnimplemented),
-        src::Intrinsic::BufferLoad(ref buffer, ref loc) |
-        src::Intrinsic::RWBufferLoad(ref buffer, ref loc) |
-        src::Intrinsic::StructuredBufferLoad(ref buffer, ref loc) |
-        src::Intrinsic::RWStructuredBufferLoad(ref buffer, ref loc) => {
-            let cl_buffer = Box::new(try!(transpile_expression(buffer, context)));
-            let cl_loc = Box::new(try!(transpile_expression(loc, context)));
-            Ok(dst::Expression::ArraySubscript(cl_buffer, cl_loc))
+        I::DotI1 => Err(TranspileError::IntrinsicUnimplemented),
+        I::DotI2 => Err(TranspileError::IntrinsicUnimplemented),
+        I::DotI3 => Err(TranspileError::IntrinsicUnimplemented),
+        I::DotI4 => Err(TranspileError::IntrinsicUnimplemented),
+        I::DotF1 => write_func("dot", &[e1, e2]),
+        I::DotF2 => write_func("dot", &[e1, e2]),
+        I::DotF3 => write_func("dot", &[e1, e2]),
+        I::DotF4 => write_func("dot", &[e1, e2]),
+        I::MinI => Err(TranspileError::IntrinsicUnimplemented),
+        I::MinI2 => Err(TranspileError::IntrinsicUnimplemented),
+        I::MinI3 => Err(TranspileError::IntrinsicUnimplemented),
+        I::MinI4 => Err(TranspileError::IntrinsicUnimplemented),
+        I::MinF => Err(TranspileError::IntrinsicUnimplemented),
+        I::MinF2 => Err(TranspileError::IntrinsicUnimplemented),
+        I::MinF3 => Err(TranspileError::IntrinsicUnimplemented),
+        I::MinF4 => Err(TranspileError::IntrinsicUnimplemented),
+        I::MaxI => Err(TranspileError::IntrinsicUnimplemented),
+        I::MaxI2 => Err(TranspileError::IntrinsicUnimplemented),
+        I::MaxI3 => Err(TranspileError::IntrinsicUnimplemented),
+        I::MaxI4 => Err(TranspileError::IntrinsicUnimplemented),
+        I::MaxF => Err(TranspileError::IntrinsicUnimplemented),
+        I::MaxF2 => Err(TranspileError::IntrinsicUnimplemented),
+        I::MaxF3 => Err(TranspileError::IntrinsicUnimplemented),
+        I::MaxF4 => Err(TranspileError::IntrinsicUnimplemented),
+        I::BufferLoad(_) |
+        I::RWBufferLoad(_) |
+        I::StructuredBufferLoad(_) |
+        I::RWStructuredBufferLoad(_) => {
+            Ok(dst::Expression::ArraySubscript(Box::new(e1), Box::new(e2)))
         }
-        src::Intrinsic::RWTexture2DLoad(ref tex, ref loc) => {
-            let cl_tex = try!(transpile_expression(tex, context));
-            let cl_loc = try!(transpile_expression(loc, context));
-            let ty = try!(src::TypeParser::get_expression_type(tex, &context.type_context));
-            let (func_name, read_type, cast_type) = match ty {
-                src::ExpressionType(src::Type(src::TypeLayout::Object(src::ObjectType::RWTexture2D(ref data_type)), _), _) => {
-                    let (func_name, read_type) = match data_type.0 {
-                        src::DataLayout::Scalar(ref scalar) | src::DataLayout::Vector(ref scalar, _) => {
-                            match *scalar {
-                                src::ScalarType::Int => ("read_imagei", dst::Type::Vector(dst::Scalar::Int, dst::VectorDimension::Four)),
-                                src::ScalarType::UInt => ("read_imageui", dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Four)),
-                                src::ScalarType::Float => ("read_imagef", dst::Type::Vector(dst::Scalar::Float, dst::VectorDimension::Four)),
-                                _ => return Err(TranspileError::Unknown),
-                            }
-                        },
-                        src::DataLayout::Matrix(_, _, _) => return Err(TranspileError::Unknown),
-                    };
-                    (func_name, read_type, try!(transpile_datatype(data_type, context)))
+        I::RWTexture2DLoad(ref data_type) => {
+            let (func_name, read_type) = match data_type.0 {
+                src::DataLayout::Scalar(ref scalar) | src::DataLayout::Vector(ref scalar, _) => {
+                    let dim = dst::VectorDimension::Four;
+                    match *scalar {
+                        src::ScalarType::Int => {
+                            ("read_imagei", dst::Type::Vector(dst::Scalar::Int, dim))
+                        }
+                        src::ScalarType::UInt => {
+                            ("read_imageui", dst::Type::Vector(dst::Scalar::UInt, dim))
+                        }
+                        src::ScalarType::Float => {
+                            ("read_imagef", dst::Type::Vector(dst::Scalar::Float, dim))
+                        }
+                        _ => return Err(TranspileError::Unknown),
+                    }
                 }
-                _ => return Err(TranspileError::Unknown),
+                src::DataLayout::Matrix(_, _, _) => return Err(TranspileError::Unknown),
             };
-            let expr = dst::Expression::UntypedIntrinsic(func_name.to_string(),
-                                                         vec![cl_tex, cl_loc]);
+            let cast_type = try!(transpile_datatype(data_type, context));
+            let expr = dst::Expression::UntypedIntrinsic(func_name.to_string(), vec![e1, e2]);
             write_cast(read_type, cast_type, expr, false, context)
         }
-        src::Intrinsic::ByteAddressBufferLoad(ref buffer, ref loc) |
-        src::Intrinsic::RWByteAddressBufferLoad(ref buffer, ref loc) |
-        src::Intrinsic::ByteAddressBufferLoad2(ref buffer, ref loc) |
-        src::Intrinsic::RWByteAddressBufferLoad2(ref buffer, ref loc) |
-        src::Intrinsic::ByteAddressBufferLoad3(ref buffer, ref loc) |
-        src::Intrinsic::RWByteAddressBufferLoad3(ref buffer, ref loc) |
-        src::Intrinsic::ByteAddressBufferLoad4(ref buffer, ref loc) |
-        src::Intrinsic::RWByteAddressBufferLoad4(ref buffer, ref loc) => {
+        I::ByteAddressBufferLoad |
+        I::RWByteAddressBufferLoad |
+        I::ByteAddressBufferLoad2 |
+        I::RWByteAddressBufferLoad2 |
+        I::ByteAddressBufferLoad3 |
+        I::RWByteAddressBufferLoad3 |
+        I::ByteAddressBufferLoad4 |
+        I::RWByteAddressBufferLoad4 => {
             let ty = Box::new(match *intrinsic {
-                src::Intrinsic::ByteAddressBufferLoad(_, _) |
-                src::Intrinsic::RWByteAddressBufferLoad(_, _) => {
-                    dst::Type::Scalar(dst::Scalar::UInt)
-                }
-                src::Intrinsic::ByteAddressBufferLoad2(_, _) |
-                src::Intrinsic::RWByteAddressBufferLoad2(_, _) => {
+                I::ByteAddressBufferLoad |
+                I::RWByteAddressBufferLoad => dst::Type::Scalar(dst::Scalar::UInt),
+                I::ByteAddressBufferLoad2 |
+                I::RWByteAddressBufferLoad2 => {
                     dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Two)
                 }
-                src::Intrinsic::ByteAddressBufferLoad3(_, _) |
-                src::Intrinsic::RWByteAddressBufferLoad3(_, _) => {
+                I::ByteAddressBufferLoad3 |
+                I::RWByteAddressBufferLoad3 => {
                     dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Three)
                 }
-                src::Intrinsic::ByteAddressBufferLoad4(_, _) |
-                src::Intrinsic::RWByteAddressBufferLoad4(_, _) => {
+                I::ByteAddressBufferLoad4 |
+                I::RWByteAddressBufferLoad4 => {
                     dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Four)
                 }
                 _ => unreachable!(),
             });
-            let cl_buffer = Box::new(try!(transpile_expression(buffer, context)));
-            let cl_loc = Box::new(try!(transpile_expression(loc, context)));
             Ok(dst::Expression::Deref(Box::new(dst::Expression::Cast(
                 dst::Type::Pointer(dst::AddressSpace::Global, ty),
-                Box::new(dst::Expression::BinaryOperation(dst::BinOp::Add, cl_buffer, cl_loc))
+                Box::new(dst::Expression::BinaryOperation(dst::BinOp::Add, Box::new(e1), Box::new(e2)))
             ))))
         }
-        src::Intrinsic::RWByteAddressBufferStore(ref buffer, ref loc, ref value) |
-        src::Intrinsic::RWByteAddressBufferStore2(ref buffer, ref loc, ref value) |
-        src::Intrinsic::RWByteAddressBufferStore3(ref buffer, ref loc, ref value) |
-        src::Intrinsic::RWByteAddressBufferStore4(ref buffer, ref loc, ref value) => {
+    }
+}
+fn transpile_intrinsic3(intrinsic: &src::Intrinsic3,
+                        src_expr_1: &src::Expression,
+                        src_expr_2: &src::Expression,
+                        src_expr_3: &src::Expression,
+                        context: &mut Context)
+                        -> Result<dst::Expression, TranspileError> {
+    use slp_lang_hir::Intrinsic3 as I;
+    let e1 = try!(transpile_expression(src_expr_1, context));
+    let e2 = try!(transpile_expression(src_expr_2, context));
+    let e3 = try!(transpile_expression(src_expr_3, context));
+    match *intrinsic {
+        I::ClampI => write_func("clamp", &[e1, e2, e3]),
+        I::ClampI2 => write_func("clamp", &[e1, e2, e3]),
+        I::ClampI3 => write_func("clamp", &[e1, e2, e3]),
+        I::ClampI4 => write_func("clamp", &[e1, e2, e3]),
+        I::ClampF => write_func("clamp", &[e1, e2, e3]),
+        I::ClampF2 => write_func("clamp", &[e1, e2, e3]),
+        I::ClampF3 => write_func("clamp", &[e1, e2, e3]),
+        I::ClampF4 => write_func("clamp", &[e1, e2, e3]),
+        I::RWByteAddressBufferStore |
+        I::RWByteAddressBufferStore2 |
+        I::RWByteAddressBufferStore3 |
+        I::RWByteAddressBufferStore4 => {
+            let st = dst::Scalar::UInt;
             let ty = Box::new(match *intrinsic {
-                src::Intrinsic::RWByteAddressBufferStore(_, _, _) => {
-                    dst::Type::Scalar(dst::Scalar::UInt)
-                }
-                src::Intrinsic::RWByteAddressBufferStore2(_, _, _) => {
-                    dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Two)
-                }
-                src::Intrinsic::RWByteAddressBufferStore3(_, _, _) => {
-                    dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Three)
-                }
-                src::Intrinsic::RWByteAddressBufferStore4(_, _, _) => {
-                    dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Four)
-                }
+                I::RWByteAddressBufferStore => dst::Type::Scalar(st),
+                I::RWByteAddressBufferStore2 => dst::Type::Vector(st, dst::VectorDimension::Two),
+                I::RWByteAddressBufferStore3 => dst::Type::Vector(st, dst::VectorDimension::Three),
+                I::RWByteAddressBufferStore4 => dst::Type::Vector(st, dst::VectorDimension::Four),
                 _ => unreachable!(),
             });
-            let cl_buffer = Box::new(try!(transpile_expression(buffer, context)));
-            let cl_loc = Box::new(try!(transpile_expression(loc, context)));
-            let cl_value = Box::new(try!(transpile_expression(value, context)));
+            let binop = dst::Expression::BinaryOperation(dst::BinOp::Add,
+                                                         Box::new(e1),
+                                                         Box::new(e2));
             Ok(dst::Expression::BinaryOperation(
                 dst::BinOp::Assignment,
                 Box::new(dst::Expression::Deref(Box::new(dst::Expression::Cast(
                     dst::Type::Pointer(dst::AddressSpace::Global, ty),
-                    Box::new(dst::Expression::BinaryOperation(dst::BinOp::Add, cl_buffer, cl_loc))
+                    Box::new(binop)
                 )))),
-                cl_value
+                Box::new(e3)
             ))
         }
     }
@@ -1328,7 +1313,14 @@ fn transpile_expression(expression: &src::Expression,
             };
             write_cast(source_cl_type, dest_cl_type, cl_expr, untyped, context)
         }
-        &src::Expression::Intrinsic(ref intrinsic) => transpile_intrinsic(intrinsic, context),
+        &src::Expression::Intrinsic0(ref i) => transpile_intrinsic0(i, context),
+        &src::Expression::Intrinsic1(ref i, ref e1) => transpile_intrinsic1(i, e1, context),
+        &src::Expression::Intrinsic2(ref i, ref e1, ref e2) => {
+            transpile_intrinsic2(i, e1, e2, context)
+        }
+        &src::Expression::Intrinsic3(ref i, ref e1, ref e2, ref e3) => {
+            transpile_intrinsic3(i, e1, e2, e3, context)
+        }
     }
 }
 

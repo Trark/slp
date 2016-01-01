@@ -496,155 +496,167 @@ impl From<Type> for LocalType {
 pub use slp_lang_hst::BinOp;
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum Intrinsic {
-    // Unary operations
-    PrefixIncrement(Type, Expression),
-    PrefixDecrement(Type, Expression),
-    PostfixIncrement(Type, Expression),
-    PostfixDecrement(Type, Expression),
-    Plus(Type, Expression),
-    Minus(Type, Expression),
-    LogicalNot(Type, Expression),
-    BitwiseNot(Type, Expression),
-
+pub enum Intrinsic0 {
     AllMemoryBarrier,
     AllMemoryBarrierWithGroupSync,
     DeviceMemoryBarrier,
     DeviceMemoryBarrierWithGroupSync,
     GroupMemoryBarrier,
     GroupMemoryBarrierWithGroupSync,
+}
 
-    AsIntU(Expression),
-    AsIntU2(Expression),
-    AsIntU3(Expression),
-    AsIntU4(Expression),
-    AsIntF(Expression),
-    AsIntF2(Expression),
-    AsIntF3(Expression),
-    AsIntF4(Expression),
+#[derive(PartialEq, Debug, Clone)]
+pub enum Intrinsic1 {
+    // Unary operations
+    PrefixIncrement(Type),
+    PrefixDecrement(Type),
+    PostfixIncrement(Type),
+    PostfixDecrement(Type),
+    Plus(Type),
+    Minus(Type),
+    LogicalNot(Type),
+    BitwiseNot(Type),
 
-    AsUIntI(Expression),
-    AsUIntI2(Expression),
-    AsUIntI3(Expression),
-    AsUIntI4(Expression),
-    AsUIntF(Expression),
-    AsUIntF2(Expression),
-    AsUIntF3(Expression),
-    AsUIntF4(Expression),
+    AsIntU,
+    AsIntU2,
+    AsIntU3,
+    AsIntU4,
+    AsIntF,
+    AsIntF2,
+    AsIntF3,
+    AsIntF4,
 
-    AsFloatI(Expression),
-    AsFloatI2(Expression),
-    AsFloatI3(Expression),
-    AsFloatI4(Expression),
-    AsFloatU(Expression),
-    AsFloatU2(Expression),
-    AsFloatU3(Expression),
-    AsFloatU4(Expression),
-    AsFloatF(Expression),
-    AsFloatF2(Expression),
-    AsFloatF3(Expression),
-    AsFloatF4(Expression),
+    AsUIntI,
+    AsUIntI2,
+    AsUIntI3,
+    AsUIntI4,
+    AsUIntF,
+    AsUIntF2,
+    AsUIntF3,
+    AsUIntF4,
 
-    AsDouble(Expression, Expression),
+    AsFloatI,
+    AsFloatI2,
+    AsFloatI3,
+    AsFloatI4,
+    AsFloatU,
+    AsFloatU2,
+    AsFloatU3,
+    AsFloatU4,
+    AsFloatF,
+    AsFloatF2,
+    AsFloatF3,
+    AsFloatF4,
 
-    ClampI(Expression, Expression, Expression),
-    ClampI2(Expression, Expression, Expression),
-    ClampI3(Expression, Expression, Expression),
-    ClampI4(Expression, Expression, Expression),
-    ClampF(Expression, Expression, Expression),
-    ClampF2(Expression, Expression, Expression),
-    ClampF3(Expression, Expression, Expression),
-    ClampF4(Expression, Expression, Expression),
+    F16ToF32,
+    F32ToF16,
 
-    Cross(Expression, Expression),
+    Floor,
+    Floor2,
+    Floor3,
+    Floor4,
 
-    Distance1(Expression, Expression),
-    Distance2(Expression, Expression),
-    Distance3(Expression, Expression),
-    Distance4(Expression, Expression),
+    IsNaN,
+    IsNaN2,
+    IsNaN3,
+    IsNaN4,
 
-    DotI1(Expression, Expression),
-    DotI2(Expression, Expression),
-    DotI3(Expression, Expression),
-    DotI4(Expression, Expression),
-    DotF1(Expression, Expression),
-    DotF2(Expression, Expression),
-    DotF3(Expression, Expression),
-    DotF4(Expression, Expression),
+    Length1,
+    Length2,
+    Length3,
+    Length4,
 
-    F16ToF32(Expression),
-    F32ToF16(Expression),
+    Normalize1,
+    Normalize2,
+    Normalize3,
+    Normalize4,
 
-    Floor(Expression),
-    Floor2(Expression),
-    Floor3(Expression),
-    Floor4(Expression),
+    SignI,
+    SignI2,
+    SignI3,
+    SignI4,
+    SignF,
+    SignF2,
+    SignF3,
+    SignF4,
 
-    IsNaN(Expression),
-    IsNaN2(Expression),
-    IsNaN3(Expression),
-    IsNaN4(Expression),
+    Sqrt,
+    Sqrt2,
+    Sqrt3,
+    Sqrt4,
+}
 
-    Length1(Expression),
-    Length2(Expression),
-    Length3(Expression),
-    Length4(Expression),
+#[derive(PartialEq, Debug, Clone)]
+pub enum Intrinsic2 {
+    AsDouble,
 
-    MinI(Expression, Expression),
-    MinI2(Expression, Expression),
-    MinI3(Expression, Expression),
-    MinI4(Expression, Expression),
-    MinF(Expression, Expression),
-    MinF2(Expression, Expression),
-    MinF3(Expression, Expression),
-    MinF4(Expression, Expression),
-    MaxI(Expression, Expression),
-    MaxI2(Expression, Expression),
-    MaxI3(Expression, Expression),
-    MaxI4(Expression, Expression),
-    MaxF(Expression, Expression),
-    MaxF2(Expression, Expression),
-    MaxF3(Expression, Expression),
-    MaxF4(Expression, Expression),
+    Cross,
 
-    Normalize1(Expression),
-    Normalize2(Expression),
-    Normalize3(Expression),
-    Normalize4(Expression),
+    Distance1,
+    Distance2,
+    Distance3,
+    Distance4,
 
-    SignI(Expression),
-    SignI2(Expression),
-    SignI3(Expression),
-    SignI4(Expression),
-    SignF(Expression),
-    SignF2(Expression),
-    SignF3(Expression),
-    SignF4(Expression),
+    DotI1,
+    DotI2,
+    DotI3,
+    DotI4,
+    DotF1,
+    DotF2,
+    DotF3,
+    DotF4,
 
-    Sqrt(Expression),
-    Sqrt2(Expression),
-    Sqrt3(Expression),
-    Sqrt4(Expression),
+    MinI,
+    MinI2,
+    MinI3,
+    MinI4,
+    MinF,
+    MinF2,
+    MinF3,
+    MinF4,
 
-    BufferLoad(Expression, Expression),
-    RWBufferLoad(Expression, Expression),
-    StructuredBufferLoad(Expression, Expression),
-    RWStructuredBufferLoad(Expression, Expression),
-    RWTexture2DLoad(Expression, Expression),
+    MaxI,
+    MaxI2,
+    MaxI3,
+    MaxI4,
+    MaxF,
+    MaxF2,
+    MaxF3,
+    MaxF4,
+
+    BufferLoad(DataType),
+    RWBufferLoad(DataType),
+    StructuredBufferLoad(StructuredType),
+    RWStructuredBufferLoad(StructuredType),
+    RWTexture2DLoad(DataType),
 
     // ByteAddressBuffer methods
-    ByteAddressBufferLoad(Expression, Expression),
-    ByteAddressBufferLoad2(Expression, Expression),
-    ByteAddressBufferLoad3(Expression, Expression),
-    ByteAddressBufferLoad4(Expression, Expression),
-    RWByteAddressBufferLoad(Expression, Expression),
-    RWByteAddressBufferLoad2(Expression, Expression),
-    RWByteAddressBufferLoad3(Expression, Expression),
-    RWByteAddressBufferLoad4(Expression, Expression),
-    RWByteAddressBufferStore(Expression, Expression, Expression),
-    RWByteAddressBufferStore2(Expression, Expression, Expression),
-    RWByteAddressBufferStore3(Expression, Expression, Expression),
-    RWByteAddressBufferStore4(Expression, Expression, Expression),
+    ByteAddressBufferLoad,
+    ByteAddressBufferLoad2,
+    ByteAddressBufferLoad3,
+    ByteAddressBufferLoad4,
+    RWByteAddressBufferLoad,
+    RWByteAddressBufferLoad2,
+    RWByteAddressBufferLoad3,
+    RWByteAddressBufferLoad4,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum Intrinsic3 {
+    ClampI,
+    ClampI2,
+    ClampI3,
+    ClampI4,
+    ClampF,
+    ClampF2,
+    ClampF3,
+    ClampF4,
+
+    // ByteAddressBuffer methods
+    RWByteAddressBufferStore,
+    RWByteAddressBufferStore2,
+    RWByteAddressBufferStore3,
+    RWByteAddressBufferStore4,
 }
 
 pub use slp_lang_hst::Literal;
@@ -722,7 +734,10 @@ pub enum Expression {
     /// Constructors for builtin numeric types, such as `float2(1.0, 0.0)`
     NumericConstructor(DataLayout, Vec<ConstructorSlot>),
     Cast(Type, Box<Expression>),
-    Intrinsic(Box<Intrinsic>),
+    Intrinsic0(Intrinsic0),
+    Intrinsic1(Intrinsic1, Box<Expression>),
+    Intrinsic2(Intrinsic2, Box<Expression>, Box<Expression>),
+    Intrinsic3(Intrinsic3, Box<Expression>, Box<Expression>, Box<Expression>),
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -912,12 +927,6 @@ pub enum TypeError {
     ArrayIndexMustBeUsedOnArrayType(TypeLayout),
 
     InvalidType(Type),
-
-    WrongObjectForBufferLoad(TypeLayout),
-    WrongObjectForRWBufferLoad(TypeLayout),
-    WrongObjectForStructuredBufferLoad(TypeLayout),
-    WrongObjectForRWStructuredBufferLoad(TypeLayout),
-    WrongObjectForRWTexture2DLoad(TypeLayout),
 }
 
 impl error::Error for TypeError {
@@ -940,18 +949,6 @@ impl error::Error for TypeError {
             TypeError::ArrayIndexMustBeUsedOnArrayType(_) => "array index used on non-array type",
 
             TypeError::InvalidType(_) => "invalid type in an intrinsic function",
-
-            TypeError::WrongObjectForBufferLoad(_) => "Buffer::Load must be called on a buffer",
-            TypeError::WrongObjectForRWBufferLoad(_) => "RWBuffer::Load must be called on a buffer",
-            TypeError::WrongObjectForStructuredBufferLoad(_) => {
-                "StructuredBuffer::Load must be called on a buffer"
-            }
-            TypeError::WrongObjectForRWStructuredBufferLoad(_) => {
-                "RWStructuredBuffer::Load must be called on a buffer"
-            }
-            TypeError::WrongObjectForRWTexture2DLoad(_) => {
-                "RWTexture2DLoad::Load must be called on a buffer"
-            }
         }
     }
 }
@@ -1310,189 +1307,171 @@ impl TypeParser {
                 Ok(Type::from_layout(TypeLayout::from_data(dtyl.clone())).to_rvalue())
             }
             Expression::Cast(ref ty, _) => Ok(ty.to_rvalue()),
-            Expression::Intrinsic(ref intrinsic) => {
-                TypeParser::get_intrinsic_type(intrinsic, context)
+            Expression::Intrinsic0(ref intrinsic) => TypeParser::get_intrinsic0_type(intrinsic),
+            Expression::Intrinsic1(ref intrinsic, _) => TypeParser::get_intrinsic1_type(intrinsic),
+            Expression::Intrinsic2(ref intrinsic, _, _) => {
+                TypeParser::get_intrinsic2_type(intrinsic)
+            }
+            Expression::Intrinsic3(ref intrinsic, _, _, _) => {
+                TypeParser::get_intrinsic3_type(intrinsic)
             }
         }
     }
 
-    fn get_intrinsic_type(intrinsic: &Intrinsic,
-                          context: &TypeContext)
-                          -> Result<ExpressionType, TypeError> {
+    pub fn get_intrinsic0_type(intrinsic: &Intrinsic0) -> Result<ExpressionType, TypeError> {
         Ok(match *intrinsic {
-            Intrinsic::PrefixIncrement(ref ty, _) => ty.to_lvalue(),
-            Intrinsic::PrefixDecrement(ref ty, _) => ty.to_lvalue(),
-            Intrinsic::PostfixIncrement(ref ty, _) => ty.to_lvalue(),
-            Intrinsic::PostfixDecrement(ref ty, _) => ty.to_lvalue(),
-            Intrinsic::Plus(ref ty, _) => ty.to_rvalue(),
-            Intrinsic::Minus(ref ty, _) => ty.to_rvalue(),
-            Intrinsic::LogicalNot(ref ty, _) => {
+            Intrinsic0::AllMemoryBarrier => Type::void().to_rvalue(),
+            Intrinsic0::AllMemoryBarrierWithGroupSync => Type::void().to_rvalue(),
+            Intrinsic0::DeviceMemoryBarrier => Type::void().to_rvalue(),
+            Intrinsic0::DeviceMemoryBarrierWithGroupSync => Type::void().to_rvalue(),
+            Intrinsic0::GroupMemoryBarrier => Type::void().to_rvalue(),
+            Intrinsic0::GroupMemoryBarrierWithGroupSync => Type::void().to_rvalue(),
+        })
+    }
+
+    pub fn get_intrinsic1_type(intrinsic: &Intrinsic1) -> Result<ExpressionType, TypeError> {
+        Ok(match *intrinsic {
+            Intrinsic1::PrefixIncrement(ref ty) => ty.to_lvalue(),
+            Intrinsic1::PrefixDecrement(ref ty) => ty.to_lvalue(),
+            Intrinsic1::PostfixIncrement(ref ty) => ty.to_lvalue(),
+            Intrinsic1::PostfixDecrement(ref ty) => ty.to_lvalue(),
+            Intrinsic1::Plus(ref ty) => ty.to_rvalue(),
+            Intrinsic1::Minus(ref ty) => ty.to_rvalue(),
+            Intrinsic1::LogicalNot(ref ty) => {
                 match ty.0 {
                     TypeLayout::Scalar(_) => Type::bool().to_rvalue(),
                     TypeLayout::Vector(_, x) => Type::booln(x).to_rvalue(),
                     _ => return Err(TypeError::InvalidType(ty.clone())),
                 }
             }
-            Intrinsic::BitwiseNot(ref ty, _) => ty.to_rvalue(),
-            Intrinsic::AllMemoryBarrier => Type::void().to_rvalue(),
-            Intrinsic::AllMemoryBarrierWithGroupSync => Type::void().to_rvalue(),
-            Intrinsic::DeviceMemoryBarrier => Type::void().to_rvalue(),
-            Intrinsic::DeviceMemoryBarrierWithGroupSync => Type::void().to_rvalue(),
-            Intrinsic::GroupMemoryBarrier => Type::void().to_rvalue(),
-            Intrinsic::GroupMemoryBarrierWithGroupSync => Type::void().to_rvalue(),
-            Intrinsic::AsIntU(_) => Type::int().to_rvalue(),
-            Intrinsic::AsIntU2(_) => Type::intn(2).to_rvalue(),
-            Intrinsic::AsIntU3(_) => Type::intn(3).to_rvalue(),
-            Intrinsic::AsIntU4(_) => Type::intn(4).to_rvalue(),
-            Intrinsic::AsIntF(_) => Type::int().to_rvalue(),
-            Intrinsic::AsIntF2(_) => Type::intn(2).to_rvalue(),
-            Intrinsic::AsIntF3(_) => Type::intn(3).to_rvalue(),
-            Intrinsic::AsIntF4(_) => Type::intn(4).to_rvalue(),
-            Intrinsic::AsUIntI(_) => Type::uint().to_rvalue(),
-            Intrinsic::AsUIntI2(_) => Type::uintn(2).to_rvalue(),
-            Intrinsic::AsUIntI3(_) => Type::uintn(3).to_rvalue(),
-            Intrinsic::AsUIntI4(_) => Type::uintn(4).to_rvalue(),
-            Intrinsic::AsUIntF(_) => Type::uint().to_rvalue(),
-            Intrinsic::AsUIntF2(_) => Type::uintn(2).to_rvalue(),
-            Intrinsic::AsUIntF3(_) => Type::uintn(3).to_rvalue(),
-            Intrinsic::AsUIntF4(_) => Type::uintn(4).to_rvalue(),
-            Intrinsic::AsFloatI(_) => Type::float().to_rvalue(),
-            Intrinsic::AsFloatI2(_) => Type::floatn(2).to_rvalue(),
-            Intrinsic::AsFloatI3(_) => Type::floatn(3).to_rvalue(),
-            Intrinsic::AsFloatI4(_) => Type::floatn(4).to_rvalue(),
-            Intrinsic::AsFloatU(_) => Type::float().to_rvalue(),
-            Intrinsic::AsFloatU2(_) => Type::floatn(2).to_rvalue(),
-            Intrinsic::AsFloatU3(_) => Type::floatn(3).to_rvalue(),
-            Intrinsic::AsFloatU4(_) => Type::floatn(4).to_rvalue(),
-            Intrinsic::AsFloatF(_) => Type::float().to_rvalue(),
-            Intrinsic::AsFloatF2(_) => Type::floatn(2).to_rvalue(),
-            Intrinsic::AsFloatF3(_) => Type::floatn(3).to_rvalue(),
-            Intrinsic::AsFloatF4(_) => Type::floatn(4).to_rvalue(),
-            Intrinsic::AsDouble(_, _) => Type::double().to_rvalue(),
-            Intrinsic::ClampI(_, _, _) => Type::int().to_rvalue(),
-            Intrinsic::ClampI2(_, _, _) => Type::intn(2).to_rvalue(),
-            Intrinsic::ClampI3(_, _, _) => Type::intn(3).to_rvalue(),
-            Intrinsic::ClampI4(_, _, _) => Type::intn(4).to_rvalue(),
-            Intrinsic::ClampF(_, _, _) => Type::float().to_rvalue(),
-            Intrinsic::ClampF2(_, _, _) => Type::floatn(2).to_rvalue(),
-            Intrinsic::ClampF3(_, _, _) => Type::floatn(3).to_rvalue(),
-            Intrinsic::ClampF4(_, _, _) => Type::floatn(4).to_rvalue(),
-            Intrinsic::Cross(_, _) => Type::floatn(3).to_rvalue(),
-            Intrinsic::Distance1(_, _) => Type::float().to_rvalue(),
-            Intrinsic::Distance2(_, _) => Type::float().to_rvalue(),
-            Intrinsic::Distance3(_, _) => Type::float().to_rvalue(),
-            Intrinsic::Distance4(_, _) => Type::float().to_rvalue(),
-            Intrinsic::DotI1(_, _) => Type::int().to_rvalue(),
-            Intrinsic::DotI2(_, _) => Type::int().to_rvalue(),
-            Intrinsic::DotI3(_, _) => Type::int().to_rvalue(),
-            Intrinsic::DotI4(_, _) => Type::int().to_rvalue(),
-            Intrinsic::DotF1(_, _) => Type::float().to_rvalue(),
-            Intrinsic::DotF2(_, _) => Type::float().to_rvalue(),
-            Intrinsic::DotF3(_, _) => Type::float().to_rvalue(),
-            Intrinsic::DotF4(_, _) => Type::float().to_rvalue(),
-            Intrinsic::F16ToF32(_) => Type::float().to_rvalue(),
-            Intrinsic::F32ToF16(_) => Type::uint().to_rvalue(),
-            Intrinsic::Floor(_) => Type::float().to_rvalue(),
-            Intrinsic::Floor2(_) => Type::floatn(2).to_rvalue(),
-            Intrinsic::Floor3(_) => Type::floatn(3).to_rvalue(),
-            Intrinsic::Floor4(_) => Type::floatn(4).to_rvalue(),
-            Intrinsic::IsNaN(_) => Type::bool().to_rvalue(),
-            Intrinsic::IsNaN2(_) => Type::booln(2).to_rvalue(),
-            Intrinsic::IsNaN3(_) => Type::booln(3).to_rvalue(),
-            Intrinsic::IsNaN4(_) => Type::booln(4).to_rvalue(),
-            Intrinsic::Length1(_) => Type::float().to_rvalue(),
-            Intrinsic::Length2(_) => Type::float().to_rvalue(),
-            Intrinsic::Length3(_) => Type::float().to_rvalue(),
-            Intrinsic::Length4(_) => Type::float().to_rvalue(),
-            Intrinsic::MinI(_, _) => Type::int().to_rvalue(),
-            Intrinsic::MinI2(_, _) => Type::intn(2).to_rvalue(),
-            Intrinsic::MinI3(_, _) => Type::intn(3).to_rvalue(),
-            Intrinsic::MinI4(_, _) => Type::intn(4).to_rvalue(),
-            Intrinsic::MinF(_, _) => Type::float().to_rvalue(),
-            Intrinsic::MinF2(_, _) => Type::floatn(2).to_rvalue(),
-            Intrinsic::MinF3(_, _) => Type::floatn(3).to_rvalue(),
-            Intrinsic::MinF4(_, _) => Type::floatn(4).to_rvalue(),
-            Intrinsic::MaxI(_, _) => Type::int().to_rvalue(),
-            Intrinsic::MaxI2(_, _) => Type::intn(2).to_rvalue(),
-            Intrinsic::MaxI3(_, _) => Type::intn(3).to_rvalue(),
-            Intrinsic::MaxI4(_, _) => Type::intn(4).to_rvalue(),
-            Intrinsic::MaxF(_, _) => Type::float().to_rvalue(),
-            Intrinsic::MaxF2(_, _) => Type::floatn(2).to_rvalue(),
-            Intrinsic::MaxF3(_, _) => Type::floatn(3).to_rvalue(),
-            Intrinsic::MaxF4(_, _) => Type::floatn(4).to_rvalue(),
-            Intrinsic::Normalize1(_) => Type::floatn(1).to_rvalue(),
-            Intrinsic::Normalize2(_) => Type::floatn(2).to_rvalue(),
-            Intrinsic::Normalize3(_) => Type::floatn(3).to_rvalue(),
-            Intrinsic::Normalize4(_) => Type::floatn(4).to_rvalue(),
-            Intrinsic::SignI(_) => Type::int().to_rvalue(),
-            Intrinsic::SignI2(_) => Type::intn(1).to_rvalue(),
-            Intrinsic::SignI3(_) => Type::intn(2).to_rvalue(),
-            Intrinsic::SignI4(_) => Type::intn(3).to_rvalue(),
-            Intrinsic::SignF(_) => Type::int().to_rvalue(),
-            Intrinsic::SignF2(_) => Type::intn(1).to_rvalue(),
-            Intrinsic::SignF3(_) => Type::intn(2).to_rvalue(),
-            Intrinsic::SignF4(_) => Type::intn(3).to_rvalue(),
-            Intrinsic::Sqrt(_) => Type::float().to_rvalue(),
-            Intrinsic::Sqrt2(_) => Type::floatn(2).to_rvalue(),
-            Intrinsic::Sqrt3(_) => Type::floatn(3).to_rvalue(),
-            Intrinsic::Sqrt4(_) => Type::floatn(4).to_rvalue(),
-            Intrinsic::BufferLoad(ref buffer, _) => {
-                let buffer_ety = try!(TypeParser::get_expression_type(buffer, context));
-                match (buffer_ety.0).0 {
-                    TypeLayout::Object(ObjectType::Buffer(data_type)) => {
-                        Type::from_data(data_type).to_rvalue()
-                    }
-                    tyl => return Err(TypeError::WrongObjectForBufferLoad(tyl)),
-                }
+            Intrinsic1::BitwiseNot(ref ty) => ty.to_rvalue(),
+            Intrinsic1::AsIntU => Type::int().to_rvalue(),
+            Intrinsic1::AsIntU2 => Type::intn(2).to_rvalue(),
+            Intrinsic1::AsIntU3 => Type::intn(3).to_rvalue(),
+            Intrinsic1::AsIntU4 => Type::intn(4).to_rvalue(),
+            Intrinsic1::AsIntF => Type::int().to_rvalue(),
+            Intrinsic1::AsIntF2 => Type::intn(2).to_rvalue(),
+            Intrinsic1::AsIntF3 => Type::intn(3).to_rvalue(),
+            Intrinsic1::AsIntF4 => Type::intn(4).to_rvalue(),
+            Intrinsic1::AsUIntI => Type::uint().to_rvalue(),
+            Intrinsic1::AsUIntI2 => Type::uintn(2).to_rvalue(),
+            Intrinsic1::AsUIntI3 => Type::uintn(3).to_rvalue(),
+            Intrinsic1::AsUIntI4 => Type::uintn(4).to_rvalue(),
+            Intrinsic1::AsUIntF => Type::uint().to_rvalue(),
+            Intrinsic1::AsUIntF2 => Type::uintn(2).to_rvalue(),
+            Intrinsic1::AsUIntF3 => Type::uintn(3).to_rvalue(),
+            Intrinsic1::AsUIntF4 => Type::uintn(4).to_rvalue(),
+            Intrinsic1::AsFloatI => Type::float().to_rvalue(),
+            Intrinsic1::AsFloatI2 => Type::floatn(2).to_rvalue(),
+            Intrinsic1::AsFloatI3 => Type::floatn(3).to_rvalue(),
+            Intrinsic1::AsFloatI4 => Type::floatn(4).to_rvalue(),
+            Intrinsic1::AsFloatU => Type::float().to_rvalue(),
+            Intrinsic1::AsFloatU2 => Type::floatn(2).to_rvalue(),
+            Intrinsic1::AsFloatU3 => Type::floatn(3).to_rvalue(),
+            Intrinsic1::AsFloatU4 => Type::floatn(4).to_rvalue(),
+            Intrinsic1::AsFloatF => Type::float().to_rvalue(),
+            Intrinsic1::AsFloatF2 => Type::floatn(2).to_rvalue(),
+            Intrinsic1::AsFloatF3 => Type::floatn(3).to_rvalue(),
+            Intrinsic1::AsFloatF4 => Type::floatn(4).to_rvalue(),
+            Intrinsic1::F16ToF32 => Type::float().to_rvalue(),
+            Intrinsic1::F32ToF16 => Type::uint().to_rvalue(),
+            Intrinsic1::Floor => Type::float().to_rvalue(),
+            Intrinsic1::Floor2 => Type::floatn(2).to_rvalue(),
+            Intrinsic1::Floor3 => Type::floatn(3).to_rvalue(),
+            Intrinsic1::Floor4 => Type::floatn(4).to_rvalue(),
+            Intrinsic1::IsNaN => Type::bool().to_rvalue(),
+            Intrinsic1::IsNaN2 => Type::booln(2).to_rvalue(),
+            Intrinsic1::IsNaN3 => Type::booln(3).to_rvalue(),
+            Intrinsic1::IsNaN4 => Type::booln(4).to_rvalue(),
+            Intrinsic1::Length1 => Type::float().to_rvalue(),
+            Intrinsic1::Length2 => Type::float().to_rvalue(),
+            Intrinsic1::Length3 => Type::float().to_rvalue(),
+            Intrinsic1::Length4 => Type::float().to_rvalue(),
+            Intrinsic1::Normalize1 => Type::floatn(1).to_rvalue(),
+            Intrinsic1::Normalize2 => Type::floatn(2).to_rvalue(),
+            Intrinsic1::Normalize3 => Type::floatn(3).to_rvalue(),
+            Intrinsic1::Normalize4 => Type::floatn(4).to_rvalue(),
+            Intrinsic1::SignI => Type::int().to_rvalue(),
+            Intrinsic1::SignI2 => Type::intn(1).to_rvalue(),
+            Intrinsic1::SignI3 => Type::intn(2).to_rvalue(),
+            Intrinsic1::SignI4 => Type::intn(3).to_rvalue(),
+            Intrinsic1::SignF => Type::int().to_rvalue(),
+            Intrinsic1::SignF2 => Type::intn(1).to_rvalue(),
+            Intrinsic1::SignF3 => Type::intn(2).to_rvalue(),
+            Intrinsic1::SignF4 => Type::intn(3).to_rvalue(),
+            Intrinsic1::Sqrt => Type::float().to_rvalue(),
+            Intrinsic1::Sqrt2 => Type::floatn(2).to_rvalue(),
+            Intrinsic1::Sqrt3 => Type::floatn(3).to_rvalue(),
+            Intrinsic1::Sqrt4 => Type::floatn(4).to_rvalue(),
+        })
+    }
+
+    pub fn get_intrinsic2_type(intrinsic: &Intrinsic2) -> Result<ExpressionType, TypeError> {
+        Ok(match *intrinsic {
+            Intrinsic2::AsDouble => Type::double().to_rvalue(),
+            Intrinsic2::Cross => Type::floatn(3).to_rvalue(),
+            Intrinsic2::Distance1 => Type::float().to_rvalue(),
+            Intrinsic2::Distance2 => Type::float().to_rvalue(),
+            Intrinsic2::Distance3 => Type::float().to_rvalue(),
+            Intrinsic2::Distance4 => Type::float().to_rvalue(),
+            Intrinsic2::DotI1 => Type::int().to_rvalue(),
+            Intrinsic2::DotI2 => Type::int().to_rvalue(),
+            Intrinsic2::DotI3 => Type::int().to_rvalue(),
+            Intrinsic2::DotI4 => Type::int().to_rvalue(),
+            Intrinsic2::DotF1 => Type::float().to_rvalue(),
+            Intrinsic2::DotF2 => Type::float().to_rvalue(),
+            Intrinsic2::DotF3 => Type::float().to_rvalue(),
+            Intrinsic2::DotF4 => Type::float().to_rvalue(),
+            Intrinsic2::MinI => Type::int().to_rvalue(),
+            Intrinsic2::MinI2 => Type::intn(2).to_rvalue(),
+            Intrinsic2::MinI3 => Type::intn(3).to_rvalue(),
+            Intrinsic2::MinI4 => Type::intn(4).to_rvalue(),
+            Intrinsic2::MinF => Type::float().to_rvalue(),
+            Intrinsic2::MinF2 => Type::floatn(2).to_rvalue(),
+            Intrinsic2::MinF3 => Type::floatn(3).to_rvalue(),
+            Intrinsic2::MinF4 => Type::floatn(4).to_rvalue(),
+            Intrinsic2::MaxI => Type::int().to_rvalue(),
+            Intrinsic2::MaxI2 => Type::intn(2).to_rvalue(),
+            Intrinsic2::MaxI3 => Type::intn(3).to_rvalue(),
+            Intrinsic2::MaxI4 => Type::intn(4).to_rvalue(),
+            Intrinsic2::MaxF => Type::float().to_rvalue(),
+            Intrinsic2::MaxF2 => Type::floatn(2).to_rvalue(),
+            Intrinsic2::MaxF3 => Type::floatn(3).to_rvalue(),
+            Intrinsic2::MaxF4 => Type::floatn(4).to_rvalue(),
+            Intrinsic2::BufferLoad(ref dty) => Type::from_data(dty.clone()).to_rvalue(),
+            Intrinsic2::RWBufferLoad(ref dty) => Type::from_data(dty.clone()).to_rvalue(),
+            Intrinsic2::StructuredBufferLoad(ref sty) => {
+                Type::from_structured(sty.clone()).to_rvalue()
             }
-            Intrinsic::RWBufferLoad(ref buffer, _) => {
-                let buffer_ety = try!(TypeParser::get_expression_type(buffer, context));
-                match (buffer_ety.0).0 {
-                    TypeLayout::Object(ObjectType::RWBuffer(data_type)) => {
-                        Type::from_data(data_type).to_rvalue()
-                    }
-                    tyl => return Err(TypeError::WrongObjectForRWBufferLoad(tyl)),
-                }
+            Intrinsic2::RWStructuredBufferLoad(ref sty) => {
+                Type::from_structured(sty.clone()).to_rvalue()
             }
-            Intrinsic::StructuredBufferLoad(ref buffer, _) => {
-                let buffer_ety = try!(TypeParser::get_expression_type(buffer, context));
-                match (buffer_ety.0).0 {
-                    TypeLayout::Object(ObjectType::StructuredBuffer(structured_type)) => {
-                        Type::from_structured(structured_type).to_rvalue()
-                    }
-                    tyl => return Err(TypeError::WrongObjectForStructuredBufferLoad(tyl)),
-                }
-            }
-            Intrinsic::RWStructuredBufferLoad(ref buffer, _) => {
-                let buffer_ety = try!(TypeParser::get_expression_type(buffer, context));
-                match (buffer_ety.0).0 {
-                    TypeLayout::Object(ObjectType::RWStructuredBuffer(structured_type)) => {
-                        Type::from_structured(structured_type).to_rvalue()
-                    }
-                    tyl => return Err(TypeError::WrongObjectForRWStructuredBufferLoad(tyl)),
-                }
-            }
-            Intrinsic::RWTexture2DLoad(ref texture, _) => {
-                let texture_ety = try!(TypeParser::get_expression_type(texture, context));
-                match (texture_ety.0).0 {
-                    TypeLayout::Object(ObjectType::RWTexture2D(data_type)) => {
-                        Type::from_data(data_type).to_rvalue()
-                    }
-                    tyl => return Err(TypeError::WrongObjectForRWTexture2DLoad(tyl)),
-                }
-            }
-            Intrinsic::ByteAddressBufferLoad(_, _) => Type::uint().to_rvalue(),
-            Intrinsic::ByteAddressBufferLoad2(_, _) => Type::uintn(2).to_rvalue(),
-            Intrinsic::ByteAddressBufferLoad3(_, _) => Type::uintn(3).to_rvalue(),
-            Intrinsic::ByteAddressBufferLoad4(_, _) => Type::uintn(4).to_rvalue(),
-            Intrinsic::RWByteAddressBufferLoad(_, _) => Type::uint().to_rvalue(),
-            Intrinsic::RWByteAddressBufferLoad2(_, _) => Type::uintn(2).to_rvalue(),
-            Intrinsic::RWByteAddressBufferLoad3(_, _) => Type::uintn(3).to_rvalue(),
-            Intrinsic::RWByteAddressBufferLoad4(_, _) => Type::uintn(4).to_rvalue(),
-            Intrinsic::RWByteAddressBufferStore(_, _, _) => Type::void().to_rvalue(),
-            Intrinsic::RWByteAddressBufferStore2(_, _, _) => Type::void().to_rvalue(),
-            Intrinsic::RWByteAddressBufferStore3(_, _, _) => Type::void().to_rvalue(),
-            Intrinsic::RWByteAddressBufferStore4(_, _, _) => Type::void().to_rvalue(),
+            Intrinsic2::RWTexture2DLoad(ref dty) => Type::from_data(dty.clone()).to_rvalue(),
+            Intrinsic2::ByteAddressBufferLoad => Type::uint().to_rvalue(),
+            Intrinsic2::ByteAddressBufferLoad2 => Type::uintn(2).to_rvalue(),
+            Intrinsic2::ByteAddressBufferLoad3 => Type::uintn(3).to_rvalue(),
+            Intrinsic2::ByteAddressBufferLoad4 => Type::uintn(4).to_rvalue(),
+            Intrinsic2::RWByteAddressBufferLoad => Type::uint().to_rvalue(),
+            Intrinsic2::RWByteAddressBufferLoad2 => Type::uintn(2).to_rvalue(),
+            Intrinsic2::RWByteAddressBufferLoad3 => Type::uintn(3).to_rvalue(),
+            Intrinsic2::RWByteAddressBufferLoad4 => Type::uintn(4).to_rvalue(),
+        })
+    }
+
+    pub fn get_intrinsic3_type(intrinsic: &Intrinsic3) -> Result<ExpressionType, TypeError> {
+        Ok(match *intrinsic {
+            Intrinsic3::ClampI => Type::int().to_rvalue(),
+            Intrinsic3::ClampI2 => Type::intn(2).to_rvalue(),
+            Intrinsic3::ClampI3 => Type::intn(3).to_rvalue(),
+            Intrinsic3::ClampI4 => Type::intn(4).to_rvalue(),
+            Intrinsic3::ClampF => Type::float().to_rvalue(),
+            Intrinsic3::ClampF2 => Type::floatn(2).to_rvalue(),
+            Intrinsic3::ClampF3 => Type::floatn(3).to_rvalue(),
+            Intrinsic3::ClampF4 => Type::floatn(4).to_rvalue(),
+            Intrinsic3::RWByteAddressBufferStore => Type::void().to_rvalue(),
+            Intrinsic3::RWByteAddressBufferStore2 => Type::void().to_rvalue(),
+            Intrinsic3::RWByteAddressBufferStore3 => Type::void().to_rvalue(),
+            Intrinsic3::RWByteAddressBufferStore4 => Type::void().to_rvalue(),
         })
     }
 }
