@@ -530,6 +530,8 @@ named!(token_no_whitespace_words<Token>, alt!(
     reserved_word_for => { |_| { Token::For } } |
     reserved_word_while => { |_| { Token::While } } |
     reserved_word_switch => { |_| { Token::Switch } } |
+    reserved_word_case => { |_| { Token::Case } } |
+    reserved_word_default => { |_| { Token::Default } } |
     reserved_word_return => { |_| { Token::Return } } |
 
     reserved_word_struct => { |_| { Token::Struct } } |
