@@ -109,12 +109,27 @@ struct LineMap {
 
 impl LineMap {
     fn get_file_location(&self, stream_location: &StreamLocation) -> Result<FileLocation, ()> {
-        let mut last_line = None;
-        for (line_index, &(ref line_stream, _)) in self.lines.iter().enumerate() {
-            if line_stream.0 <= stream_location.0 {
-                last_line = Some(line_index);
+        let mut lower = 0;
+        let mut upper = self.lines.len();
+        while lower < upper - 1 {
+            let next_index = (lower + upper) / 2;
+            assert!(next_index > lower);
+            assert!(next_index <= upper);
+
+            let &(ref line_stream, _) = &self.lines[next_index];
+            let matches = line_stream.0 <= stream_location.0;
+
+            if matches {
+                lower = next_index;
+            } else {
+                upper = next_index;
             }
         }
+        let last_line = if lower == self.lines.len() {
+            None
+        } else {
+            Some(lower)
+        };
         match last_line {
             Some(index) => {
                 let (ref line_stream, ref line_file) = self.lines[index];
