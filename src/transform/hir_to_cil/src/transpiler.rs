@@ -1534,24 +1534,48 @@ fn transpile_params(params: &[src::FunctionParam],
 }
 
 fn transpile_kernel_input_semantic(param: &src::KernelParam,
+                                   group_dim: &dst::Dimension,
                                    context: &mut Context)
                                    -> Result<dst::Statement, TranspileError> {
     let typename = try!(transpile_type(&param.1.get_type(), context));
+    fn lit(i: u64) -> Box<dst::Expression> {
+        Box::new(dst::Expression::Literal(dst::Literal::UInt(i)))
+    }
     let assign = match param.1 {
         src::KernelSemantic::DispatchThreadId => {
-            let x = dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(Box::new(dst::Expression::Literal(dst::Literal::UInt(0)))));
-            let y = dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(Box::new(dst::Expression::Literal(dst::Literal::UInt(1)))));
-            let z = dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(Box::new(dst::Expression::Literal(dst::Literal::UInt(2)))));
+            let x = dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(lit(0)));
+            let y = dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(lit(1)));
+            let z = dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(lit(2)));
             let sty = dst::Scalar::UInt;
             let dim = dst::NumericDimension::Vector(dst::VectorDimension::Three);
             dst::Expression::NumericConstructor(sty, dim, vec![x, y, z])
         }
-        src::KernelSemantic::GroupId => unimplemented!(),
-        src::KernelSemantic::GroupIndex => unimplemented!(),
+        src::KernelSemantic::GroupId => {
+            let x_g = Box::new(dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(lit(0))));
+            let y_g = Box::new(dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(lit(1))));
+            let z_g = Box::new(dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(lit(2))));
+            let x = dst::Expression::BinaryOperation(dst::BinOp::Divide, x_g, lit(group_dim.0));
+            let y = dst::Expression::BinaryOperation(dst::BinOp::Divide, y_g, lit(group_dim.1));
+            let z = dst::Expression::BinaryOperation(dst::BinOp::Divide, z_g, lit(group_dim.2));
+            let sty = dst::Scalar::UInt;
+            let dim = dst::NumericDimension::Vector(dst::VectorDimension::Three);
+            dst::Expression::NumericConstructor(sty, dim, vec![x, y, z])
+        }
+        src::KernelSemantic::GroupIndex => {
+            let x = dst::Expression::Intrinsic(dst::Intrinsic::GetLocalId(lit(0)));
+            let yt = dst::Expression::Intrinsic(dst::Intrinsic::GetLocalId(lit(1)));
+            let zt = dst::Expression::Intrinsic(dst::Intrinsic::GetLocalId(lit(2)));
+            let dim_x = lit(group_dim.0);
+            let dim_xy = lit(group_dim.0 * group_dim.1);
+            let y = dst::Expression::BinaryOperation(dst::BinOp::Multiply, Box::new(yt), dim_x);
+            let z = dst::Expression::BinaryOperation(dst::BinOp::Multiply, Box::new(zt), dim_xy);
+            let y_z = dst::Expression::BinaryOperation(dst::BinOp::Add, Box::new(y), Box::new(z));
+            dst::Expression::BinaryOperation(dst::BinOp::Add, Box::new(x), Box::new(y_z))
+        }
         src::KernelSemantic::GroupThreadId => {
-            let x = dst::Expression::Intrinsic(dst::Intrinsic::GetLocalId(Box::new(dst::Expression::Literal(dst::Literal::UInt(0)))));
-            let y = dst::Expression::Intrinsic(dst::Intrinsic::GetLocalId(Box::new(dst::Expression::Literal(dst::Literal::UInt(1)))));
-            let z = dst::Expression::Intrinsic(dst::Intrinsic::GetLocalId(Box::new(dst::Expression::Literal(dst::Literal::UInt(2)))));
+            let x = dst::Expression::Intrinsic(dst::Intrinsic::GetLocalId(lit(0)));
+            let y = dst::Expression::Intrinsic(dst::Intrinsic::GetLocalId(lit(1)));
+            let z = dst::Expression::Intrinsic(dst::Intrinsic::GetLocalId(lit(2)));
             let sty = dst::Scalar::UInt;
             let dim = dst::NumericDimension::Vector(dst::VectorDimension::Three);
             dst::Expression::NumericConstructor(sty, dim, vec![x, y, z])
@@ -1565,11 +1589,12 @@ fn transpile_kernel_input_semantic(param: &src::KernelParam,
 }
 
 fn transpile_kernel_input_semantics(params: &[src::KernelParam],
+                                    group_dim: &dst::Dimension,
                                     context: &mut Context)
                                     -> Result<Vec<dst::Statement>, TranspileError> {
     let mut cl_params = vec![];
     for param in params {
-        cl_params.push(try!(transpile_kernel_input_semantic(param, context)));
+        cl_params.push(try!(transpile_kernel_input_semantic(param, group_dim, context)));
     }
     Ok(cl_params)
 }
@@ -1712,16 +1737,17 @@ fn transpile_kernel(kernel: &src::Kernel,
             }
         });
     }
-    let mut body = try!(transpile_kernel_input_semantics(&kernel.params, context));
+    let group_dim = dst::Dimension(kernel.group_dimensions.0,
+                                   kernel.group_dimensions.1,
+                                   kernel.group_dimensions.2);
+    let mut body = try!(transpile_kernel_input_semantics(&kernel.params, &group_dim, context));
     let mut main_body = try!(transpile_statements(&kernel.scope_block.0, context));
     let decls = context.pop_scope_for_function();
     body.append(&mut main_body);
     let cl_kernel = dst::Kernel {
         params: params,
         body: body,
-        group_dimensions: dst::Dimension(kernel.group_dimensions.0,
-                                         kernel.group_dimensions.1,
-                                         kernel.group_dimensions.2),
+        group_dimensions: group_dim,
         local_declarations: decls,
     };
     Ok(dst::RootDefinition::Kernel(cl_kernel))
