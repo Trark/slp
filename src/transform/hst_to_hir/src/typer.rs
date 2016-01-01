@@ -42,7 +42,7 @@ pub enum TyperError {
     NumericConstructorWrongArgumentCount,
 
     UnaryOperationWrongTypes(ast::UnaryOp, ErrorType),
-    BinaryOperationWrongTypes(ir::BinOp, ErrorType, ErrorType),
+    BinaryOperationWrongTypes(ast::BinOp, ErrorType, ErrorType),
     BinaryOperationNonNumericType,
     TernaryConditionRequiresBoolean(ErrorType),
     TernaryArmsMustHaveSameType(ErrorType, ErrorType),
@@ -1634,11 +1634,11 @@ fn parse_expr_unaryop(op: &ast::UnaryOp,
 }
 
 fn resolve_arithmetic_types
-    (binop: &ir::BinOp,
+    (binop: &ast::BinOp,
      left: &ExpressionType,
      right: &ExpressionType,
      context: &ExpressionContext)
-     -> Result<(ImplicitConversion, ImplicitConversion, ExpressionType), TyperError> {
+     -> Result<(ImplicitConversion, ImplicitConversion, ir::Intrinsic2), TyperError> {
     use slp_lang_hir::Type;
     use slp_lang_hir::ScalarType;
 
@@ -1678,15 +1678,100 @@ fn resolve_arithmetic_types
     }
 
     // Calculate the output type from the input type and operation
-    fn output_type(left: Type, right: Type, op: &ir::BinOp) -> ExpressionType {
-        // Actually implement this by using the hir's type parser
-        ir::TypeParser::get_binary_operation_output_type(left, right, op)
+    fn output_type(left: Type, right: Type, op: &ast::BinOp) -> ir::Intrinsic2 {
+
+        // Assert input validity
+        {
+            let ls = left.0.to_scalar().expect("non-numeric type in binary operation (lhs)");
+            let rs = right.0.to_scalar().expect("non-numeric type in binary operation (rhs)");;
+            match *op {
+                ast::BinOp::LeftShift |
+                ast::BinOp::RightShift |
+                ast::BinOp::BitwiseAnd |
+                ast::BinOp::BitwiseOr |
+                ast::BinOp::BitwiseXor => {
+                    assert!(ls == ScalarType::Int || ls == ScalarType::UInt,
+                            "hir: non-integer source in bitwise op (lhs)");
+                    assert!(rs == ScalarType::Int || rs == ScalarType::UInt,
+                            "hir: non-integer source in bitwise op (rhs)");
+                }
+                ast::BinOp::BooleanAnd |
+                ast::BinOp::BooleanOr => {
+                    assert!(ls == ScalarType::Bool,
+                            "hir: non-boolean source in boolean op (lhs)");
+                    assert!(rs == ScalarType::Bool,
+                            "hir: non-boolean source in boolean op (rhs)");
+                }
+                _ => {}
+            }
+        }
+
+        // Get the more important input type, that serves as the base to
+        // calculate the output type from
+        let dty = match (&left.0, &right.0) {
+            (&ir::TypeLayout::Scalar(ref ls),
+             &ir::TypeLayout::Scalar(ref rs)) => {
+                assert_eq!(ls, rs);
+                let layout = ir::DataLayout::Scalar(ls.clone());
+                ir::DataType(layout, left.1.clone())
+            }
+            (&ir::TypeLayout::Scalar(ref ls),
+             &ir::TypeLayout::Vector(ref rs, ref rx)) => {
+                assert_eq!(ls, rs);
+                let layout = ir::DataLayout::Vector(ls.clone(), *rx);
+                ir::DataType(layout, right.1.clone())
+            }
+            (&ir::TypeLayout::Vector(ref ls, ref lx),
+             &ir::TypeLayout::Scalar(ref rs)) => {
+                assert_eq!(ls, rs);
+                let layout = ir::DataLayout::Vector(ls.clone(), *lx);
+                ir::DataType(layout, left.1.clone())
+            }
+            (&ir::TypeLayout::Vector(ref ls, ref lx),
+             &ir::TypeLayout::Vector(ref rs, ref rx)) => {
+                assert_eq!(ls, rs);
+                assert_eq!(lx, rx);
+                let layout = ir::DataLayout::Vector(ls.clone(), *lx);
+                ir::DataType(layout, left.1.clone())
+            }
+            (&ir::TypeLayout::Matrix(ref ls, ref lx, ref ly),
+             &ir::TypeLayout::Matrix(ref rs, ref rx, ref ry)) => {
+                assert_eq!(ls, rs);
+                assert_eq!(lx, rx);
+                assert_eq!(ly, ry);
+                let layout = ir::DataLayout::Matrix(ls.clone(), *lx, *ly);
+                ir::DataType(layout, left.1.clone())
+            }
+            _ => panic!("non-arithmetic numeric type in binary operation"),
+        };
+
+        match *op {
+            ast::BinOp::Add => ir::Intrinsic2::Add(dty),
+            ast::BinOp::Subtract => ir::Intrinsic2::Subtract(dty),
+            ast::BinOp::Multiply => ir::Intrinsic2::Multiply(dty),
+            ast::BinOp::Divide => ir::Intrinsic2::Divide(dty),
+            ast::BinOp::Modulus => ir::Intrinsic2::Modulus(dty),
+            ast::BinOp::LeftShift => ir::Intrinsic2::LeftShift(dty),
+            ast::BinOp::RightShift => ir::Intrinsic2::RightShift(dty),
+            ast::BinOp::BitwiseAnd => ir::Intrinsic2::BitwiseAnd(dty),
+            ast::BinOp::BitwiseOr => ir::Intrinsic2::BitwiseOr(dty),
+            ast::BinOp::BitwiseXor => ir::Intrinsic2::BitwiseXor(dty),
+            ast::BinOp::LessThan => ir::Intrinsic2::LessThan(dty),
+            ast::BinOp::LessEqual => ir::Intrinsic2::LessEqual(dty),
+            ast::BinOp::GreaterThan => ir::Intrinsic2::GreaterThan(dty),
+            ast::BinOp::GreaterEqual => ir::Intrinsic2::GreaterEqual(dty),
+            ast::BinOp::Equality => ir::Intrinsic2::Equality(dty),
+            ast::BinOp::Inequality => ir::Intrinsic2::Inequality(dty),
+            ast::BinOp::BooleanAnd => ir::Intrinsic2::BooleanAnd(dty),
+            ast::BinOp::BooleanOr => ir::Intrinsic2::BooleanOr(dty),
+            _ => panic!("unexpected binop in resolve_arithmetic_types"),
+        }
     }
 
-    fn do_noerror(op: &ir::BinOp,
+    fn do_noerror(op: &ast::BinOp,
                   left: &ExpressionType,
                   right: &ExpressionType)
-                  -> Result<(ImplicitConversion, ImplicitConversion, ExpressionType), ()> {
+                  -> Result<(ImplicitConversion, ImplicitConversion, ir::Intrinsic2), ()> {
         let &ExpressionType(ir::Type(ref left_l, ref modl), _) = left;
         let &ExpressionType(ir::Type(ref right_l, ref modr), _) = right;
         let (ltl, rtl) = match (left_l, right_l) {
@@ -1764,13 +1849,14 @@ fn parse_expr_binop(op: &ast::BinOp,
     let rhs_texp = try!(parse_expr(rhs, context));
     let lhs_pt = context.typed_expression_to_error_type(&lhs_texp);
     let rhs_pt = context.typed_expression_to_error_type(&rhs_texp);
+    let err_bad_type = Err(TyperError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt));
     let (lhs_ir, lhs_type) = match lhs_texp {
         TypedExpression::Value(expr_ir, expr_ty) => (expr_ir, expr_ty),
-        _ => return Err(TyperError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt)),
+        _ => return err_bad_type,
     };
     let (rhs_ir, rhs_type) = match rhs_texp {
         TypedExpression::Value(expr_ir, expr_ty) => (expr_ir, expr_ty),
-        _ => return Err(TyperError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt)),
+        _ => return err_bad_type,
     };
     match *op {
         ast::BinOp::Add |
@@ -1796,14 +1882,15 @@ fn parse_expr_binop(op: &ast::BinOp,
                     sty == ir::ScalarType::UntypedInt
                 }
                 if !is_integer(&lhs_type) || !is_integer(&rhs_type) {
-                    return Err(TyperError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt));
+                    return err_bad_type;
                 }
             }
             let types = try!(resolve_arithmetic_types(op, &lhs_type, &rhs_type, context));
-            let (lhs_cast, rhs_cast, output_type) = types;
+            let (lhs_cast, rhs_cast, output_intrinsic) = types;
             let lhs_final = Box::new(lhs_cast.apply(lhs_ir));
             let rhs_final = Box::new(rhs_cast.apply(rhs_ir));
-            let node = ir::Expression::BinaryOperation(op.clone(), lhs_final, rhs_final);
+            let output_type = output_intrinsic.get_return_type();
+            let node = ir::Expression::Intrinsic2(output_intrinsic, lhs_final, rhs_final);
             Ok(TypedExpression::Value(node, output_type))
         }
         ast::BinOp::BitwiseAnd |
@@ -1827,11 +1914,7 @@ fn parse_expr_binop(op: &ast::BinOp,
                     (ir::ScalarType::Int, ir::ScalarType::UInt) => ir::ScalarType::UInt,
                     (ir::ScalarType::UInt, ir::ScalarType::Int) => ir::ScalarType::UInt,
                     (ir::ScalarType::UInt, ir::ScalarType::UInt) => ir::ScalarType::UInt,
-                    _ => {
-                        return Err(TyperError::BinaryOperationWrongTypes(op.clone(),
-                                                                         lhs_pt,
-                                                                         rhs_pt))
-                    }
+                    _ => return err_bad_type,
                 }
             };
             let x = ir::TypeLayout::max_dim(lhs_tyl.to_x(), rhs_tyl.to_x());
@@ -1846,23 +1929,30 @@ fn parse_expr_binop(op: &ast::BinOp,
             let ty = ir::Type(tyl, out_mod).to_rvalue();
             let lhs_cast = match ImplicitConversion::find(&lhs_type, &ty) {
                 Ok(cast) => cast,
-                Err(()) => {
-                    return Err(TyperError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt))
-                }
+                Err(()) => return err_bad_type,
             };
             let rhs_cast = match ImplicitConversion::find(&rhs_type, &ty) {
                 Ok(cast) => cast,
-                Err(()) => {
-                    return Err(TyperError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt))
-                }
+                Err(()) => return err_bad_type,
             };
             assert_eq!(lhs_cast.get_target_type(), rhs_cast.get_target_type());
             let lhs_final = lhs_cast.apply(lhs_ir);
             let rhs_final = rhs_cast.apply(rhs_ir);
-            Ok(TypedExpression::Value(ir::Expression::BinaryOperation(op.clone(),
-                                                                      Box::new(lhs_final),
-                                                                      Box::new(rhs_final)),
-                                      rhs_cast.get_target_type()))
+            let dty = match rhs_cast.get_target_type().0.into() {
+                Some(dty) => dty,
+                None => return err_bad_type,
+            };
+            let i = match *op {
+                ast::BinOp::BitwiseAnd => ir::Intrinsic2::BitwiseAnd(dty),
+                ast::BinOp::BitwiseOr => ir::Intrinsic2::BitwiseOr(dty),
+                ast::BinOp::BitwiseXor => ir::Intrinsic2::BitwiseXor(dty),
+                ast::BinOp::BooleanAnd => ir::Intrinsic2::BooleanAnd(dty),
+                ast::BinOp::BooleanOr => ir::Intrinsic2::BooleanOr(dty),
+                _ => unreachable!(),
+            };
+            let output_type = i.get_return_type();
+            let node = ir::Expression::Intrinsic2(i, Box::new(lhs_final), Box::new(rhs_final));
+            Ok(TypedExpression::Value(node, output_type))
         }
         ast::BinOp::Assignment |
         ast::BinOp::SumAssignment |
@@ -1874,12 +1964,33 @@ fn parse_expr_binop(op: &ast::BinOp,
             match ImplicitConversion::find(&rhs_type, &required_rtype) {
                 Ok(rhs_cast) => {
                     let rhs_final = rhs_cast.apply(rhs_ir);
-                    Ok(TypedExpression::Value(ir::Expression::BinaryOperation(op.clone(),
-                                                                              Box::new(lhs_ir),
-                                                                              Box::new(rhs_final)),
-                                              lhs_type))
+                    let ty = required_rtype.0.clone();
+                    let i = match *op {
+                        ast::BinOp::Assignment => ir::Intrinsic2::Assignment(ty),
+                        ast::BinOp::SumAssignment |
+                        ast::BinOp::DifferenceAssignment => {
+                            // Find data type for assignment
+                            let dtyl = match ty.0.into() {
+                                Some(dtyl) => dtyl,
+                                None => return err_bad_type,
+                            };
+                            let dty = ir::DataType(dtyl, ty.1);
+                            // Make output intrinsic from source op and data type
+                            match *op {
+                                ast::BinOp::SumAssignment => ir::Intrinsic2::SumAssignment(dty),
+                                ast::BinOp::DifferenceAssignment => {
+                                    ir::Intrinsic2::DifferenceAssignment(dty)
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                        _ => unreachable!(),
+                    };
+                    let output_type = i.get_return_type();
+                    let node = ir::Expression::Intrinsic2(i, Box::new(lhs_ir), Box::new(rhs_final));
+                    Ok(TypedExpression::Value(node, output_type))
                 }
-                Err(()) => Err(TyperError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt)),
+                Err(()) => err_bad_type,
             }
         }
     }

@@ -94,6 +94,29 @@ pub enum Intrinsic1 {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Intrinsic2 {
+    // Binary operations
+    Add(DataType),
+    Subtract(DataType),
+    Multiply(DataType),
+    Divide(DataType),
+    Modulus(DataType),
+    LeftShift(DataType),
+    RightShift(DataType),
+    BitwiseAnd(DataType),
+    BitwiseOr(DataType),
+    BitwiseXor(DataType),
+    BooleanAnd(DataType),
+    BooleanOr(DataType),
+    LessThan(DataType),
+    LessEqual(DataType),
+    GreaterThan(DataType),
+    GreaterEqual(DataType),
+    Equality(DataType),
+    Inequality(DataType),
+    Assignment(Type),
+    SumAssignment(DataType),
+    DifferenceAssignment(DataType),
+
     AsDouble,
 
     Cross,
@@ -264,6 +287,41 @@ impl Intrinsic for Intrinsic1 {
 impl Intrinsic for Intrinsic2 {
     fn get_return_type(&self) -> ExpressionType {
         match *self {
+            Intrinsic2::Add(ref dty) |
+            Intrinsic2::Subtract(ref dty) |
+            Intrinsic2::Multiply(ref dty) |
+            Intrinsic2::Divide(ref dty) |
+            Intrinsic2::Modulus(ref dty) |
+            Intrinsic2::LeftShift(ref dty) |
+            Intrinsic2::RightShift(ref dty) |
+            Intrinsic2::BitwiseAnd(ref dty) |
+            Intrinsic2::BitwiseOr(ref dty) |
+            Intrinsic2::BitwiseXor(ref dty) |
+            Intrinsic2::BooleanAnd(ref dty) |
+            Intrinsic2::BooleanOr(ref dty) => {
+                // dty is the type of the arguments operated on, which
+                // is the same as the return value
+                Type::from_data(dty.clone()).to_rvalue()
+            }
+            Intrinsic2::LessThan(ref dty) |
+            Intrinsic2::LessEqual(ref dty) |
+            Intrinsic2::GreaterThan(ref dty) |
+            Intrinsic2::GreaterEqual(ref dty) |
+            Intrinsic2::Equality(ref dty) |
+            Intrinsic2::Inequality(ref dty) => {
+                // dty is the type of the arguments operated on, so the return
+                // value is a bool with the same dimensions as dty
+                Type::from_data(dty.clone()).transform_scalar(ScalarType::Bool).to_rvalue()
+            }
+            Intrinsic2::Assignment(ref ty) => {
+                // ty is the type of the assigned value, so it the return value
+                ty.clone().to_lvalue()
+            }
+            Intrinsic2::SumAssignment(ref dty) |
+            Intrinsic2::DifferenceAssignment(ref dty) => {
+                // dty is the type of the assigned value, so it the return value
+                Type::from_data(dty.clone()).to_lvalue()
+            }
             Intrinsic2::AsDouble => Type::double().to_rvalue(),
             Intrinsic2::Cross => Type::floatn(3).to_rvalue(),
             Intrinsic2::Distance1 => Type::float().to_rvalue(),

@@ -782,32 +782,6 @@ fn transpile_localtype(local_type: &src::LocalType,
     }
 }
 
-fn transpile_binop(binop: &src::BinOp) -> Result<dst::BinOp, TranspileError> {
-    match *binop {
-        src::BinOp::Add => Ok(dst::BinOp::Add),
-        src::BinOp::Subtract => Ok(dst::BinOp::Subtract),
-        src::BinOp::Multiply => Ok(dst::BinOp::Multiply),
-        src::BinOp::Divide => Ok(dst::BinOp::Divide),
-        src::BinOp::Modulus => Ok(dst::BinOp::Modulus),
-        src::BinOp::LeftShift => Ok(dst::BinOp::LeftShift),
-        src::BinOp::RightShift => Ok(dst::BinOp::RightShift),
-        src::BinOp::BitwiseAnd => Ok(dst::BinOp::BitwiseAnd),
-        src::BinOp::BitwiseOr => Ok(dst::BinOp::BitwiseOr),
-        src::BinOp::BitwiseXor => Ok(dst::BinOp::BitwiseXor),
-        src::BinOp::BooleanAnd => Ok(dst::BinOp::LogicalAnd),
-        src::BinOp::BooleanOr => Ok(dst::BinOp::LogicalOr),
-        src::BinOp::LessThan => Ok(dst::BinOp::LessThan),
-        src::BinOp::LessEqual => Ok(dst::BinOp::LessEqual),
-        src::BinOp::GreaterThan => Ok(dst::BinOp::GreaterThan),
-        src::BinOp::GreaterEqual => Ok(dst::BinOp::GreaterEqual),
-        src::BinOp::Equality => Ok(dst::BinOp::Equality),
-        src::BinOp::Inequality => Ok(dst::BinOp::Inequality),
-        src::BinOp::Assignment => Ok(dst::BinOp::Assignment),
-        src::BinOp::SumAssignment => Ok(dst::BinOp::SumAssignment),
-        src::BinOp::DifferenceAssignment => Ok(dst::BinOp::DifferenceAssignment),
-    }
-}
-
 fn transpile_literal(lit: &src::Literal) -> Result<dst::Literal, TranspileError> {
     match lit {
         &src::Literal::Bool(b) => Ok(dst::Literal::Bool(b)),
@@ -939,6 +913,13 @@ fn transpile_intrinsic1(intrinsic: &src::Intrinsic1,
     }
 }
 
+fn write_binop(binop: dst::BinOp,
+               lhs: dst::Expression,
+               rhs: dst::Expression)
+               -> Result<dst::Expression, TranspileError> {
+    Ok(dst::Expression::BinaryOperation(binop, Box::new(lhs), Box::new(rhs)))
+}
+
 fn transpile_intrinsic2(intrinsic: &src::Intrinsic2,
                         src_expr_1: &src::Expression,
                         src_expr_2: &src::Expression,
@@ -948,6 +929,27 @@ fn transpile_intrinsic2(intrinsic: &src::Intrinsic2,
     let e1 = try!(transpile_expression(src_expr_1, context));
     let e2 = try!(transpile_expression(src_expr_2, context));
     match *intrinsic {
+        I::Add(_) => write_binop(dst::BinOp::Add, e1, e2),
+        I::Subtract(_) => write_binop(dst::BinOp::Subtract, e1, e2),
+        I::Multiply(_) => write_binop(dst::BinOp::Multiply, e1, e2),
+        I::Divide(_) => write_binop(dst::BinOp::Divide, e1, e2),
+        I::Modulus(_) => write_binop(dst::BinOp::Modulus, e1, e2),
+        I::LeftShift(_) => write_binop(dst::BinOp::LeftShift, e1, e2),
+        I::RightShift(_) => write_binop(dst::BinOp::RightShift, e1, e2),
+        I::BitwiseAnd(_) => write_binop(dst::BinOp::BitwiseAnd, e1, e2),
+        I::BitwiseOr(_) => write_binop(dst::BinOp::BitwiseOr, e1, e2),
+        I::BitwiseXor(_) => write_binop(dst::BinOp::BitwiseXor, e1, e2),
+        I::BooleanAnd(_) => write_binop(dst::BinOp::LogicalAnd, e1, e2),
+        I::BooleanOr(_) => write_binop(dst::BinOp::LogicalOr, e1, e2),
+        I::LessThan(_) => write_binop(dst::BinOp::LessThan, e1, e2),
+        I::LessEqual(_) => write_binop(dst::BinOp::LessEqual, e1, e2),
+        I::GreaterThan(_) => write_binop(dst::BinOp::GreaterThan, e1, e2),
+        I::GreaterEqual(_) => write_binop(dst::BinOp::GreaterEqual, e1, e2),
+        I::Equality(_) => write_binop(dst::BinOp::Equality, e1, e2),
+        I::Inequality(_) => write_binop(dst::BinOp::Inequality, e1, e2),
+        I::Assignment(_) => write_binop(dst::BinOp::Assignment, e1, e2),
+        I::SumAssignment(_) => write_binop(dst::BinOp::SumAssignment, e1, e2),
+        I::DifferenceAssignment(_) => write_binop(dst::BinOp::DifferenceAssignment, e1, e2),
         I::AsDouble => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
         I::Cross => write_func("cross", &[e1, e2]),
         I::Distance1 |
@@ -1208,12 +1210,6 @@ fn transpile_expression(expression: &src::Expression,
         &src::Expression::Global(ref id) => context.get_global_var(id),
         &src::Expression::ConstantVariable(ref id, ref name) => {
             context.get_constant(id, name.clone())
-        }
-        &src::Expression::BinaryOperation(ref binop, ref lhs, ref rhs) => {
-            let cl_binop = try!(transpile_binop(binop));
-            let cl_lhs = Box::new(try!(transpile_expression(lhs, context)));
-            let cl_rhs = Box::new(try!(transpile_expression(rhs, context)));
-            Ok(dst::Expression::BinaryOperation(cl_binop, cl_lhs, cl_rhs))
         }
         &src::Expression::TernaryConditional(ref cond, ref lhs, ref rhs) => {
             let cl_cond = Box::new(try!(transpile_expression(cond, context)));

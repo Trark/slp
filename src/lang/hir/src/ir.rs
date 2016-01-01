@@ -34,6 +34,24 @@ impl DataLayout {
             DataLayout::Matrix(ref scalar, _, _) => scalar.clone(),
         }
     }
+    pub fn transform_scalar(self, to_scalar: ScalarType) -> DataLayout {
+        match self {
+            DataLayout::Scalar(_) => DataLayout::Scalar(to_scalar),
+            DataLayout::Vector(_, x) => DataLayout::Vector(to_scalar, x),
+            DataLayout::Matrix(_, x, y) => DataLayout::Matrix(to_scalar, x, y),
+        }
+    }
+}
+
+impl From<TypeLayout> for Option<DataLayout> {
+    fn from(ty: TypeLayout) -> Option<DataLayout> {
+        match ty {
+            TypeLayout::Scalar(scalar) => Some(DataLayout::Scalar(scalar)),
+            TypeLayout::Vector(scalar, x) => Some(DataLayout::Vector(scalar, x)),
+            TypeLayout::Matrix(scalar, x, y) => Some(DataLayout::Matrix(scalar, x, y)),
+            _ => None,
+        }
+    }
 }
 
 /// A type that can be used in data buffers (Buffer / RWBuffer / etc)
@@ -43,6 +61,16 @@ impl DataLayout {
 /// apis call them data buffers
 #[derive(PartialEq, Debug, Clone)]
 pub struct DataType(pub DataLayout, pub TypeModifier);
+
+impl From<Type> for Option<DataType> {
+    fn from(ty: Type) -> Option<DataType> {
+        let Type(tyl, ty_mod) = ty;
+        match tyl.into() {
+            Some(dtyl) => Some(DataType(dtyl, ty_mod)),
+            None => None,
+        }
+    }
+}
 
 /// Layout for StructuredType
 #[derive(PartialEq, Debug, Clone)]
@@ -412,6 +440,11 @@ impl Type {
     pub fn float4x4() -> Type {
         Type::from_matrix(ScalarType::Float, 4, 4)
     }
+
+    pub fn transform_scalar(self, to_scalar: ScalarType) -> Type {
+        let Type(tyl, ty_mod) = self;
+        Type(tyl.transform_scalar(to_scalar), ty_mod)
+    }
 }
 
 impl From<DataType> for Type {
@@ -494,7 +527,6 @@ impl From<Type> for LocalType {
     }
 }
 
-pub use slp_lang_hst::BinOp;
 pub use slp_lang_hst::Literal;
 
 /// Id to function (in global scope)
@@ -561,7 +593,6 @@ pub enum Expression {
     Variable(VariableRef),
     Global(GlobalId),
     ConstantVariable(ConstantBufferId, String),
-    BinaryOperation(BinOp, Box<Expression>, Box<Expression>),
     TernaryConditional(Box<Expression>, Box<Expression>, Box<Expression>),
     Swizzle(Box<Expression>, Vec<SwizzleSlot>),
     ArraySubscript(Box<Expression>, Box<Expression>),
@@ -959,91 +990,6 @@ impl TypeParser {
         .to_rvalue()
     }
 
-    pub fn get_binary_operation_output_type(left: Type, right: Type, op: &BinOp) -> ExpressionType {
-
-        // If to convert the output type to bool
-        fn is_boolean(op: &BinOp) -> bool {
-            match *op {
-                // Numeric input - numeric output (don't cast)
-                BinOp::Add |
-                BinOp::Subtract |
-                BinOp::Multiply |
-                BinOp::Divide |
-                BinOp::Modulus => false,
-
-                // Integer input - Integer output (don't cast)
-                BinOp::LeftShift |
-                BinOp::RightShift |
-                BinOp::BitwiseAnd |
-                BinOp::BitwiseOr |
-                BinOp::BitwiseXor => false,
-
-                // Numeric input - boolean output (must cast to bool)
-                BinOp::LessThan |
-                BinOp::LessEqual |
-                BinOp::GreaterThan |
-                BinOp::GreaterEqual |
-                BinOp::Equality |
-                BinOp::Inequality => true,
-
-                // Boolean input - boolean output (irrelevant what we return)
-                BinOp::BooleanAnd |
-                BinOp::BooleanOr => true,
-
-                _ => panic!("non-arithmetic numeric type in binary operation"),
-            }
-        }
-
-        // Assert tree validity
-        {
-            let ls = left.0.to_scalar().expect("non-numeric type in binary operation (lhs)");
-            let rs = right.0.to_scalar().expect("non-numeric type in binary operation (rhs)");;
-            match *op {
-                BinOp::LeftShift |
-                BinOp::RightShift |
-                BinOp::BitwiseAnd |
-                BinOp::BitwiseOr |
-                BinOp::BitwiseXor => {
-                    assert!(ls == ScalarType::Int || ls == ScalarType::UInt,
-                            "hir: non-integer source in bitwise op (lhs)");
-                    assert!(rs == ScalarType::Int || rs == ScalarType::UInt,
-                            "hir: non-integer source in bitwise op (rhs)");
-                }
-                BinOp::BooleanAnd |
-                BinOp::BooleanOr => {
-                    assert!(ls == ScalarType::Bool,
-                            "hir: non-boolean source in boolean op (lhs)");
-                    assert!(rs == ScalarType::Bool,
-                            "hir: non-boolean source in boolean op (rhs)");
-                }
-                _ => {}
-            }
-        }
-
-        // Get the more important input type, that serves as the base to
-        // calculate the output type from
-        let base_source = match (&left.0, &right.0) {
-            (&TypeLayout::Scalar(_), &TypeLayout::Scalar(_)) => left,
-            (&TypeLayout::Scalar(_), &TypeLayout::Vector(_, _)) => right,
-            (&TypeLayout::Vector(_, _), &TypeLayout::Scalar(_)) => left,
-            (&TypeLayout::Vector(_, _), &TypeLayout::Vector(_, _)) => left,
-            (&TypeLayout::Matrix(_, _, _), &TypeLayout::Matrix(_, _, _)) => left,
-            _ => panic!("non-arithmetic numeric type in binary operation"),
-        };
-
-        // Modify the input type
-        let ty = if is_boolean(op) {
-            let Type(tyl, modifier) = base_source;
-            let final_tyl = tyl.transform_scalar(ScalarType::Bool);
-            Type(final_tyl, modifier)
-        } else {
-            base_source
-        };
-
-        // Return the modified type as an rvalue
-        ty.to_rvalue()
-    }
-
     pub fn get_expression_type(expression: &Expression,
                                context: &TypeContext)
                                -> Result<ExpressionType, TypeError> {
@@ -1052,37 +998,6 @@ impl TypeParser {
             Expression::Variable(ref var_ref) => context.get_local(var_ref),
             Expression::Global(ref id) => context.get_global(id),
             Expression::ConstantVariable(ref id, ref name) => context.get_constant(id, name),
-            Expression::BinaryOperation(ref op, ref e1, ref e2) => {
-                match *op {
-                    BinOp::Add |
-                    BinOp::Subtract |
-                    BinOp::Multiply |
-                    BinOp::Divide |
-                    BinOp::Modulus |
-                    BinOp::LeftShift |
-                    BinOp::RightShift |
-                    BinOp::BitwiseAnd |
-                    BinOp::BitwiseOr |
-                    BinOp::BitwiseXor |
-                    BinOp::LessThan |
-                    BinOp::LessEqual |
-                    BinOp::GreaterThan |
-                    BinOp::GreaterEqual |
-                    BinOp::Equality |
-                    BinOp::Inequality |
-                    BinOp::BooleanAnd |
-                    BinOp::BooleanOr => {
-                        let e1_ty = try!(TypeParser::get_expression_type(e1, context)).0;
-                        let e2_ty = try!(TypeParser::get_expression_type(e2, context)).0;
-                        let ety = TypeParser::get_binary_operation_output_type(e1_ty, e2_ty, op);
-                        Ok(ety)
-                    }
-
-                    BinOp::Assignment |
-                    BinOp::SumAssignment |
-                    BinOp::DifferenceAssignment => TypeParser::get_expression_type(e1, context),
-                }
-            }
             Expression::TernaryConditional(_, ref expr_left, ref expr_right) => {
                 // Ensure the layouts of each side are the same
                 // Value types + modifiers can be different

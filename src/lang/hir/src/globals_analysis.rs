@@ -194,10 +194,6 @@ fn search_expression(expression: &Expression, usage: &mut LocalFunctionGlobalUsa
         Expression::ConstantVariable(ref id, _) => {
             usage.cbuffers.insert(id.clone());
         }
-        Expression::BinaryOperation(_, ref lhs, ref rhs) => {
-            search_expression(lhs, usage);
-            search_expression(rhs, usage);
-        }
         Expression::TernaryConditional(ref cond, ref left, ref right) => {
             search_expression(cond, usage);
             search_expression(left, usage);
