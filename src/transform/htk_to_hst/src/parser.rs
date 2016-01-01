@@ -1095,8 +1095,7 @@ fn cbuffer(input: &[LexToken]) -> IResult<&[LexToken], ConstantBuffer, ParseErro
             token!(Token::LeftBrace),
             many0!(constantvariable),
             token!(Token::RightBrace)
-        ) ~
-        token!(Token::Semicolon),
+        ),
         || { ConstantBuffer { name: name.to_node(), slot: slot, members: members } }
     )
 }
@@ -1251,6 +1250,11 @@ fn rootdefinition(input: &[LexToken]) -> IResult<&[LexToken], RootDefinition, Pa
     IResult::Error(err)
 }
 
+fn rootdefinition_with_semicolon(input: &[LexToken])
+                                 -> IResult<&[LexToken], RootDefinition, ParseErrorReason> {
+    terminated!(input, rootdefinition, many0!(token!(Token::Semicolon)))
+}
+
 // Find the error with the longest tokens used
 fn get_most_relevant_error<'a: 'c, 'b: 'c, 'c>(lhs: Err<&'a [LexToken], ParseErrorReason>,
                                                rhs: Err<&'b [LexToken], ParseErrorReason>)
@@ -1278,7 +1282,7 @@ pub fn module(input: &[LexToken]) -> IResult<&[LexToken], Vec<RootDefinition>, P
     let mut roots = Vec::new();
     let mut rest = input;
     loop {
-        let last_def = rootdefinition(rest);
+        let last_def = rootdefinition_with_semicolon(rest);
         if let IResult::Done(remaining, root) = last_def {
             roots.push(root);
             rest = remaining;
@@ -1942,7 +1946,7 @@ fn test_rootdefinition() {
 
     let cbuffer_str = parse_from_str(Box::new(cbuffer));
 
-    let test_cbuffer1_str = "cbuffer globals { float4x4 wvp; };";
+    let test_cbuffer1_str = "cbuffer globals { float4x4 wvp; }";
     let test_cbuffer1_ast = ConstantBuffer {
         name: "globals".to_string(),
         slot: None,
@@ -1957,7 +1961,7 @@ fn test_rootdefinition() {
     let cbuffer_register_str = parse_from_str(Box::new(cbuffer_register));
     assert_eq!(cbuffer_register_str(" : register(b12) "), ConstantSlot(12));
 
-    let test_cbuffer2_str = "cbuffer globals : register(b12) { float4x4 wvp; };";
+    let test_cbuffer2_str = "cbuffer globals : register(b12) { float4x4 wvp; }";
     let test_cbuffer2_ast = ConstantBuffer {
         name: "globals".to_string(),
         slot: Some(ConstantSlot(12)),
