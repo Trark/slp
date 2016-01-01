@@ -882,34 +882,69 @@ fn transpile_intrinsic1(intrinsic: &src::Intrinsic1,
         I::AsFloatF4 => write_func("as_float4", &[e1]),
         I::F16ToF32 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
         I::F32ToF16 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
-        I::Floor => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
-        I::Floor2 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
-        I::Floor3 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
-        I::Floor4 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
-        I::IsNaN => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
+        I::Floor |
+        I::Floor2 |
+        I::Floor3 |
+        I::Floor4 => write_func("floor", &[e1]),
+        I::IsNaN => {
+            // OpenCL isnan returns 1 for true or 0 for false
+            // Cast to bool to get boolean result
+            write_cast(dst::Type::Scalar(dst::Scalar::Int),
+                       dst::Type::Bool,
+                       try!(write_func("isnan", &[e1])),
+                       false,
+                       context)
+        }
         I::IsNaN2 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
         I::IsNaN3 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
         I::IsNaN4 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
-        I::Length1 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
-        I::Length2 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
-        I::Length3 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
-        I::Length4 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
-        I::Normalize1 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
-        I::Normalize2 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
-        I::Normalize3 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
-        I::Normalize4 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
+        I::Length1 |
+        I::Length2 |
+        I::Length3 |
+        I::Length4 => write_func("length", &[e1]),
+        I::Normalize1 |
+        I::Normalize2 |
+        I::Normalize3 |
+        I::Normalize4 => write_func("normalize", &[e1]),
         I::SignI => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
         I::SignI2 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
         I::SignI3 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
         I::SignI4 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
-        I::SignF => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
-        I::SignF2 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
-        I::SignF3 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
-        I::SignF4 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
-        I::Sqrt => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
-        I::Sqrt2 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
-        I::Sqrt3 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
-        I::Sqrt4 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
+        // HLSL sign returns int, OpenCL sign returns float (with different results for negative
+        // and positive zero)
+        // Cast to int to get the same behavior
+        I::SignF => {
+            write_cast(dst::Type::Scalar(dst::Scalar::Float),
+                       dst::Type::Scalar(dst::Scalar::Int),
+                       try!(write_func("sign", &[e1])),
+                       false,
+                       context)
+        }
+        I::SignF2 => {
+            write_cast(dst::Type::Vector(dst::Scalar::Float, dst::VectorDimension::Two),
+                       dst::Type::Vector(dst::Scalar::Int, dst::VectorDimension::Two),
+                       try!(write_func("sign", &[e1])),
+                       false,
+                       context)
+        }
+        I::SignF3 => {
+            write_cast(dst::Type::Vector(dst::Scalar::Float, dst::VectorDimension::Three),
+                       dst::Type::Vector(dst::Scalar::Int, dst::VectorDimension::Three),
+                       try!(write_func("sign", &[e1])),
+                       false,
+                       context)
+        }
+        I::SignF4 => {
+            write_cast(dst::Type::Vector(dst::Scalar::Float, dst::VectorDimension::Four),
+                       dst::Type::Vector(dst::Scalar::Int, dst::VectorDimension::Four),
+                       try!(write_func("sign", &[e1])),
+                       false,
+                       context)
+        }
+        I::Sqrt |
+        I::Sqrt2 |
+        I::Sqrt3 |
+        I::Sqrt4 => write_func("sqrt", &[e1]),
     }
 }
 
@@ -968,26 +1003,26 @@ fn transpile_intrinsic2(intrinsic: &src::Intrinsic2,
         I::DotI2 => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
         I::DotI3 => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
         I::DotI4 => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
-        I::DotF1 => write_func("dot", &[e1, e2]),
-        I::DotF2 => write_func("dot", &[e1, e2]),
-        I::DotF3 => write_func("dot", &[e1, e2]),
+        I::DotF1 |
+        I::DotF2 |
+        I::DotF3 |
         I::DotF4 => write_func("dot", &[e1, e2]),
-        I::MinI => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
-        I::MinI2 => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
-        I::MinI3 => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
-        I::MinI4 => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
-        I::MinF => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
-        I::MinF2 => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
-        I::MinF3 => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
-        I::MinF4 => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
-        I::MaxI => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
-        I::MaxI2 => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
-        I::MaxI3 => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
-        I::MaxI4 => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
-        I::MaxF => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
-        I::MaxF2 => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
-        I::MaxF3 => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
-        I::MaxF4 => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
+        I::MinI |
+        I::MinI2 |
+        I::MinI3 |
+        I::MinI4 => write_func("min", &[e1, e2]),
+        I::MinF |
+        I::MinF2 |
+        I::MinF3 |
+        I::MinF4 => write_func("fmin", &[e1, e2]),
+        I::MaxI |
+        I::MaxI2 |
+        I::MaxI3 |
+        I::MaxI4 => write_func("max", &[e1, e2]),
+        I::MaxF |
+        I::MaxF2 |
+        I::MaxF3 |
+        I::MaxF4 => write_func("fmax", &[e1, e2]),
         I::BufferLoad(_) |
         I::RWBufferLoad(_) |
         I::StructuredBufferLoad(_) |

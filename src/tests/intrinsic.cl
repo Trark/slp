@@ -1,4 +1,31 @@
 
+int2 cast_float2_to_int2(float2 from)
+{
+	int2 to;
+	to[0] = from[0];
+	to[1] = from[1];
+	return to;
+}
+
+int3 cast_float3_to_int3(float3 from)
+{
+	int3 to;
+	to[0] = from[0];
+	to[1] = from[1];
+	to[2] = from[2];
+	return to;
+}
+
+int4 cast_float4_to_int4(float4 from)
+{
+	int4 to;
+	to[0] = from[0];
+	to[1] = from[1];
+	to[2] = from[2];
+	to[3] = from[3];
+	return to;
+}
+
 struct testStruct
 {
 	float4 value;
@@ -176,4 +203,43 @@ kernel void MyKernel(__global uint4* g_roBuffer, __global struct testStruct* g_r
 	float dot_f2 = dot(fx2, fy2);
 	float dot_f3 = dot(fx3, fy3);
 	float dot_f4 = dot(fx4, fy4);
+	bool isnan_s = (bool)isnan(fx);
+	float length_f1 = length(fx1);
+	float length_f2 = length(fx2);
+	float length_f3 = length(fx3);
+	float length_f4 = length(fx4);
+	float normalize_f1 = normalize(fx1);
+	float2 normalize_f2 = normalize(fx2);
+	float3 normalize_f3 = normalize(fx3);
+	float4 normalize_f4 = normalize(fx4);
+	int sign_s = (int)sign(fx);
+	int sign_f1 = (int)sign(fx1);
+	int2 sign_f2 = cast_float2_to_int2(sign(fx2));
+	int3 sign_f3 = cast_float3_to_int3(sign(fx3));
+	int4 sign_f4 = cast_float4_to_int4(sign(fx4));
+	float sqrt_s = sqrt(fx);
+	float sqrt_f1 = sqrt(fx1);
+	float2 sqrt_f2 = sqrt(fx2);
+	float3 sqrt_f3 = sqrt(fx3);
+	float4 sqrt_f4 = sqrt(fx4);
+	float min_fs = fmin(fx, fy);
+	float min_f1 = fmin(fx1, fy1);
+	float2 min_f2 = fmin(fx2, fy2);
+	float3 min_f3 = fmin(fx3, fy3);
+	float4 min_f4 = fmin(fx4, fy4);
+	int min_is = min(ix, iy);
+	int min_i1 = min(ix1, iy1);
+	int2 min_i2 = min(ix2, iy2);
+	int3 min_i3 = min(ix3, iy3);
+	int4 min_i4 = min(ix4, iy4);
+	float max_fs = fmax(fx, fy);
+	float max_f1 = fmax(fx1, fy1);
+	float2 max_f2 = fmax(fx2, fy2);
+	float3 max_f3 = fmax(fx3, fy3);
+	float4 max_f4 = fmax(fx4, fy4);
+	int max_is = max(ix, iy);
+	int max_i1 = max(ix1, iy1);
+	int2 max_i2 = max(ix2, iy2);
+	int3 max_i3 = max(ix3, iy3);
+	int4 max_i4 = max(ix4, iy4);
 }
