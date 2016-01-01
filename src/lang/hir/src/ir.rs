@@ -1,6 +1,8 @@
 
 use std::error;
 use std::fmt;
+use std::fmt::Debug;
+use std::fmt::Formatter;
 use std::collections::HashMap;
 
 /// Basic scalar types
@@ -210,7 +212,7 @@ pub enum RowOrder {
 }
 
 /// Modifier for type
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Clone)]
 pub struct TypeModifier {
     pub is_const: bool,
     pub row_order: RowOrder,
@@ -234,6 +236,33 @@ impl TypeModifier {
 
     pub fn keep_precise(&self) -> TypeModifier {
         TypeModifier { precise: self.precise, ..TypeModifier::default() }
+    }
+}
+
+impl Debug for TypeModifier {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
+        let mut parts = vec![];
+        if self.is_const {
+            parts.push("const")
+        };
+        if self.row_order == RowOrder::Row {
+            parts.push("row_major")
+        };
+        if self.precise {
+            parts.push("precise")
+        };
+        if self.volatile {
+            parts.push("volatile")
+        };
+        try!(write!(f, "{}", "{"));
+        for (index, part) in parts.iter().enumerate() {
+            try!(write!(f, "{}", part));
+            if index != parts.len() - 1 {
+                try!(write!(f, ", "));
+            }
+        }
+        try!(write!(f, "{}", "}"));
+        Ok(())
     }
 }
 
