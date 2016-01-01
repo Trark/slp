@@ -319,8 +319,22 @@ fn search_intrinsic(intrinsic: &Intrinsic, usage: &mut LocalFunctionGlobalUsage)
         Intrinsic::DotF2(ref e1, ref e2) |
         Intrinsic::DotF3(ref e1, ref e2) |
         Intrinsic::DotF4(ref e1, ref e2) |
-        Intrinsic::Min(ref e1, ref e2) |
-        Intrinsic::Max(ref e1, ref e2) |
+        Intrinsic::MinI(ref e1, ref e2) |
+        Intrinsic::MinI2(ref e1, ref e2) |
+        Intrinsic::MinI3(ref e1, ref e2) |
+        Intrinsic::MinI4(ref e1, ref e2) |
+        Intrinsic::MinF(ref e1, ref e2) |
+        Intrinsic::MinF2(ref e1, ref e2) |
+        Intrinsic::MinF3(ref e1, ref e2) |
+        Intrinsic::MinF4(ref e1, ref e2) |
+        Intrinsic::MaxI(ref e1, ref e2) |
+        Intrinsic::MaxI2(ref e1, ref e2) |
+        Intrinsic::MaxI3(ref e1, ref e2) |
+        Intrinsic::MaxI4(ref e1, ref e2) |
+        Intrinsic::MaxF(ref e1, ref e2) |
+        Intrinsic::MaxF2(ref e1, ref e2) |
+        Intrinsic::MaxF3(ref e1, ref e2) |
+        Intrinsic::MaxF4(ref e1, ref e2) |
         Intrinsic::BufferLoad(ref e1, ref e2) |
         Intrinsic::RWBufferLoad(ref e1, ref e2) |
         Intrinsic::StructuredBufferLoad(ref e1, ref e2) |
