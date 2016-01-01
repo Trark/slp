@@ -556,6 +556,11 @@ pub enum Intrinsic {
     IsNaN3(Expression),
     IsNaN4(Expression),
 
+    Length1(Expression),
+    Length2(Expression),
+    Length3(Expression),
+    Length4(Expression),
+
     Min(Expression, Expression),
     Max(Expression, Expression),
 
@@ -1352,6 +1357,10 @@ impl TypeParser {
             Intrinsic::IsNaN2(_) => Type::booln(2).to_rvalue(),
             Intrinsic::IsNaN3(_) => Type::booln(3).to_rvalue(),
             Intrinsic::IsNaN4(_) => Type::booln(4).to_rvalue(),
+            Intrinsic::Length1(_) => Type::float().to_rvalue(),
+            Intrinsic::Length2(_) => Type::float().to_rvalue(),
+            Intrinsic::Length3(_) => Type::float().to_rvalue(),
+            Intrinsic::Length4(_) => Type::float().to_rvalue(),
             Intrinsic::Min(_, _) => unimplemented!(),
             Intrinsic::Max(_, _) => unimplemented!(),
             Intrinsic::Normalize1(_) => Type::floatn(1).to_rvalue(),

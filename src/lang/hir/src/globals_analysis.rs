@@ -282,6 +282,10 @@ fn search_intrinsic(intrinsic: &Intrinsic, usage: &mut LocalFunctionGlobalUsage)
         Intrinsic::IsNaN2(ref e1) |
         Intrinsic::IsNaN3(ref e1) |
         Intrinsic::IsNaN4(ref e1) |
+        Intrinsic::Length1(ref e1) |
+        Intrinsic::Length2(ref e1) |
+        Intrinsic::Length3(ref e1) |
+        Intrinsic::Length4(ref e1) |
         Intrinsic::Normalize1(ref e1) |
         Intrinsic::Normalize2(ref e1) |
         Intrinsic::Normalize3(ref e1) |

@@ -165,6 +165,11 @@ const INTRINSICS: &'static [IntrinsicDefinition] = &[
     (T_BOOL3_TY, "isnan", &[T_FLOAT3], I1(Intrinsic::IsNaN3)),
     (T_BOOL4_TY, "isnan", &[T_FLOAT4], I1(Intrinsic::IsNaN4)),
 
+    (T_FLOAT_TY, "length", &[T_FLOAT1], I1(Intrinsic::Length1)),
+    (T_FLOAT_TY, "length", &[T_FLOAT2], I1(Intrinsic::Length2)),
+    (T_FLOAT_TY, "length", &[T_FLOAT3], I1(Intrinsic::Length3)),
+    (T_FLOAT_TY, "length", &[T_FLOAT4], I1(Intrinsic::Length4)),
+
     (T_INT_TY, "min", &[T_INT, T_INT], I2(Intrinsic::Min)),
     (T_INT2_TY, "min", &[T_INT2, T_INT2], I2(Intrinsic::Min)),
     (T_INT3_TY, "min", &[T_INT3, T_INT3], I2(Intrinsic::Min)),
