@@ -712,9 +712,16 @@ fn preprocess_command<'a>(buffer: &mut IntermediateText,
                                         .apply_all(macros))
                                    .resolve();
 
+                let resolved_str: &str = &resolved;
+                // Sneaky hack to make `#if COND // comment` work
+                let resolved_no_comment = match resolved_str.find("//") {
+                    Some(sz) => resolved_str[..sz].trim(),
+                    None => resolved_str,
+                };
+
                 let active = {
                     use condition_parser::parse;
-                    try!(parse(&resolved))
+                    try!(parse(resolved_no_comment))
                 };
                 condition_chain.push(active);
 
@@ -731,8 +738,8 @@ fn preprocess_command<'a>(buffer: &mut IntermediateText,
                     Some(sz) => sz + 1,
                     _ => return Err(PreprocessError::InvalidElse),
                 };
-                let body = &args[..end].trim();
-                if body.len() != 0 {
+                let body = args[..end].trim();
+                if body.len() != 0 && !body.starts_with("//") {
                     return Err(PreprocessError::InvalidElse);
                 }
 
@@ -978,6 +985,11 @@ fn test_condition() {
     assert_eq!(pp("#if 1\n#define X Y\n#else\n#define X Z\n#endif\nX").unwrap().code,
                b"Y");
     assert_eq!(pp("#if 1\n#define X Y\n#else\n#include\"fail\"\n#endif\nX").unwrap().code,
+               b"Y");
+    assert_eq!(pp("#if 1 // comment\n#define X Y\n#else // comment\n#include\"fail\"\n#endif // \
+                   comment\nX")
+                   .unwrap()
+                   .code,
                b"Y");
 }
 
