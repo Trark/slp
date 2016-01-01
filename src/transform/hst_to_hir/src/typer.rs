@@ -6,6 +6,7 @@ use std::collections::hash_map::Entry;
 use slp_lang_hir as ir;
 use slp_lang_hir::ExpressionType;
 use slp_lang_hir::ToExpressionType;
+use slp_lang_hir::Intrinsic;
 use slp_lang_hst as ast;
 use super::intrinsics;
 use super::intrinsics::IntrinsicFactory;
@@ -1099,15 +1100,11 @@ fn get_intrinsics() -> HashMap<String, UnresolvedFunction> {
 
     let mut strmap: HashMap<String, UnresolvedFunction> = HashMap::new();
     for &(ref name, ref params, ref factory) in funcs {
-        let return_type_res = match *factory {
-            IntrinsicFactory::Intrinsic0(ref i) => ir::TypeParser::get_intrinsic0_type(i),
-            IntrinsicFactory::Intrinsic1(ref i) => ir::TypeParser::get_intrinsic1_type(i),
-            IntrinsicFactory::Intrinsic2(ref i) => ir::TypeParser::get_intrinsic2_type(i),
-            IntrinsicFactory::Intrinsic3(ref i) => ir::TypeParser::get_intrinsic3_type(i),
-        };
-        let return_type = match return_type_res {
-            Ok(ty) => ty,
-            Err(_) => panic!("bad intrinsic data"),
+        let return_type = match *factory {
+            IntrinsicFactory::Intrinsic0(ref i) => i.get_return_type(),
+            IntrinsicFactory::Intrinsic1(ref i) => i.get_return_type(),
+            IntrinsicFactory::Intrinsic2(ref i) => i.get_return_type(),
+            IntrinsicFactory::Intrinsic3(ref i) => i.get_return_type(),
         };
         let overload = FunctionOverload(FunctionName::Intrinsic(factory.clone()),
                                         return_type.0,
@@ -2070,15 +2067,11 @@ fn parse_expr_unchecked(ast: &ast::Expression,
                     match intrinsics::get_method(object_type, &member) {
                         Ok(intrinsics::MethodDefinition(object_type, name, method_overloads)) => {
                             let overloads = method_overloads.iter().map(|&(ref param_types, ref factory)| {
-                                let return_type_res = match *factory {
-                                    IntrinsicFactory::Intrinsic0(ref i) => ir::TypeParser::get_intrinsic0_type(i),
-                                    IntrinsicFactory::Intrinsic1(ref i) => ir::TypeParser::get_intrinsic1_type(i),
-                                    IntrinsicFactory::Intrinsic2(ref i) => ir::TypeParser::get_intrinsic2_type(i),
-                                    IntrinsicFactory::Intrinsic3(ref i) => ir::TypeParser::get_intrinsic3_type(i),
-                                };
-                                let return_type = match return_type_res {
-                                    Ok(ty) => ty,
-                                    Err(_) => panic!("bad intrinsic data"),
+                                let return_type = match *factory {
+                                    IntrinsicFactory::Intrinsic0(ref i) => i.get_return_type(),
+                                    IntrinsicFactory::Intrinsic1(ref i) => i.get_return_type(),
+                                    IntrinsicFactory::Intrinsic2(ref i) => i.get_return_type(),
+                                    IntrinsicFactory::Intrinsic3(ref i) => i.get_return_type(),
                                 };
                                 FunctionOverload(FunctionName::Intrinsic(factory.clone()), return_type.0, param_types.clone())
                             }).collect::<Vec<_>>();
