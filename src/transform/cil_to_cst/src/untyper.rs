@@ -330,14 +330,37 @@ fn untype_expression(expression: &src::Expression,
     })
 }
 
+fn untype_initializer(init: &src::Initializer,
+                      context: &mut Context)
+                      -> Result<dst::Initializer, UntyperError> {
+    Ok(match *init {
+        src::Initializer::Expression(ref expr) => {
+            dst::Initializer::Expression(try!(untype_expression(expr, context)))
+        }
+        src::Initializer::Aggregate(ref inits) => {
+            let mut elements = Vec::with_capacity(inits.len());
+            for init in inits {
+                elements.push(try!(untype_initializer(init, context)));
+            }
+            dst::Initializer::Aggregate(elements)
+        }
+    })
+}
+
+fn untype_initializer_opt(init_opt: &Option<src::Initializer>,
+                          context: &mut Context)
+                          -> Result<Option<dst::Initializer>, UntyperError> {
+    Ok(match *init_opt {
+        Some(ref init) => Some(try!(untype_initializer(init, context))),
+        None => None,
+    })
+}
+
 fn untype_vardef(vd: &src::VarDef, context: &mut Context) -> Result<dst::VarDef, UntyperError> {
     Ok(dst::VarDef {
         name: try!(context.get_local_name(&vd.id)),
         typename: try!(untype_type(&vd.typename, context)),
-        assignment: match vd.assignment {
-            None => None,
-            Some(ref expr) => Some(try!(untype_expression(expr, context))),
-        },
+        init: try!(untype_initializer_opt(&vd.init, context)),
     })
 }
 
@@ -427,10 +450,7 @@ fn untype_root_definition(root: &src::RootDefinition,
                 name: try!(context.get_global_name(&gv.id)),
                 ty: try!(untype_type(&gv.ty, context)),
                 address_space: gv.address_space.clone(),
-                init: match gv.init {
-                    None => None,
-                    Some(ref expr) => Some(try!(untype_expression(expr, context))),
-                },
+                init: try!(untype_initializer_opt(&gv.init, context)),
             })
         }
         src::RootDefinition::Struct(ref sd) => {

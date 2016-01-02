@@ -134,6 +134,9 @@ impl LexToken {
     pub fn to_loc(self) -> FileLocation {
         self.1
     }
+    pub fn with_no_loc(token: Token) -> LexToken {
+        LexToken(token, FileLocation::none())
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]

@@ -608,10 +608,21 @@ pub enum Expression {
 }
 
 #[derive(PartialEq, Debug, Clone)]
+/// The node for representing the initial value of a variable
+pub enum Initializer {
+    /// Variable is initialized to the value of an expression
+    Expression(Expression),
+    /// Variable is initialized in parts (composite types and arrays)
+    /// Unlike HLSL or slp_lang_hst, this can not be used for scalars with
+    /// a 1 element aggregate.
+    Aggregate(Vec<Initializer>),
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub struct VarDef {
     pub id: VariableId,
     pub local_type: LocalType,
-    pub assignment: Option<Expression>,
+    pub init: Option<Initializer>,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -667,7 +678,7 @@ pub struct ConstantBuffer {
 pub struct GlobalVariable {
     pub id: GlobalId,
     pub global_type: GlobalType,
-    pub assignment: Option<Expression>,
+    pub init: Option<Initializer>,
 }
 
 pub use slp_lang_hst::FunctionAttribute;

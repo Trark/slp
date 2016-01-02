@@ -525,10 +525,11 @@ fn parse_localtype(input: &[LexToken]) -> IResult<&[LexToken], LocalType, ParseE
     }
 }
 
-fn parse_arraydim(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, ParseErrorReason> {
+fn parse_arraydim(input: &[LexToken])
+                  -> IResult<&[LexToken], Option<Located<Expression>>, ParseErrorReason> {
     chain!(input,
         token!(Token::LeftSquareBracket) ~
-        constant_expression: expr ~
+        constant_expression: opt!(expr) ~
         token!(Token::RightSquareBracket),
         || { constant_expression }
     )
@@ -880,6 +881,94 @@ fn expr(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, ParseEr
     expr_p15(input)
 }
 
+fn initializer(input: &[LexToken]) -> IResult<&[LexToken], Option<Initializer>, ParseErrorReason> {
+
+    fn init_expr(input: &[LexToken]) -> IResult<&[LexToken], Initializer, ParseErrorReason> {
+        map!(input, expr, |expr| Initializer::Expression(expr))
+    }
+
+    fn init_aggregate(input: &[LexToken]) -> IResult<&[LexToken], Initializer, ParseErrorReason> {
+        map!(input,
+             delimited!(token!(Token::LeftBrace),
+                        separated_nonempty_list!(token!(Token::Comma), init_any),
+                        token!(Token::RightBrace)),
+             |exprs| Initializer::Aggregate(exprs))
+    }
+
+    fn init_any(input: &[LexToken]) -> IResult<&[LexToken], Initializer, ParseErrorReason> {
+        alt!(input, init_expr | init_aggregate)
+    }
+
+    if input.len() == 0 {
+        IResult::Incomplete(Needed::Size(1))
+    } else {
+        match input[0].0 {
+            Token::Equals => map!(&input[1..], init_any, |init| Some(init)),
+            _ => IResult::Done(input, None),
+        }
+    }
+}
+
+#[test]
+fn test_initializer() {
+    assert_eq!(initializer(&[]), IResult::Incomplete(Needed::Size(1)));
+
+    // Semicolon to trigger parsing to end
+    let semicolon = LexToken::with_no_loc(Token::Semicolon);
+    let done_toks = &[semicolon.clone()][..];
+
+    // No initializer tests
+    assert_eq!(initializer(&[semicolon.clone()]),
+               IResult::Done(done_toks, None));
+
+    // Expression initialization tests
+    // = [expr]
+    let expr_lit = [LexToken::with_no_loc(Token::Equals),
+                    LexToken::with_no_loc(Token::LiteralInt(4)),
+                    semicolon.clone()];
+    let hst_lit = Located::none(Expression::Literal(Literal::UntypedInt(4)));
+    assert_eq!(initializer(&expr_lit),
+               IResult::Done(done_toks, Some(Initializer::Expression(hst_lit))));
+
+    // Aggregate initialization tests
+    // = { [expr], [expr], [expr] }
+    fn loc_lit(i: u64) -> Initializer {
+        Initializer::Expression(Located::none(Expression::Literal(Literal::UntypedInt(i))))
+    }
+
+    let aggr_1 = [LexToken::with_no_loc(Token::Equals),
+                  LexToken::with_no_loc(Token::LeftBrace),
+                  LexToken::with_no_loc(Token::LiteralInt(4)),
+                  LexToken::with_no_loc(Token::RightBrace),
+                  semicolon.clone()];
+    let aggr_1_lit = loc_lit(4);
+    assert_eq!(initializer(&aggr_1),
+               IResult::Done(done_toks, Some(Initializer::Aggregate(vec![aggr_1_lit]))));
+
+    let aggr_3 = [LexToken::with_no_loc(Token::Equals),
+                  LexToken::with_no_loc(Token::LeftBrace),
+                  LexToken::with_no_loc(Token::LiteralInt(4)),
+                  LexToken::with_no_loc(Token::Comma),
+                  LexToken::with_no_loc(Token::LiteralInt(2)),
+                  LexToken::with_no_loc(Token::Comma),
+                  LexToken::with_no_loc(Token::LiteralInt(1)),
+                  LexToken::with_no_loc(Token::RightBrace),
+                  semicolon.clone()];
+    let aggr_3_lits = vec![loc_lit(4), loc_lit(2), loc_lit(1)];
+    assert_eq!(initializer(&aggr_3),
+               IResult::Done(done_toks, Some(Initializer::Aggregate(aggr_3_lits))));
+
+    // = {} should fail
+    let aggr_0 = [LexToken::with_no_loc(Token::Equals),
+                  LexToken::with_no_loc(Token::LeftBrace),
+                  LexToken::with_no_loc(Token::RightBrace),
+                  semicolon.clone()];
+    assert!(match initializer(&aggr_0) {
+        IResult::Error(_) => true,
+        _ => false,
+    });
+}
+
 fn vardef(input: &[LexToken]) -> IResult<&[LexToken], VarDef, ParseErrorReason> {
     chain!(input,
         typename: parse_localtype ~
@@ -888,17 +977,11 @@ fn vardef(input: &[LexToken]) -> IResult<&[LexToken], VarDef, ParseErrorReason> 
             chain!(
                 varname: parse_variablename ~
                 array_dim: opt!(parse_arraydim) ~
-                assign: opt!(
-                    chain!(
-                        token!(Token::Equals) ~
-                        assignment_expr: expr,
-                        || { assignment_expr }
-                    )
-                ),
+                init: initializer,
                 || LocalVariableName {
                     name: varname.to_node(),
                     bind: match array_dim { Some(ref expr) => VariableBind::Array(expr.clone()), None => VariableBind::Normal },
-                    assignment: assign
+                    init: init
                 }
             )
         ), |res: Vec<_>| if res.len() > 0 { Ok(res) } else { Err(()) }),
@@ -1147,12 +1230,12 @@ fn globalvariablename(input: &[LexToken])
         name: parse_variablename ~
         array_dim: opt!(parse_arraydim) ~
         slot: opt!(globalvariable_register) ~
-        assignment:  opt!(chain!(token!(Token::Equals) ~ expr: expr, || expr)),
+        init: initializer,
         || { GlobalVariableName {
             name: name.to_node(),
             bind: match array_dim { Some(ref expr) => VariableBind::Array(expr.clone()), None => VariableBind::Normal },
             slot: slot,
-            assignment: assignment
+            init: init
         } }
     )
 }
@@ -1822,27 +1905,26 @@ fn test_statement() {
 
     assert_eq!(init_statement_str("x"),
                InitStatement::Expression(exp_var("x", 1, 1)));
-    assert_eq!(vardef_str("uint x"),
-               VarDef::new("x".to_string(), Type::uint().into(), None));
+    assert_eq!(vardef_str("uint x"), VarDef::one("x", Type::uint().into()));
     assert_eq!(init_statement_str("uint x"),
-               InitStatement::Declaration(VarDef::new("x".to_string(), Type::uint().into(), None)));
+               InitStatement::Declaration(VarDef::one("x", Type::uint().into())));
     assert_eq!(init_statement_str("uint x = y"),
-               InitStatement::Declaration(VarDef::new("x".to_string(),
-                                                      Type::uint().into(),
-                                                      Some(exp_var("y", 1, 10)))));
+               InitStatement::Declaration(VarDef::one_with_expr("x",
+                                                                Type::uint().into(),
+                                                                exp_var("y", 1, 10))));
 
     // Variable declarations
     assert_eq!(statement_str("uint x = y;"),
-               Statement::Var(VarDef::new("x".to_string(),
-                                          Type::uint().into(),
-                                          Some(exp_var("y", 1, 10)))));
+               Statement::Var(VarDef::one_with_expr("x",
+                                                    Type::uint().into(),
+                                                    exp_var("y", 1, 10))));
     assert_eq!(statement_str("float x[3];"),
         Statement::Var(VarDef {
             local_type: Type::from_layout(TypeLayout::float()).into(),
             defs: vec![LocalVariableName {
                 name: "x".to_string(),
-                bind: VariableBind::Array(Located::loc(1, 9, Expression::Literal(Literal::UntypedInt(3)))),
-                assignment: None,
+                bind: VariableBind::Array(Some(Located::loc(1, 9, Expression::Literal(Literal::UntypedInt(3))))),
+                init: None,
             }]
         })
     );
@@ -1899,7 +1981,7 @@ fn test_statement() {
     );
     assert_eq!(statement_str("for (uint i = 0; i; i++) { func(); }"),
         Statement::For(
-            InitStatement::Declaration(VarDef::new("i".to_string(), Type::uint().into(), Some(Located::loc(1, 15, Expression::Literal(Literal::UntypedInt(0)))))),
+            InitStatement::Declaration(VarDef::one_with_expr("i", Type::uint().into(), Located::loc(1, 15, Expression::Literal(Literal::UntypedInt(0))))),
             exp_var("i", 1, 18),
             Located::loc(1, 21, Expression::UnaryOperation(UnaryOp::PostfixIncrement, bexp_var("i", 1, 21))),
             Box::new(Statement::Block(vec![Statement::Expression(Located::loc(1, 28, Expression::Call(bexp_var("func", 1, 28), vec![])))]))
@@ -2011,7 +2093,7 @@ fn test_rootdefinition() {
                    },
                    ConstantVariableName {
                        name: "y".to_string(),
-                       bind: VariableBind::Array(Located::loc(1, 60, Expression::Literal(Literal::UntypedInt(2)))),
+                       bind: VariableBind::Array(Some(Located::loc(1, 60, Expression::Literal(Literal::UntypedInt(2))))),
                        offset: None,
                    }],
     };
@@ -2033,7 +2115,7 @@ fn test_rootdefinition() {
             name: "g_myBuffer".to_string(),
             bind: VariableBind::Normal,
             slot: Some(GlobalSlot::ReadSlot(1)),
-            assignment: None,
+            init: None,
         }],
     };
     assert_eq!(globalvariable_str(test_buffersrv_str),
@@ -2048,7 +2130,7 @@ fn test_rootdefinition() {
             name: "g_myBuffer".to_string(),
             bind: VariableBind::Normal,
             slot: Some(GlobalSlot::ReadSlot(1)),
-            assignment: None,
+            init: None,
         }],
     };
     assert_eq!(globalvariable_str(test_buffersrv2_str),
@@ -2063,7 +2145,7 @@ fn test_rootdefinition() {
             name: "g_myBuffer".to_string(),
             bind: VariableBind::Normal,
             slot: Some(GlobalSlot::ReadSlot(1)),
-            assignment: None,
+            init: None,
         }],
     };
     assert_eq!(globalvariable_str(test_buffersrv3_str),
@@ -2078,7 +2160,7 @@ fn test_rootdefinition() {
             name: "g_myBuffer".to_string(),
             bind: VariableBind::Normal,
             slot: Some(GlobalSlot::ReadSlot(1)),
-            assignment: None,
+            init: None,
         }],
     };
     assert_eq!(globalvariable_str(test_buffersrv4_str),
@@ -2096,9 +2178,9 @@ fn test_rootdefinition() {
                        name: "c_numElements".to_string(),
                        bind: VariableBind::Normal,
                        slot: None,
-                       assignment: Some(Located::loc(1,
+                       init: Some(Initializer::Expression(Located::loc(1,
                                                      34,
-                                                     Expression::Literal(Literal::UntypedInt(4)))),
+                                                     Expression::Literal(Literal::UntypedInt(4))))),
                    }],
     };
     assert_eq!(globalvariable_str(test_static_const_str),
@@ -2106,14 +2188,38 @@ fn test_rootdefinition() {
     assert_eq!(rootdefinition_str(test_static_const_str),
                RootDefinition::GlobalVariable(test_static_const_ast.clone()));
 
+    let test_const_arr_str = "static const int data[4] = { 0, 1, 2, 3 };";
+    let test_const_arr_ast_lits = vec![
+        Initializer::Expression(Located::loc(1, 30, Expression::Literal(Literal::UntypedInt(0)))),
+        Initializer::Expression(Located::loc(1, 33, Expression::Literal(Literal::UntypedInt(1)))),
+        Initializer::Expression(Located::loc(1, 36, Expression::Literal(Literal::UntypedInt(2)))),
+        Initializer::Expression(Located::loc(1, 39, Expression::Literal(Literal::UntypedInt(3)))),
+    ];
+    let test_const_arr_ast = GlobalVariable {
+        global_type: GlobalType(Type(TypeLayout::int(),
+                                     TypeModifier { is_const: true, ..TypeModifier::default() }),
+                                GlobalStorage::Static,
+                                None),
+        defs: vec![GlobalVariableName {
+                       name: "data".to_string(),
+                       bind: VariableBind::Array(Some(Located::loc(1, 23, Expression::Literal(Literal::UntypedInt(4))))),
+                       slot: None,
+                       init: Some(Initializer::Aggregate(test_const_arr_ast_lits)),
+                   }],
+    };
+    assert_eq!(globalvariable_str(test_const_arr_str),
+               test_const_arr_ast.clone());
+    assert_eq!(rootdefinition_str(test_const_arr_str),
+               RootDefinition::GlobalVariable(test_const_arr_ast.clone()));
+
     let test_groupshared_str = "groupshared float4 local_data[32];";
     let test_groupshared_ast = GlobalVariable {
         global_type: GlobalType(Type::floatn(4), GlobalStorage::GroupShared, None),
         defs: vec![GlobalVariableName {
                        name: "local_data".to_string(),
-                       bind: VariableBind::Array(Located::loc(1, 31, Expression::Literal(Literal::UntypedInt(32)))),
+                       bind: VariableBind::Array(Some(Located::loc(1, 31, Expression::Literal(Literal::UntypedInt(32))))),
                        slot: None,
-                       assignment: None,
+                       init: None,
                    }],
     };
     assert_eq!(globalvariable_str(test_groupshared_str),

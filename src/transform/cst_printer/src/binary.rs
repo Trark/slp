@@ -456,6 +456,37 @@ fn print_expression(expression: &Expression, printer: &mut Printer) {
     print_expression_inner(expression, 16, printer)
 }
 
+fn print_initializer(init_opt: &Option<Initializer>, printer: &mut Printer) {
+    fn print_initializer_inner(init: &Initializer, printer: &mut Printer) {
+        match *init {
+            Initializer::Expression(ref expr) => {
+                print_expression(expr, printer);
+            }
+            Initializer::Aggregate(ref inits) => {
+                printer.print("{");
+                printer.space();
+                for (index, init) in inits.iter().enumerate() {
+                    print_initializer_inner(init, printer);
+                    if index != inits.len() - 1 {
+                        printer.print(",");
+                    }
+                    printer.space();
+                }
+                printer.print("}");
+            }
+        };
+    }
+    match *init_opt {
+        None => {}
+        Some(ref init) => {
+            printer.space();
+            printer.print("=");
+            printer.space();
+            print_initializer_inner(init, printer);
+        }
+    };
+}
+
 fn print_vardef(vardef: &VarDef, printer: &mut Printer) {
     let array_dim = match vardef.typename {
         Type::Array(ref inner, ref dim) => {
@@ -474,15 +505,7 @@ fn print_vardef(vardef: &VarDef, printer: &mut Printer) {
         print_literal(&Literal::Int(dim), printer);
         printer.print("]");
     };
-    match &vardef.assignment {
-        &Some(ref expr) => {
-            printer.space();
-            printer.print("=");
-            printer.space();
-            print_expression(expr, printer);
-        }
-        &None => {}
-    };
+    print_initializer(&vardef.init, printer);
 }
 
 fn print_init_statement(cond: &InitStatement, printer: &mut Printer) {
@@ -594,15 +617,7 @@ fn print_rootdefinition_globalvariable(gv: &GlobalVariable, printer: &mut Printe
         print_literal(&Literal::Int(dim), printer);
         printer.print("]");
     };
-    match &gv.init {
-        &Some(ref expr) => {
-            printer.space();
-            printer.print("=");
-            printer.space();
-            print_expression(expr, printer);
-        }
-        &None => {}
-    }
+    print_initializer(&gv.init, printer);
     printer.print(";");
 }
 

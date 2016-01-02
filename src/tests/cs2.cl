@@ -11,6 +11,10 @@ int __constant g_myFour = (int)4;
 
 float4 __local sdata[32];
 
+uint __constant g_myArray1[4] = { 5u, 8u, 3u, 2u };
+
+int2 __constant g_myArray2[4] = { (int2)((int)2, (int)3), (int2)((int)9, (int)0), { (int)4, (int)5 }, (int2)((int)6, (int)7) };
+
 struct myStruct
 {
 	float4 pos;
@@ -93,7 +97,7 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint
 	float val0 = vals[(int)0] + 1.0f;
 	outTest_0(&vals[(int)2]);
 	myFunc_0((uint)g_myFour);
-	uint2 cast_from;
+	uint2 cast_from = { g_myArray1[(int)1], (uint)g_myArray2[(int)3].x };
 	int2 cast_t0 = cast_uint2_to_int2(cast_from);
 	float s = sdata[(int)0].x;
 	float t1;

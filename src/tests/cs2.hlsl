@@ -7,6 +7,8 @@ RWBuffer<float> unused_u0 : register(u0);
 static const int g_myFour = 4;
 static const int unused_static_constant = -4;
 groupshared float4 sdata[32];
+static const uint g_myArray1[4] = { 5u, 8u, 3u, 2u };
+static const int2 g_myArray2[] = { int2(2, 3), int2(9, 0), { 4, 5 }, int2(6, 7) };
 
 struct myStruct
 {
@@ -97,7 +99,7 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     float val0 = vals[0] + 1.0f;
     outTest(vals[2]);
     myFunc(g_myFour);
-    uint2 cast_from;
+    uint2 cast_from = { g_myArray1[1], g_myArray2[3].x };
     int2 cast_t0 = cast_from;
     float s = sdata[0].x, t1;
     float arr1[3], arr2[4];

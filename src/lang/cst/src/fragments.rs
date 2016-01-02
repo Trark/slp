@@ -24,7 +24,7 @@ impl Fragment {
                 let mut body = vec![Statement::Var(VarDef {
                                         name: to_local.clone(),
                                         typename: Type::Vector(to.clone(), dim_to.clone()),
-                                        assignment: None,
+                                        init: None,
                                     })];
                 for i in 0..dim_to_u32 {
                     let index = i as u64;
@@ -50,7 +50,7 @@ impl Fragment {
                 let mut body = vec![Statement::Var(VarDef {
                                         name: to_local.clone(),
                                         typename: Type::Vector(to.clone(), dim_to.clone()),
-                                        assignment: None,
+                                        init: None,
                                     })];
                 for i in 0..(dim_to.as_u32()) {
                     let index = i as u64;

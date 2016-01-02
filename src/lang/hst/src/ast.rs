@@ -375,14 +375,23 @@ pub enum Expression {
 #[derive(PartialEq, Debug, Clone)]
 pub enum VariableBind {
     Normal,
-    Array(Located<Expression>),
+    Array(Option<Located<Expression>>),
+}
+
+#[derive(PartialEq, Debug, Clone)]
+/// The node for representing the initial value of a variable
+pub enum Initializer {
+    /// Variable is initialized to the value of an expression
+    Expression(Located<Expression>),
+    /// Variable is initialized in parts (composite types and arrays)
+    Aggregate(Vec<Initializer>),
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct LocalVariableName {
     pub name: String,
     pub bind: VariableBind,
-    pub assignment: Option<Located<Expression>>,
+    pub init: Option<Initializer>,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -392,16 +401,23 @@ pub struct VarDef {
 }
 
 impl VarDef {
-    pub fn new(name: String,
-               local_type: LocalType,
-               assignment: Option<Located<Expression>>)
-               -> VarDef {
+    pub fn one(name: &str, local_type: LocalType) -> VarDef {
         VarDef {
             local_type: local_type,
             defs: vec![LocalVariableName {
-                           name: name,
+                           name: name.to_string(),
                            bind: VariableBind::Normal,
-                           assignment: assignment,
+                           init: None,
+                       }],
+        }
+    }
+    pub fn one_with_expr(name: &str, local_type: LocalType, expr: Located<Expression>) -> VarDef {
+        VarDef {
+            local_type: local_type,
+            defs: vec![LocalVariableName {
+                           name: name.to_string(),
+                           bind: VariableBind::Normal,
+                           init: Some(Initializer::Expression(expr)),
                        }],
         }
     }
@@ -493,7 +509,7 @@ pub struct GlobalVariableName {
     pub name: String,
     pub bind: VariableBind,
     pub slot: Option<GlobalSlot>,
-    pub assignment: Option<Located<Expression>>,
+    pub init: Option<Initializer>,
 }
 
 #[derive(PartialEq, Debug, Clone)]

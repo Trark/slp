@@ -167,6 +167,28 @@ fn search_statement(statement: &Statement, usage: &mut LocalFunctionGlobalUsage)
     }
 }
 
+fn search_initializer(init: &Initializer, usage: &mut LocalFunctionGlobalUsage) {
+    match *init {
+        Initializer::Expression(ref expr) => search_expression(expr, usage),
+        Initializer::Aggregate(ref inits) => {
+            for init in inits {
+                search_initializer(init, usage)
+            }
+        }
+    }
+}
+
+fn search_initializer_opt(init_opt: &Option<Initializer>, usage: &mut LocalFunctionGlobalUsage) {
+    match *init_opt {
+        Some(ref init) => search_initializer(init, usage),
+        None => {}
+    }
+}
+
+fn search_vardef(vd: &VarDef, usage: &mut LocalFunctionGlobalUsage) {
+    search_initializer_opt(&vd.init, usage);
+}
+
 fn search_initexpression(init: &ForInit, usage: &mut LocalFunctionGlobalUsage) {
     match *init {
         ForInit::Expression(ref expr) => search_expression(expr, usage),
@@ -175,13 +197,6 @@ fn search_initexpression(init: &ForInit, usage: &mut LocalFunctionGlobalUsage) {
                 search_vardef(vd, usage)
             }
         }
-    }
-}
-
-fn search_vardef(vd: &VarDef, usage: &mut LocalFunctionGlobalUsage) {
-    match vd.assignment {
-        Some(ref expr) => search_expression(expr, usage),
-        None => {}
     }
 }
 

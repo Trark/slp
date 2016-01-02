@@ -1385,16 +1385,39 @@ fn transpile_expression(expression: &src::Expression,
     }
 }
 
+fn transpile_initializer(init: &src::Initializer,
+                         context: &mut Context)
+                         -> Result<dst::Initializer, TranspileError> {
+    Ok(match *init {
+        src::Initializer::Expression(ref expr) => {
+            dst::Initializer::Expression(try!(transpile_expression(expr, context)))
+        }
+        src::Initializer::Aggregate(ref inits) => {
+            let mut elements = Vec::with_capacity(inits.len());
+            for init in inits {
+                elements.push(try!(transpile_initializer(init, context)));
+            }
+            dst::Initializer::Aggregate(elements)
+        }
+    })
+}
+
+fn transpile_initializer_opt(init_opt: &Option<src::Initializer>,
+                             context: &mut Context)
+                             -> Result<Option<dst::Initializer>, TranspileError> {
+    Ok(match *init_opt {
+        Some(ref init) => Some(try!(transpile_initializer(init, context))),
+        None => None,
+    })
+}
+
 fn transpile_vardef(vardef: &src::VarDef,
                     context: &mut Context)
                     -> Result<dst::VarDef, TranspileError> {
     Ok(dst::VarDef {
         id: try!(context.get_variable_id(&vardef.id)),
         typename: try!(transpile_localtype(&vardef.local_type, context)),
-        assignment: match &vardef.assignment {
-            &None => None,
-            &Some(ref expr) => Some(try!(transpile_expression(expr, context))),
-        },
+        init: try!(transpile_initializer_opt(&vardef.init, context)),
     })
 }
 
@@ -1584,7 +1607,7 @@ fn transpile_kernel_input_semantic(param: &src::KernelParam,
     Ok(dst::Statement::Var(dst::VarDef {
         id: try!(context.get_variable_id(&param.0)),
         typename: typename,
-        assignment: Some(assign),
+        init: Some(dst::Initializer::Expression(assign)),
     }))
 }
 
@@ -1649,10 +1672,7 @@ fn transpile_globalvariable(gv: &src::GlobalVariable,
     } else {
         let global_id = try!(context.get_global_static_id(&gv.id));
         let cl_type = try!(transpile_type(&src::Type(ty.clone(), modifiers.clone()), &context));
-        let cl_init = match &gv.assignment {
-            &Some(ref expr) => Some(try!(transpile_expression(expr, context))),
-            &None => None,
-        };
+        let cl_init = try!(transpile_initializer_opt(&gv.init, context));
         let address_space = match gv.global_type.1 {
             src::GlobalStorage::Extern => panic!("extern not lifted"),
             src::GlobalStorage::Static => dst::AddressSpace::Constant,
@@ -1832,7 +1852,7 @@ fn test_transpile() {
                     name: "g_myInBuffer".to_string(),
                     bind: hst::VariableBind::Normal,
                     slot: Some(hst::GlobalSlot::ReadSlot(0)),
-                    assignment: None,
+                    init: None,
                 }],
             }),
             hst::RootDefinition::Function(hst::FunctionDefinition {
@@ -1855,8 +1875,8 @@ fn test_transpile() {
                 params: vec![],
                 body: vec![
                     hst::Statement::Empty,
-                    hst::Statement::Var(hst::VarDef::new("a".to_string(), hst::Type::uint().into(), None)),
-                    hst::Statement::Var(hst::VarDef::new("b".to_string(), hst::Type::uint().into(), None)),
+                    hst::Statement::Var(hst::VarDef::one("a", hst::Type::uint().into())),
+                    hst::Statement::Var(hst::VarDef::one("b", hst::Type::uint().into())),
                     hst::Statement::Expression(Located::none(
                         hst::Expression::BinaryOperation(hst::BinOp::Assignment,
                             Box::new(Located::none(hst::Expression::Variable("a".to_string()))),

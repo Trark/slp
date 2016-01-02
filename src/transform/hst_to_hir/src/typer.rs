@@ -50,8 +50,12 @@ pub enum TyperError {
     ExpectedValueExpression(ErrorType),
 
     InvalidCast(ErrorType, ErrorType),
-    FunctionTypeInInitExpression,
-    WrongTypeInInitExpression,
+
+    InitializerExpressionWrongType,
+    InitializerAggregateDoesNotMatchType,
+    InitializerAggregateWrongDimension,
+    InitializerAggregateWrongElementType,
+
     WrongTypeInConstructor,
     WrongTypeInReturnStatement,
     FunctionNotCalled,
@@ -64,6 +68,7 @@ pub enum TyperError {
 
     LvalueRequired,
     ArrayDimensionsMustBeConstantExpression(ast::Expression),
+    ArrayDimensionNotSpecified,
 }
 
 pub type ReturnType = ir::Type;
@@ -146,8 +151,16 @@ impl error::Error for TyperError {
             TyperError::ExpectedValueExpression(_) => "expected a value expression",
 
             TyperError::InvalidCast(_, _) => "invalid cast",
-            TyperError::FunctionTypeInInitExpression => "function not called",
-            TyperError::WrongTypeInInitExpression => "wrong type in variable initialization",
+
+            TyperError::InitializerExpressionWrongType => "wrong type in variable initialization",
+            TyperError::InitializerAggregateDoesNotMatchType => "initializer does not match type",
+            TyperError::InitializerAggregateWrongDimension => {
+                "initializer has incorrect number of elements"
+            }
+            TyperError::InitializerAggregateWrongElementType => {
+                "initializer element has incorrect type"
+            }
+
             TyperError::WrongTypeInConstructor => "wrong type in numeric constructor",
             TyperError::WrongTypeInReturnStatement => "wrong type in return statement",
             TyperError::FunctionNotCalled => "function not called",
@@ -168,6 +181,7 @@ impl error::Error for TyperError {
             TyperError::ArrayDimensionsMustBeConstantExpression(_) => {
                 "array dimensions must be constant"
             }
+            TyperError::ArrayDimensionNotSpecified => "array not given any dimensions",
         }
     }
 }
@@ -2340,15 +2354,28 @@ fn evaluate_constexpr_int(expr: &ast::Expression) -> Result<u64, ()> {
     })
 }
 
-fn apply_variable_bind(ty: ir::Type, bind: &ast::VariableBind) -> Result<ir::Type, TyperError> {
+fn apply_variable_bind(ty: ir::Type,
+                       bind: &ast::VariableBind,
+                       init: &Option<ast::Initializer>)
+                       -> Result<ir::Type, TyperError> {
     match *bind {
         ast::VariableBind::Array(ref dim) => {
             let ir::Type(layout, modifiers) = ty;
 
-            let constant_dim = match evaluate_constexpr_int(&**dim) {
-                Ok(val) => val,
-                Err(()) => {
-                    return Err(TyperError::ArrayDimensionsMustBeConstantExpression((**dim).clone()))
+            let constant_dim = match *dim {
+                Some(ref dim_expr) => {
+                    match evaluate_constexpr_int(&**dim_expr) {
+                        Ok(val) => val,
+                        Err(()) => {
+                            return Err(TyperError::ArrayDimensionsMustBeConstantExpression((**dim_expr).clone()))
+                        }
+                    }
+                }
+                None => {
+                    match *init {
+                        Some(ast::Initializer::Aggregate(ref exprs)) => exprs.len() as u64,
+                        _ => return Err(TyperError::ArrayDimensionNotSpecified),
+                    }
                 }
             };
 
@@ -2359,43 +2386,111 @@ fn apply_variable_bind(ty: ir::Type, bind: &ast::VariableBind) -> Result<ir::Typ
     }
 }
 
+fn parse_initializer(init: &ast::Initializer,
+                     tyl: &ir::TypeLayout,
+                     context: &ExpressionContext)
+                     -> Result<ir::Initializer, TyperError> {
+    Ok(match *init {
+        ast::Initializer::Expression(ref expr) => {
+            let ety = ir::Type::from_layout(tyl.clone()).to_rvalue();
+            match try!(parse_expr(expr, context)) {
+                TypedExpression::Value(expr_ir, expr_ty) => {
+                    match ImplicitConversion::find(&expr_ty, &ety) {
+                        Ok(rhs_cast) => ir::Initializer::Expression(rhs_cast.apply(expr_ir)),
+                        Err(()) => return Err(TyperError::InitializerExpressionWrongType),
+                    }
+                }
+                _ => return Err(TyperError::FunctionNotCalled),
+            }
+        }
+        ast::Initializer::Aggregate(ref exprs) => {
+            fn build_elements(ety: &ExpressionType,
+                              inits: &[ast::Initializer],
+                              context: &ExpressionContext)
+                              -> Result<Vec<ir::Initializer>, TyperError> {
+                let mut elements = Vec::with_capacity(inits.len());
+                for init in inits {
+                    let element = try!(parse_initializer(init, &(ety.0).0, context));
+                    elements.push(element);
+                }
+                Ok(elements)
+            }
+            match *tyl {
+                ir::TypeLayout::Scalar(_) => {
+                    if exprs.len() as u32 != 1 {
+                        return Err(TyperError::InitializerAggregateWrongDimension);
+                    }
+
+                    // Reparse as if it was a single expression instead of a 1 element aggregate
+                    // Meaning '{ x }' is read as if it were 'x'
+                    // Will also reduce '{{ x }}' to 'x'
+                    try!(parse_initializer(&exprs[0], tyl, context))
+                }
+                ir::TypeLayout::Vector(ref scalar, ref dim) => {
+                    if exprs.len() as u32 != *dim {
+                        return Err(TyperError::InitializerAggregateWrongDimension);
+                    }
+
+                    let ety = ir::Type::from_scalar(scalar.clone()).to_rvalue();
+                    let elements = try!(build_elements(&ety, exprs, context));
+
+                    ir::Initializer::Aggregate(elements)
+                }
+                ir::TypeLayout::Array(ref inner, ref dim) => {
+                    if exprs.len() as u64 != *dim {
+                        return Err(TyperError::InitializerAggregateWrongDimension);
+                    }
+
+                    let ety = ir::Type::from_layout(*inner.clone()).to_rvalue();
+                    let elements = try!(build_elements(&ety, exprs, context));
+
+                    ir::Initializer::Aggregate(elements)
+                }
+                _ => return Err(TyperError::InitializerAggregateDoesNotMatchType),
+            }
+        }
+    })
+}
+
+fn parse_initializer_opt(init_opt: &Option<ast::Initializer>,
+                         tyl: &ir::TypeLayout,
+                         context: &ExpressionContext)
+                         -> Result<Option<ir::Initializer>, TyperError> {
+    Ok(match *init_opt {
+        Some(ref init) => Some(try!(parse_initializer(init, tyl, context))),
+        None => None,
+    })
+}
+
 fn parse_vardef(ast: &ast::VarDef,
                 context: ScopeContext)
                 -> Result<(Vec<ir::VarDef>, ScopeContext), TyperError> {
-    let var_type = try!(parse_localtype(&ast.local_type, &context));
-    let rvalue = var_type.0.clone().to_rvalue();
+    let base_type = try!(parse_localtype(&ast.local_type, &context));
 
+    // Build multiple output VarDefs for each variable inside the source VarDef
     let mut context = context;
     let mut vardefs = vec![];
     for local_variable in &ast.defs {
-        let name = &local_variable.name;
-        let assignment = &local_variable.assignment;
+        // Get variable name
+        let var_name = &local_variable.name.clone();
 
-        let assign_ir = match *assignment {
-            Some(ref expr) => {
-                match try!(parse_expr(expr, &context)) {
-                    TypedExpression::Value(expr_ir, expt_ty) => {
-                        match ImplicitConversion::find(&expt_ty, &rvalue) {
-                            Ok(rhs_cast) => Some(rhs_cast.apply(expr_ir)),
-                            Err(()) => return Err(TyperError::WrongTypeInInitExpression),
-                        }
-                    }
-                    _ => return Err(TyperError::FunctionTypeInInitExpression),
-                }
-            }
-            None => None,
-        };
-        let var_name = name.clone();
-
-        let ir::LocalType(lty, ls, interp) = var_type.clone();
+        // Build type from ast type + bind
+        let ir::LocalType(lty, ls, interp) = base_type.clone();
         let bind = &local_variable.bind;
-        let lv_type = ir::LocalType(try!(apply_variable_bind(lty, bind)), ls, interp);
+        let lv_tyl = try!(apply_variable_bind(lty, bind, &local_variable.init));
+        let lv_type = ir::LocalType(lv_tyl, ls, interp);
 
+        // Parse the initializer
+        let var_init = try!(parse_initializer_opt(&local_variable.init, &(lv_type.0).0, &context));
+
+        // Register the variable
         let var_id = try!(context.insert_variable(var_name.clone(), lv_type.0.clone()));
+
+        // Add the variables creation node
         vardefs.push(ir::VarDef {
             id: var_id,
             local_type: lv_type,
-            assignment: assign_ir,
+            init: var_init,
         });
     }
 
@@ -2548,7 +2643,7 @@ fn parse_rootdefinition_struct(sd: &ast::StructDefinition,
         let base_type = try!(parse_type(&ast_member.ty, &context));
         for def in &ast_member.defs {
             let name = def.name.clone();
-            let ty = try!(apply_variable_bind(base_type.clone(), &def.bind));
+            let ty = try!(apply_variable_bind(base_type.clone(), &def.bind, &None));
             member_map.insert(name.clone(), ty.clone());
             members.push(ir::StructMember {
                 name: name,
@@ -2581,7 +2676,7 @@ fn parse_rootdefinition_constantbuffer
         for def in &member.defs {
             let var_name = def.name.clone();
             let var_offset = def.offset.clone();
-            let var_type = try!(apply_variable_bind(base_type.clone(), &def.bind));
+            let var_type = try!(apply_variable_bind(base_type.clone(), &def.bind, &None));
             members_map.insert(var_name.clone(), var_type.clone());
             members.push(ir::ConstantVariable {
                 name: var_name,
@@ -2621,36 +2716,19 @@ fn parse_rootdefinition_globalvariable
         // Resolve type
         let ir::GlobalType(lty, gs, interp) = var_type.clone();
         let bind = &def.bind;
-        let gv_type = ir::GlobalType(try!(apply_variable_bind(lty, bind)), gs, interp);
+        let gv_tyl = try!(apply_variable_bind(lty, bind, &def.init));
+        let gv_type = ir::GlobalType(gv_tyl, gs, interp);
 
         // Insert variable
         let var_name = def.name.clone();
         let input_type = gv_type.0.clone();
         let var_id = try!(context.insert_global(var_name.clone(), input_type.clone()));
 
-        let var_assign = match &def.assignment {
-            &Some(ref assign) => {
-                let (uncasted, ty) = match try!(parse_expr(assign, &context)) {
-                    TypedExpression::Value(expr, ty) => (expr, ty),
-                    TypedExpression::Function(_) => return Err(TyperError::FunctionNotCalled),
-                    TypedExpression::Method(_) => return Err(TyperError::FunctionNotCalled),
-                };
-                // Todo: review if we want to purge modifiers for rhs of assignment
-                let cast_to = ir::Type(input_type.0.clone(), ir::TypeModifier::default())
-                                  .to_rvalue();
-                let cast = match ImplicitConversion::find(&ty, &cast_to) {
-                    Ok(cast) => cast,
-                    Err(()) => return Err(TyperError::WrongTypeInInitExpression),
-                };
-                let casted = cast.apply(uncasted);
-                Some(casted)
-            }
-            &None => None,
-        };
+        let var_init = try!(parse_initializer_opt(&def.init, &input_type.0, &context));
         let gv_ir = ir::GlobalVariable {
             id: var_id,
             global_type: gv_type,
-            assignment: var_assign,
+            init: var_init,
         };
         let entry = ir::GlobalEntry {
             id: var_id,
@@ -2972,7 +3050,7 @@ fn test_typeparse() {
                     name: "g_myInBuffer".to_string(),
                     bind: ast::VariableBind::Normal,
                     slot: Some(ast::GlobalSlot::ReadSlot(0)),
-                    assignment: None,
+                    init: None,
                 }],
             }),
             ast::RootDefinition::GlobalVariable(ast::GlobalVariable {
@@ -2981,7 +3059,7 @@ fn test_typeparse() {
                     name: "g_myFour".to_string(),
                     bind: ast::VariableBind::Normal,
                     slot: None,
-                    assignment: Some(Located::none(ast::Expression::Literal(ast::Literal::UntypedInt(4)))),
+                    init: Some(ast::Initializer::Expression(Located::none(ast::Expression::Literal(ast::Literal::UntypedInt(4))))),
                 }],
             }),
             ast::RootDefinition::Function(ast::FunctionDefinition {
@@ -3003,7 +3081,7 @@ fn test_typeparse() {
                 returntype: ast::Type::void(),
                 params: vec![ast::FunctionParam { name: "x".to_string(), param_type: ast::ParamType(ast::Type::float(), ast::InputModifier::Out, None), semantic: None }],
                 body: vec![
-                    ast::Statement::Var(ast::VarDef::new("local_static".to_string(), ast::LocalType(ast::Type::uint(), ast::LocalStorage::Static, None), None)),
+                    ast::Statement::Var(ast::VarDef::one("local_static", ast::LocalType(ast::Type::uint(), ast::LocalStorage::Static, None))),
                     ast::Statement::Expression(Located::loc(1, 1,
                         ast::Expression::BinaryOperation(ast::BinOp::Assignment,
                             Box::new(Located::none(ast::Expression::Variable("x".to_string()))),
@@ -3019,8 +3097,8 @@ fn test_typeparse() {
                 params: vec![],
                 body: vec![
                     ast::Statement::Empty,
-                    ast::Statement::Var(ast::VarDef::new("a".to_string(), ast::Type::uint().into(), None)),
-                    ast::Statement::Var(ast::VarDef::new("b".to_string(), ast::Type::uint().into(), None)),
+                    ast::Statement::Var(ast::VarDef::one("a", ast::Type::uint().into())),
+                    ast::Statement::Var(ast::VarDef::one("b", ast::Type::uint().into())),
                     ast::Statement::Expression(Located::none(
                         ast::Expression::BinaryOperation(ast::BinOp::Assignment,
                             Box::new(Located::none(ast::Expression::Variable("a".to_string()))),
@@ -3048,13 +3126,13 @@ fn test_typeparse() {
                             ]
                         )
                     )),
-                    ast::Statement::Var(ast::VarDef::new("testOut".to_string(), ast::Type::float().into(), None)),
+                    ast::Statement::Var(ast::VarDef::one("testOut", ast::Type::float().into())),
                     ast::Statement::Var(ast::VarDef {
                         local_type: ast::Type::from_layout(ast::TypeLayout::float()).into(),
                         defs: vec![ast::LocalVariableName {
                             name: "x".to_string(),
-                            bind: ast::VariableBind::Array(Located::none(ast::Expression::Literal(ast::Literal::UntypedInt(3)))),
-                            assignment: None,
+                            bind: ast::VariableBind::Array(Some(Located::none(ast::Expression::Literal(ast::Literal::UntypedInt(3))))),
+                            init: None,
                         }]
                     }),
                     ast::Statement::Expression(Located::none(
@@ -3080,7 +3158,7 @@ fn test_typeparse() {
                     name: "g_myFour".to_string(),
                     bind: ast::VariableBind::Normal,
                     slot: None,
-                    assignment: Some(Located::none(ast::Expression::Literal(ast::Literal::UntypedInt(4)))),
+                    init: Some(ast::Initializer::Expression(Located::none(ast::Expression::Literal(ast::Literal::UntypedInt(4))))),
                 }],
             }),
             ast::RootDefinition::Function(ast::FunctionDefinition {
@@ -3108,7 +3186,7 @@ fn test_typeparse() {
             ir::RootDefinition::GlobalVariable(ir::GlobalVariable {
                 id: ir::GlobalId(0),
                 global_type: ir::GlobalType(ir::Type(ir::TypeLayout::from_scalar(ir::ScalarType::Int), ir::TypeModifier { is_const: true, .. ir::TypeModifier::default() }), ir::GlobalStorage::Static, None),
-                assignment: Some(ir::Expression::Cast(ir::Type::int(), Box::new(ir::Expression::Literal(ir::Literal::UntypedInt(4))))),
+                init: Some(ir::Initializer::Expression(ir::Expression::Cast(ir::Type::int(), Box::new(ir::Expression::Literal(ir::Literal::UntypedInt(4)))))),
             }),
             ir::RootDefinition::Kernel(ir::Kernel {
                 group_dimensions: ir::Dimension(8, 8, 1),

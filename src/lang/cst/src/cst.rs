@@ -182,10 +182,19 @@ pub enum Expression {
 }
 
 #[derive(PartialEq, Debug, Clone)]
+/// The node for representing the initial value of a variable
+pub enum Initializer {
+    /// Variable is initialized to the value of an expression
+    Expression(Expression),
+    /// Variable is initialized in parts (composite types and arrays)
+    Aggregate(Vec<Initializer>),
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub struct VarDef {
     pub name: Identifier,
     pub typename: Type,
-    pub assignment: Option<Expression>,
+    pub init: Option<Initializer>,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -212,7 +221,7 @@ pub struct GlobalVariable {
     pub name: Identifier,
     pub ty: Type,
     pub address_space: AddressSpace, // Make part of Type?
-    pub init: Option<Expression>,
+    pub init: Option<Initializer>,
 }
 
 #[derive(PartialEq, Debug, Clone)]
