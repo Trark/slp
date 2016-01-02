@@ -2574,15 +2574,18 @@ fn parse_rootdefinition_constantbuffer
     let mut members = vec![];
     let mut members_map = HashMap::new();
     for member in &cb.members {
-        let var_name = member.name.clone();
-        let var_type = try!(parse_type(&member.typename, &context));
-        let var_offset = member.offset.clone();
-        members_map.insert(var_name.clone(), var_type.clone());
-        members.push(ir::ConstantVariable {
-            name: var_name,
-            typename: var_type,
-            offset: var_offset,
-        });
+        let base_type = try!(parse_type(&member.ty, &context));
+        for def in &member.defs {
+            let var_name = def.name.clone();
+            let var_offset = def.offset.clone();
+            let var_type = try!(apply_variable_bind(base_type.clone(), &def.bind));
+            members_map.insert(var_name.clone(), var_type.clone());
+            members.push(ir::ConstantVariable {
+                name: var_name,
+                typename: var_type,
+                offset: var_offset,
+            });
+        }
     }
     let id = match context.insert_cbuffer(&cb_name, members_map) {
         Some(id) => id,

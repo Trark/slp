@@ -25,6 +25,8 @@ struct testStruct_0
 struct myConstants_t
 {
 	uint g_offset;
+	float g_x;
+	float g_uv[2];
 };
 
 void myFunc_0(uint x)
@@ -65,6 +67,8 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint
 		struct testStruct_0 data;
 	}
 	myFunc_1(4.0f);
+	myFunc_1(myConstants->g_x);
+	myFunc_1(myConstants->g_uv[(int)1]);
 	for (uint x = 4u; x < 10u; ++x)
 	{
 		myFunc_0(x);

@@ -22,6 +22,7 @@ struct testStruct_0
 cbuffer myConstants : register(b0)
 {
     uint g_offset;
+    float g_x, g_uv[2];
 };
 
 cbuffer unused_constants : register(b1)
@@ -71,6 +72,8 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
         testStruct_0 data;
     }
     myFunc(4.0f);
+    myFunc(g_x);
+    myFunc(g_uv[1]);
     for (uint x = 4u; x < 10u; ++x)
     {
         myFunc(x);

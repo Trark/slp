@@ -1063,12 +1063,25 @@ fn structdefinition(input: &[LexToken]) -> IResult<&[LexToken], StructDefinition
     )
 }
 
+fn constantvariablename(input: &[LexToken])
+                        -> IResult<&[LexToken], ConstantVariableName, ParseErrorReason> {
+    chain!(input,
+        name: parse_variablename ~
+        array_dim: opt!(parse_arraydim),
+        || { ConstantVariableName {
+            name: name.to_node(),
+            bind: match array_dim { Some(ref expr) => VariableBind::Array(expr.clone()), None => VariableBind::Normal },
+            offset: None,
+        } }
+    )
+}
+
 fn constantvariable(input: &[LexToken]) -> IResult<&[LexToken], ConstantVariable, ParseErrorReason> {
     chain!(input,
         typename: parse_typename ~
-        varname: parse_variablename ~
+        defs: separated_nonempty_list!(token!(Token::Comma), constantvariablename) ~
         token!(Token::Semicolon),
-        || { ConstantVariable { name: varname.to_node(), typename: typename, offset: None } }
+        || { ConstantVariable { ty: typename, defs: defs } }
     )
 }
 
@@ -1937,9 +1950,12 @@ fn test_rootdefinition() {
 
     let test_cbuffervar_str = "float4x4 wvp;";
     let test_cbuffervar_ast = ConstantVariable {
-        name: "wvp".to_string(),
-        typename: Type::float4x4(),
-        offset: None,
+        ty: Type::float4x4(),
+        defs: vec![ConstantVariableName {
+                       name: "wvp".to_string(),
+                       bind: VariableBind::Normal,
+                       offset: None,
+                   }],
     };
     assert_eq!(constantvariable_str(test_cbuffervar_str),
                test_cbuffervar_ast.clone());
@@ -1950,9 +1966,14 @@ fn test_rootdefinition() {
     let test_cbuffer1_ast = ConstantBuffer {
         name: "globals".to_string(),
         slot: None,
-        members: vec![
-            ConstantVariable { name: "wvp".to_string(), typename: Type::float4x4(), offset: None },
-        ],
+        members: vec![ConstantVariable {
+                          ty: Type::float4x4(),
+                          defs: vec![ConstantVariableName {
+                                         name: "wvp".to_string(),
+                                         bind: VariableBind::Normal,
+                                         offset: None,
+                                     }],
+                      }],
     };
     assert_eq!(cbuffer_str(test_cbuffer1_str), test_cbuffer1_ast.clone());
     assert_eq!(rootdefinition_str(test_cbuffer1_str),
@@ -1961,13 +1982,32 @@ fn test_rootdefinition() {
     let cbuffer_register_str = parse_from_str(Box::new(cbuffer_register));
     assert_eq!(cbuffer_register_str(" : register(b12) "), ConstantSlot(12));
 
-    let test_cbuffer2_str = "cbuffer globals : register(b12) { float4x4 wvp; }";
+    let test_cbuffer2_str = "cbuffer globals : register(b12) { float4x4 wvp; float x, y[2]; }";
+    let test_cbuffer2_ast_wvp = ConstantVariable {
+        ty: Type::float4x4(),
+        defs: vec![ConstantVariableName {
+                       name: "wvp".to_string(),
+                       bind: VariableBind::Normal,
+                       offset: None,
+                   }],
+    };
+    let test_cbuffer2_ast_xy = ConstantVariable {
+        ty: Type::float(),
+        defs: vec![ConstantVariableName {
+                       name: "x".to_string(),
+                       bind: VariableBind::Normal,
+                       offset: None,
+                   },
+                   ConstantVariableName {
+                       name: "y".to_string(),
+                       bind: VariableBind::Array(Located::loc(1, 60, Expression::Literal(Literal::UntypedInt(2)))),
+                       offset: None,
+                   }],
+    };
     let test_cbuffer2_ast = ConstantBuffer {
         name: "globals".to_string(),
         slot: Some(ConstantSlot(12)),
-        members: vec![
-            ConstantVariable { name: "wvp".to_string(), typename: Type::float4x4(), offset: None },
-        ],
+        members: vec![test_cbuffer2_ast_wvp, test_cbuffer2_ast_xy],
     };
     assert_eq!(cbuffer_str(test_cbuffer2_str), test_cbuffer2_ast.clone());
     assert_eq!(rootdefinition_str(test_cbuffer2_str),

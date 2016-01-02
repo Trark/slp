@@ -616,10 +616,25 @@ fn print_rootdefinition_struct(structdefinition: &StructDefinition, printer: &mu
     printer.indent();
     for member in &structdefinition.members {
         printer.line();
-        print_typename(&member.typename, printer);
+
+        let array_dim = match member.typename {
+            Type::Array(ref inner, ref dim) => {
+                print_typename(inner, printer);
+                Some(dim.clone())
+            }
+            ref ty => {
+                print_typename(ty, printer);
+                None
+            }
+        };
         printer.space();
         printer.print(&member.name);
-        printer.separator();
+        if let Some(dim) = array_dim {
+            printer.print("[");
+            print_literal(&Literal::Int(dim), printer);
+            printer.print("]");
+        };
+
         printer.print(";");
     }
     printer.unindent();
