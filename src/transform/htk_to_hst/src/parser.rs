@@ -540,7 +540,7 @@ fn expr_paren(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, P
         chain!(start: token!(Token::LeftParen) ~ expr: expr ~ token!(Token::RightParen), || { Located::new(expr.to_node(), start.to_loc()) }) |
         parse_variablename => { |name: Located<String>| { Located::new(Expression::Variable(name.node), name.location) } } |
         token!(LexToken(Token::LiteralInt(i), ref loc) => Located::new(Expression::Literal(Literal::UntypedInt(i)), loc.clone())) |
-        token!(LexToken(Token::LiteralUint(i), ref loc) => Located::new(Expression::Literal(Literal::UInt(i)), loc.clone())) |
+        token!(LexToken(Token::LiteralUInt(i), ref loc) => Located::new(Expression::Literal(Literal::UInt(i)), loc.clone())) |
         token!(LexToken(Token::LiteralLong(i), ref loc) => Located::new(Expression::Literal(Literal::Long(i)), loc.clone())) |
         token!(LexToken(Token::LiteralHalf(i), ref loc) => Located::new(Expression::Literal(Literal::Half(i)), loc.clone())) |
         token!(LexToken(Token::LiteralFloat(i), ref loc) => Located::new(Expression::Literal(Literal::Float(i)), loc.clone())) |

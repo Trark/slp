@@ -64,12 +64,12 @@ named!(digits<u64>, chain!(
 ));
 
 enum IntType {
-    Uint,
+    UInt,
     Long,
 }
 named!(int_type<IntType>, alt!(
-    tag!("u") => { |_| { IntType::Uint } } |
-    tag!("U") => { |_| { IntType::Uint } } |
+    tag!("u") => { |_| { IntType::UInt } } |
+    tag!("U") => { |_| { IntType::UInt } } |
     tag!("l") => { |_| { IntType::Long } } |
     tag!("L") => { |_| { IntType::Long } }
 ));
@@ -80,7 +80,7 @@ named!(literal_int<Token>, chain!(
     || {
         match int_type_opt {
             None => Token::LiteralInt(value),
-            Some(IntType::Uint) => Token::LiteralUint(value),
+            Some(IntType::UInt) => Token::LiteralUInt(value),
             Some(IntType::Long) => Token::LiteralLong(value),
         }
     }
@@ -665,7 +665,7 @@ fn test_token() {
     assert_eq!(token(&b"12 "[..]),
                IResult::Done(&b""[..], from_end(Token::LiteralInt(12), 3)));
     assert_eq!(token(&b"12u"[..]),
-               IResult::Done(&b""[..], from_end(Token::LiteralUint(12), 3)));
+               IResult::Done(&b""[..], from_end(Token::LiteralUInt(12), 3)));
     assert_eq!(token(&b"12l"[..]),
                IResult::Done(&b""[..], from_end(Token::LiteralLong(12), 3)));
     assert_eq!(token(&b"12L"[..]),
