@@ -1005,7 +1005,36 @@ fn init_statement(input: &[LexToken]) -> IResult<&[LexToken], InitStatement, Par
     )
 }
 
+fn statement_attribute(input: &[LexToken]) -> IResult<&[LexToken], (), ParseErrorReason> {
+    chain!(input,
+        token!(Token::LeftSquareBracket) ~
+        token!(Token::Id(_)) ~
+        opt!(chain!(
+            token!(Token::LeftParen) ~
+            separated_nonempty_list!(token!(Token::Comma), token!(Token::Id(_))) ~
+            token!(Token::RightParen),
+            || ()
+        )) ~
+        token!(Token::RightSquareBracket),
+        || ()
+    )
+}
+
+#[test]
+fn test_statement_attribute() {
+    let fastopt = &[LexToken::with_no_loc(Token::LeftSquareBracket),
+                    LexToken::with_no_loc(Token::Id(Identifier("fastopt".to_string()))),
+                    LexToken::with_no_loc(Token::RightSquareBracket)];
+    assert_eq!(statement_attribute(fastopt), IResult::Done(&[][..], ()));
+}
+
 fn statement(input: &[LexToken]) -> IResult<&[LexToken], Statement, ParseErrorReason> {
+    // Parse and ignore attributes before a statement
+    let input = match many0!(input, statement_attribute) {
+        IResult::Done(rest, _) => rest,
+        IResult::Incomplete(rem) => return IResult::Incomplete(rem),
+        IResult::Error(err) => return IResult::Error(err),
+    };
     if input.len() == 0 {
         IResult::Incomplete(Needed::Size(1))
     } else {
