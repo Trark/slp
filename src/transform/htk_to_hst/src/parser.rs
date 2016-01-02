@@ -1039,12 +1039,23 @@ fn statement_block(input: &[LexToken]) -> IResult<&[LexToken], Vec<Statement>, P
     }
 }
 
+fn structmembername(input: &[LexToken]) -> IResult<&[LexToken], StructMemberName, ParseErrorReason> {
+    chain!(input,
+        name: parse_variablename ~
+        array_dim: opt!(parse_arraydim),
+        || StructMemberName {
+            name: name.to_node(),
+            bind: match array_dim { Some(ref expr) => VariableBind::Array(expr.clone()), None => VariableBind::Normal },
+        }
+    )
+}
+
 fn structmember(input: &[LexToken]) -> IResult<&[LexToken], StructMember, ParseErrorReason> {
     chain!(input,
         typename: parse_typename ~
-        varname: parse_variablename ~
+        defs: separated_nonempty_list!(token!(Token::Comma), structmembername) ~
         token!(Token::Semicolon),
-        || { StructMember { name: varname.to_node(), typename: typename } }
+        || StructMember { ty: typename, defs: defs }
     )
 }
 
@@ -1907,8 +1918,8 @@ fn test_rootdefinition() {
     let test_struct_ast = StructDefinition {
         name: "MyStruct".to_string(),
         members: vec![
-            StructMember { name: "a".to_string(), typename: Type::uint() },
-            StructMember { name: "b".to_string(), typename: Type::float() },
+            StructMember { ty: Type::uint(), defs: vec![StructMemberName { name: "a".to_string(), bind: VariableBind::Normal }] },
+            StructMember { ty: Type::float(), defs: vec![StructMemberName { name: "b".to_string(), bind: VariableBind::Normal }] },
         ],
     };
     assert_eq!(structdefinition_str(test_struct_str),

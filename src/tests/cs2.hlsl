@@ -17,6 +17,7 @@ struct myStruct
 struct testStruct_0
 {
     uint index;
+    float x, y[2];
 };
 
 cbuffer myConstants : register(b0)

@@ -2545,13 +2545,16 @@ fn parse_rootdefinition_struct(sd: &ast::StructDefinition,
     let mut members = vec![];
     let mut member_map = HashMap::new();
     for ast_member in &sd.members {
-        let name = ast_member.name.clone();
-        let typename = try!(parse_type(&ast_member.typename, &context));
-        member_map.insert(name.clone(), typename.clone());
-        members.push(ir::StructMember {
-            name: name,
-            typename: typename,
-        });
+        let base_type = try!(parse_type(&ast_member.ty, &context));
+        for def in &ast_member.defs {
+            let name = def.name.clone();
+            let ty = try!(apply_variable_bind(base_type.clone(), &def.bind));
+            member_map.insert(name.clone(), ty.clone());
+            members.push(ir::StructMember {
+                name: name,
+                typename: ty,
+            });
+        }
     }
     let name = &sd.name;
     match context.insert_struct(name, member_map) {

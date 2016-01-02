@@ -20,6 +20,8 @@ struct myStruct
 struct testStruct_0
 {
 	uint index;
+	float x;
+	float y[2];
 };
 
 struct myConstants_t

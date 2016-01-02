@@ -427,9 +427,15 @@ pub enum Statement {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct StructMember {
+pub struct StructMemberName {
     pub name: String,
-    pub typename: Type,
+    pub bind: VariableBind,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct StructMember {
+    pub ty: Type,
+    pub defs: Vec<StructMemberName>,
 }
 
 #[derive(PartialEq, Debug, Clone)]
