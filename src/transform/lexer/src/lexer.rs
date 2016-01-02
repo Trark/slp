@@ -63,6 +63,66 @@ named!(digits<u64>, chain!(
     }
 ));
 
+named!(digit_hex<u64>, alt!(
+    tag!("0") => { |_| { 0 } } |
+    tag!("1") => { |_| { 1 } } |
+    tag!("2") => { |_| { 2 } } |
+    tag!("3") => { |_| { 3 } } |
+    tag!("4") => { |_| { 4 } } |
+    tag!("5") => { |_| { 5 } } |
+    tag!("6") => { |_| { 6 } } |
+    tag!("7") => { |_| { 7 } } |
+    tag!("8") => { |_| { 8 } } |
+    tag!("9") => { |_| { 9 } } |
+    tag!("A") => { |_| { 10 } } |
+    tag!("a") => { |_| { 10 } } |
+    tag!("B") => { |_| { 11 } } |
+    tag!("b") => { |_| { 11 } } |
+    tag!("C") => { |_| { 12 } } |
+    tag!("c") => { |_| { 12 } } |
+    tag!("D") => { |_| { 13 } } |
+    tag!("d") => { |_| { 13 } } |
+    tag!("E") => { |_| { 14 } } |
+    tag!("e") => { |_| { 14 } } |
+    tag!("F") => { |_| { 15 } } |
+    tag!("f") => { |_| { 15 } }
+));
+
+named!(digits_hex<u64>, chain!(
+    digits: many1!(digit_hex),
+    || {
+        let mut value = 0u64;
+        for digit in digits {
+            value = value * 16;
+            value += digit;
+        };
+        value
+    }
+));
+
+named!(digit_octal<u64>, alt!(
+    tag!("0") => { |_| { 0 } } |
+    tag!("1") => { |_| { 1 } } |
+    tag!("2") => { |_| { 2 } } |
+    tag!("3") => { |_| { 3 } } |
+    tag!("4") => { |_| { 4 } } |
+    tag!("5") => { |_| { 5 } } |
+    tag!("6") => { |_| { 6 } } |
+    tag!("7") => { |_| { 7 } }
+));
+
+named!(digits_octal<u64>, chain!(
+    digits: many1!(digit_octal),
+    || {
+        let mut value = 0u64;
+        for digit in digits {
+            value = value * 8;
+            value += digit;
+        };
+        value
+    }
+));
+
 enum IntType {
     UInt,
     Long,
@@ -74,7 +134,7 @@ named!(int_type<IntType>, alt!(
     tag!("L") => { |_| { IntType::Long } }
 ));
 
-named!(literal_int<Token>, chain!(
+named!(literal_decimal_int<Token>, chain!(
     value: digits ~
     int_type_opt: opt!(int_type),
     || {
@@ -85,6 +145,56 @@ named!(literal_int<Token>, chain!(
         }
     }
 ));
+
+named!(literal_hex_int<Token>, chain!(
+    value: digits_hex ~
+    int_type_opt: opt!(int_type),
+    || {
+        match int_type_opt {
+            None => Token::LiteralInt(value),
+            Some(IntType::UInt) => Token::LiteralUInt(value),
+            Some(IntType::Long) => Token::LiteralLong(value),
+        }
+    }
+));
+
+named!(literal_octal_int<Token>, chain!(
+    value: digits_octal ~
+    int_type_opt: opt!(int_type),
+    || {
+        match int_type_opt {
+            None => Token::LiteralInt(value),
+            Some(IntType::UInt) => Token::LiteralUInt(value),
+            Some(IntType::Long) => Token::LiteralLong(value),
+        }
+    }
+));
+
+fn literal_int(input: &[u8]) -> IResult<&[u8], Token> {
+    if input.starts_with(b"0x") {
+        literal_hex_int(&input[2..])
+    } else if input.starts_with(b"0") && (digit_octal(&input[1..]).is_done()) {
+        literal_octal_int(&input[1..])
+    } else {
+        literal_decimal_int(input)
+    }
+}
+
+#[test]
+fn test_literal_int() {
+    let p = literal_int;
+    let d = IResult::Done;
+    assert_eq!(p(b"0u"), d(&b""[..], Token::LiteralUInt(0)));
+    assert_eq!(p(b"0 "), d(&b" "[..], Token::LiteralInt(0)));
+    assert_eq!(p(b"12 "), d(&b" "[..], Token::LiteralInt(12)));
+    assert_eq!(p(b"12u"), d(&b""[..], Token::LiteralUInt(12)));
+    assert_eq!(p(b"12l"), d(&b""[..], Token::LiteralLong(12)));
+    assert_eq!(p(b"12L"), d(&b""[..], Token::LiteralLong(12)));
+    assert_eq!(p(b"0x3 "), d(&b" "[..], Token::LiteralInt(3)));
+    assert_eq!(p(b"0xA1 "), d(&b" "[..], Token::LiteralInt(161)));
+    assert_eq!(p(b"0xA1u"), d(&b""[..], Token::LiteralUInt(161)));
+    assert_eq!(p(b"0123u"), d(&b""[..], Token::LiteralUInt(83)));
+}
 
 fn literal_float<'a>(input: &'a [u8]) -> IResult<&'a [u8], Token> {
 
