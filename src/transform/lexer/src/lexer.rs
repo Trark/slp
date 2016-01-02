@@ -264,17 +264,34 @@ fn identifier<'a>(input: &'a [u8]) -> IResult<&'a [u8], Identifier> {
                   Identifier(str::from_utf8(&chars[..]).unwrap().to_string()))
 }
 
-fn whitespace_ignore(_: Vec<&[u8]>) -> Result<(), ()> {
+fn whitespace_ignore(_: Vec<()>) -> Result<(), ()> {
     Result::Ok(())
 }
+named!(whitespace_simple<()>, map!(alt!(tag!(" ") | tag!("\n") | tag!("\r") | tag!("\t")), |_: &[u8]| ()));
+named!(line_comment<()>, chain!(tag!("//") ~ many0!(is_not!("\n")) ~ tag!("\n"), || ()));
+named!(not_block_comment_end<()>, alt!(is_not!("*") => { |_| () } | chain!(tag!("*") ~ none_of!("/"), || ())));
+named!(block_comment<()>, chain!(tag!("/*") ~ many0!(not_block_comment_end) ~ tag!("*/"), || ()));
 named!(whitespace<()>, map_res!(
     many1!(alt!(
-        tag!(" ") | tag!("\n") | tag!("\r") | tag!("\t") |
-        chain!(tag!("//") ~ many0!(is_not!("\n")) ~ tag!("\n"), || { &[] as &[u8] }) |
-        chain!(tag!("/*") ~ many0!(is_not!("*/")) ~ tag!("*/"), || { &[] as &[u8] })
+        whitespace_simple |
+        line_comment |
+        block_comment
     )),
     whitespace_ignore
 ));
+
+#[test]
+fn test_whitespace() {
+    let complete = IResult::Done(&[][..], ());
+    assert!(whitespace(b"").is_err());
+    assert_eq!(whitespace(b" "), complete);
+    assert_eq!(whitespace(b"//\n"), complete);
+    assert_eq!(whitespace(b"// comment\n"), complete);
+    assert_eq!(whitespace(b"/* comment */"), complete);
+    assert_eq!(whitespace(b"/* line 1\n\t line 2\n\t line 3 */"), complete);
+    assert_eq!(whitespace(b"/* line 1\n\t star *\n\t line 3 */"), complete);
+    assert_eq!(whitespace(b"/* line 1\n\t slash /\n\t line 3 */"), complete);
+}
 
 // Reserved words
 named!(reserved_word_if, complete!(tag!("if")));
