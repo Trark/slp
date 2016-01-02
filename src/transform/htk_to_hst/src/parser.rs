@@ -867,7 +867,11 @@ fn expr_p15(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, Par
         alt!(input,
              token!(LexToken(Token::Equals, _) => BinOp::Assignment) |
              chain!(token!(Token::Plus) ~ token!(Token::Equals), || BinOp::SumAssignment) |
-             chain!(token!(Token::Minus) ~ token!(Token::Equals), || BinOp::DifferenceAssignment))
+             chain!(token!(Token::Minus) ~ token!(Token::Equals), || BinOp::DifferenceAssignment) |
+             chain!(token!(Token::Asterix) ~ token!(Token::Equals), || BinOp::ProductAssignment) |
+             chain!(token!(Token::ForwardSlash) ~ token!(Token::Equals), || BinOp::QuotientAssignment) |
+             chain!(token!(Token::Percent) ~ token!(Token::Equals), || BinOp::RemainderAssignment)
+        )
     }
 
     alt!(input,
@@ -1831,6 +1835,24 @@ fn test_expr() {
                Located::loc(1,
                             1,
                             Expression::BinaryOperation(BinOp::DifferenceAssignment,
+                                                        bexp_var("a", 1, 1),
+                                                        bexp_var("b", 1, 6))));
+    assert_eq!(expr_str("a *= b"),
+               Located::loc(1,
+                            1,
+                            Expression::BinaryOperation(BinOp::ProductAssignment,
+                                                        bexp_var("a", 1, 1),
+                                                        bexp_var("b", 1, 6))));
+    assert_eq!(expr_str("a /= b"),
+               Located::loc(1,
+                            1,
+                            Expression::BinaryOperation(BinOp::QuotientAssignment,
+                                                        bexp_var("a", 1, 1),
+                                                        bexp_var("b", 1, 6))));
+    assert_eq!(expr_str("a %= b"),
+               Located::loc(1,
+                            1,
+                            Expression::BinaryOperation(BinOp::RemainderAssignment,
                                                         bexp_var("a", 1, 1),
                                                         bexp_var("b", 1, 6))));
 

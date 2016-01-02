@@ -117,6 +117,9 @@ pub enum BinOp {
     Assignment,
     SumAssignment,
     DifferenceAssignment,
+    ProductAssignment,
+    QuotientAssignment,
+    RemainderAssignment,
 }
 
 #[derive(PartialEq, Debug, Clone)]

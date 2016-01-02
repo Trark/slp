@@ -116,6 +116,9 @@ pub enum Intrinsic2 {
     Assignment(Type),
     SumAssignment(DataType),
     DifferenceAssignment(DataType),
+    ProductAssignment(DataType),
+    QuotientAssignment(DataType),
+    RemainderAssignment(DataType),
 
     AsDouble,
 
@@ -318,7 +321,10 @@ impl Intrinsic for Intrinsic2 {
                 ty.clone().to_lvalue()
             }
             Intrinsic2::SumAssignment(ref dty) |
-            Intrinsic2::DifferenceAssignment(ref dty) => {
+            Intrinsic2::DifferenceAssignment(ref dty) |
+            Intrinsic2::ProductAssignment(ref dty) |
+            Intrinsic2::QuotientAssignment(ref dty) |
+            Intrinsic2::RemainderAssignment(ref dty) => {
                 // dty is the type of the assigned value, so it the return value
                 Type::from_data(dty.clone()).to_lvalue()
             }

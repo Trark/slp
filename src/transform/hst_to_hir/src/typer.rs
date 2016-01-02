@@ -1970,7 +1970,10 @@ fn parse_expr_binop(op: &ast::BinOp,
         }
         ast::BinOp::Assignment |
         ast::BinOp::SumAssignment |
-        ast::BinOp::DifferenceAssignment => {
+        ast::BinOp::DifferenceAssignment |
+        ast::BinOp::ProductAssignment |
+        ast::BinOp::QuotientAssignment |
+        ast::BinOp::RemainderAssignment => {
             let required_rtype = match lhs_type.1 {
                 ir::ValueType::Lvalue => ExpressionType(lhs_type.0.clone(), ir::ValueType::Rvalue),
                 _ => return Err(TyperError::LvalueRequired),
@@ -1982,7 +1985,10 @@ fn parse_expr_binop(op: &ast::BinOp,
                     let i = match *op {
                         ast::BinOp::Assignment => ir::Intrinsic2::Assignment(ty),
                         ast::BinOp::SumAssignment |
-                        ast::BinOp::DifferenceAssignment => {
+                        ast::BinOp::DifferenceAssignment |
+                        ast::BinOp::ProductAssignment |
+                        ast::BinOp::QuotientAssignment |
+                        ast::BinOp::RemainderAssignment => {
                             // Find data type for assignment
                             let dtyl = match ty.0.into() {
                                 Some(dtyl) => dtyl,
@@ -1994,6 +2000,15 @@ fn parse_expr_binop(op: &ast::BinOp,
                                 ast::BinOp::SumAssignment => ir::Intrinsic2::SumAssignment(dty),
                                 ast::BinOp::DifferenceAssignment => {
                                     ir::Intrinsic2::DifferenceAssignment(dty)
+                                }
+                                ast::BinOp::ProductAssignment => {
+                                    ir::Intrinsic2::ProductAssignment(dty)
+                                }
+                                ast::BinOp::QuotientAssignment => {
+                                    ir::Intrinsic2::QuotientAssignment(dty)
+                                }
+                                ast::BinOp::RemainderAssignment => {
+                                    ir::Intrinsic2::RemainderAssignment(dty)
                                 }
                                 _ => unreachable!(),
                             }

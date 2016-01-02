@@ -996,7 +996,13 @@ fn transpile_intrinsic2(intrinsic: &src::Intrinsic2,
         I::Subtract(_) => write_binop(dst::BinOp::Subtract, e1, e2),
         I::Multiply(_) => write_binop(dst::BinOp::Multiply, e1, e2),
         I::Divide(_) => write_binop(dst::BinOp::Divide, e1, e2),
-        I::Modulus(_) => write_binop(dst::BinOp::Modulus, e1, e2),
+        I::Modulus(ref dty) => {
+            match dty.0.to_scalar() {
+                src::ScalarType::Int | src::ScalarType::UInt => {}
+                _ => return Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
+            };
+            write_binop(dst::BinOp::Modulus, e1, e2)
+        }
         I::LeftShift(_) => write_binop(dst::BinOp::LeftShift, e1, e2),
         I::RightShift(_) => write_binop(dst::BinOp::RightShift, e1, e2),
         I::BitwiseAnd(_) => write_binop(dst::BinOp::BitwiseAnd, e1, e2),
@@ -1013,6 +1019,15 @@ fn transpile_intrinsic2(intrinsic: &src::Intrinsic2,
         I::Assignment(_) => write_binop(dst::BinOp::Assignment, e1, e2),
         I::SumAssignment(_) => write_binop(dst::BinOp::SumAssignment, e1, e2),
         I::DifferenceAssignment(_) => write_binop(dst::BinOp::DifferenceAssignment, e1, e2),
+        I::ProductAssignment(_) => write_binop(dst::BinOp::ProductAssignment, e1, e2),
+        I::QuotientAssignment(_) => write_binop(dst::BinOp::QuotientAssignment, e1, e2),
+        I::RemainderAssignment(ref dty) => {
+            match dty.0.to_scalar() {
+                src::ScalarType::Int | src::ScalarType::UInt => {}
+                _ => return Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
+            };
+            write_binop(dst::BinOp::RemainderAssignment, e1, e2)
+        }
         I::AsDouble => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
         I::Cross => write_func("cross", &[e1, e2]),
         I::Distance1 |
