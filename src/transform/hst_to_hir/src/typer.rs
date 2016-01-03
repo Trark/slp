@@ -2177,7 +2177,7 @@ fn parse_expr_unchecked(ast: &ast::Expression,
                 }
                 _ => return Err(TyperError::TypeDoesNotHaveMembers(composite_pt)),
             };
-            let ExpressionType(ir::Type(composite_tyl, _), vt) = composite_ty;
+            let ExpressionType(ir::Type(composite_tyl, composite_mod), vt) = composite_ty;
             match &composite_tyl {
                 &ir::TypeLayout::Struct(ref id) => {
                     match context.find_struct_member(id, member) {
@@ -2198,21 +2198,19 @@ fn parse_expr_unchecked(ast: &ast::Expression,
                             }
                         });
                     }
-                    let ety = ir::ExpressionType(ir::Type::from_layout(// Lets say single element swizzles go to scalars
-                                                                       // Technically they might be going to 1 element vectors
-                                                                       // that then get downcasted
-                                                                       // But it's hard to tell as scalars + single element vectors
-                                                                       // have the same overload precedence
-                                                                       if swizzle_slots.len() ==
-                                                                          1 {
-                                                     ir::TypeLayout::Scalar(scalar.clone())
-                                                 } else {
-                                                     ir::TypeLayout::Vector(scalar.clone(), swizzle_slots.len() as u32)
-                                                 }),
-                                                 vt);
-                    Ok(TypedExpression::Value(ir::Expression::Swizzle(Box::new(composite_ir),
-                                                                      swizzle_slots),
-                                              ety))
+                    // Lets say single element swizzles go to scalars
+                    // Technically they might be going to 1 element vectors
+                    // that then get downcasted
+                    // But it's hard to tell as scalars + single element vectors
+                    // have the same overload precedence
+                    let ty = if swizzle_slots.len() == 1 {
+                        ir::TypeLayout::Scalar(scalar.clone())
+                    } else {
+                        ir::TypeLayout::Vector(scalar.clone(), swizzle_slots.len() as u32)
+                    };
+                    let ety = ir::ExpressionType(ir::Type(ty, composite_mod), vt);
+                    let node = ir::Expression::Swizzle(Box::new(composite_ir), swizzle_slots);
+                    Ok(TypedExpression::Value(node, ety))
                 }
                 &ir::TypeLayout::Object(ref object_type) => {
                     match intrinsics::get_method(object_type, &member) {
