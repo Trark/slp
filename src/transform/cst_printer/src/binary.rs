@@ -226,7 +226,11 @@ fn print_binaryoperation(binop: &BinOp,
         BinOp::RemainderAssignment => 14,
     };
 
-    if last_precedence <= op_prec {
+    // Print parens around &&'s inside ||'s to silence warnings that clang emits
+    let is_and_in_or = op_prec == 11 && last_precedence == 12;
+    let requires_paren = last_precedence <= op_prec || is_and_in_or;
+
+    if requires_paren {
         printer.print("(");
     }
     print_expression_inner(lhs, op_prec + 1, printer);
@@ -234,7 +238,7 @@ fn print_binaryoperation(binop: &BinOp,
     printer.print(op_symbol);
     printer.space();
     print_expression_inner(rhs, op_prec, printer);
-    if last_precedence <= op_prec {
+    if requires_paren {
         printer.print(")");
     }
 }

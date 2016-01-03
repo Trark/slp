@@ -129,7 +129,7 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint
 	}
 	else
 	{
-		if (false || true && false)
+		if (false || (true && false))
 		{
 			myFunc_0(4u);
 		}
