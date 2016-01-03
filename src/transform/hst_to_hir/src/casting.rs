@@ -55,13 +55,6 @@ pub enum ConversionPriority {
     Worse,
 }
 
-#[derive(PartialEq, Debug, Clone, Copy)]
-enum NumericDimension {
-    Scalar,
-    Vector(u32),
-    Matrix(u32, u32),
-}
-
 #[derive(PartialEq, Debug, Clone)]
 struct DimensionCast(NumericDimension, NumericDimension);
 
@@ -346,8 +339,8 @@ impl ImplicitConversion {
     }
 
     pub fn get_rank(&self) -> ConversionRank {
-        use self::NumericDimension::Scalar;
-        use self::NumericDimension::Vector;
+        use slp_lang_hir::NumericDimension::Scalar;
+        use slp_lang_hir::NumericDimension::Vector;
         let &ImplicitConversion(_, _, ref dim_cast, ref num_cast, _) = self;
         let vec = match *dim_cast {
             None |

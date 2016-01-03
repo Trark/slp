@@ -1689,6 +1689,72 @@ fn parse_expr_unaryop(op: &ast::UnaryOp,
     }
 }
 
+fn most_sig_type_dim(lhs: &ir::TypeLayout, rhs: &ir::TypeLayout) -> Option<ir::NumericDimension> {
+    use slp_lang_hir::TypeLayout::*;
+    use std::cmp::min;
+    use std::cmp::max;
+    match (lhs, rhs) {
+        (&Scalar(_), &Scalar(_)) => Some(ir::NumericDimension::Scalar),
+        (&Scalar(_), &Vector(_, ref x)) => Some(ir::NumericDimension::Vector(*x)),
+        (&Vector(_, ref x), &Scalar(_)) => Some(ir::NumericDimension::Vector(*x)),
+        (&Vector(_, ref x1), &Vector(_, ref x2)) if *x1 == 1 || *x2 == 1 => {
+            Some(ir::NumericDimension::Vector(max(*x1, *x2)))
+        }
+        (&Vector(_, ref x1), &Vector(_, ref x2)) => {
+            let x = min(*x1, *x2);
+            Some(ir::NumericDimension::Vector(x))
+        }
+        (&Matrix(_, ref x1, ref y1), &Matrix(_, ref x2, ref y2)) => {
+            let x = min(*x1, *x2);
+            let y = min(*y1, *y2);
+            Some(ir::NumericDimension::Matrix(x, y))
+        }
+        _ => None,
+    }
+}
+
+fn most_sig_scalar(left: &ir::ScalarType, right: &ir::ScalarType) -> ir::ScalarType {
+    use slp_lang_hir::ScalarType;
+
+    // The limited number of hlsl types means these happen to always have one
+    // type being the common type
+    fn get_order(ty: &ScalarType) -> Option<u32> {
+        match *ty {
+            ScalarType::Bool => Some(0),
+            ScalarType::Int => Some(1),
+            ScalarType::UInt => Some(2),
+            ScalarType::Half => Some(3),
+            ScalarType::Float => Some(4),
+            ScalarType::Double => Some(5),
+            _ => None,
+        }
+    }
+
+    let left = match *left {
+        ScalarType::UntypedInt => ScalarType::Int,
+        ref scalar => scalar.clone(),
+    };
+    let right = match *right {
+        ScalarType::UntypedInt => ScalarType::Int,
+        ref scalar => scalar.clone(),
+    };
+
+    let left_order = match get_order(&left) {
+        Some(order) => order,
+        None => panic!("unknown scalar type"),
+    };
+    let right_order = match get_order(&right) {
+        Some(order) => order,
+        None => panic!("unknown scalar type"),
+    };
+
+    if left_order > right_order {
+        left
+    } else {
+        right
+    }
+}
+
 fn resolve_arithmetic_types
     (binop: &ast::BinOp,
      left: &ExpressionType,
@@ -1699,37 +1765,7 @@ fn resolve_arithmetic_types
     use slp_lang_hir::ScalarType;
 
     fn common_real_type(left: &ScalarType, right: &ScalarType) -> Result<ir::ScalarType, ()> {
-
-        // The limited number of hlsl types means these happen to always have one type being the common type
-        fn get_order(ty: &ScalarType) -> Result<u32, ()> {
-            match *ty {
-                ScalarType::Bool => Ok(0),
-                ScalarType::Int => Ok(1),
-                ScalarType::UInt => Ok(2),
-                ScalarType::Half => Ok(3),
-                ScalarType::Float => Ok(4),
-                ScalarType::Double => Ok(5),
-                _ => Err(()),
-            }
-        }
-
-        let left = match *left {
-            ScalarType::UntypedInt => ScalarType::Int,
-            ref scalar => scalar.clone(),
-        };
-        let right = match *right {
-            ScalarType::UntypedInt => ScalarType::Int,
-            ref scalar => scalar.clone(),
-        };
-
-        let left_order = try!(get_order(&left));
-        let right_order = try!(get_order(&right));
-
-        if left_order > right_order {
-            Ok(left)
-        } else {
-            Ok(right)
-        }
+        Ok(most_sig_scalar(left, right))
     }
 
     // Calculate the output type from the input type and operation
@@ -1763,41 +1799,15 @@ fn resolve_arithmetic_types
 
         // Get the more important input type, that serves as the base to
         // calculate the output type from
-        let dty = match (&left.0, &right.0) {
-            (&ir::TypeLayout::Scalar(ref ls),
-             &ir::TypeLayout::Scalar(ref rs)) => {
-                assert_eq!(ls, rs);
-                let layout = ir::DataLayout::Scalar(ls.clone());
-                ir::DataType(layout, left.1.clone())
-            }
-            (&ir::TypeLayout::Scalar(ref ls),
-             &ir::TypeLayout::Vector(ref rs, ref rx)) => {
-                assert_eq!(ls, rs);
-                let layout = ir::DataLayout::Vector(ls.clone(), *rx);
-                ir::DataType(layout, right.1.clone())
-            }
-            (&ir::TypeLayout::Vector(ref ls, ref lx),
-             &ir::TypeLayout::Scalar(ref rs)) => {
-                assert_eq!(ls, rs);
-                let layout = ir::DataLayout::Vector(ls.clone(), *lx);
-                ir::DataType(layout, left.1.clone())
-            }
-            (&ir::TypeLayout::Vector(ref ls, ref lx),
-             &ir::TypeLayout::Vector(ref rs, ref rx)) => {
-                assert_eq!(ls, rs);
-                assert_eq!(lx, rx);
-                let layout = ir::DataLayout::Vector(ls.clone(), *lx);
-                ir::DataType(layout, left.1.clone())
-            }
-            (&ir::TypeLayout::Matrix(ref ls, ref lx, ref ly),
-             &ir::TypeLayout::Matrix(ref rs, ref rx, ref ry)) => {
-                assert_eq!(ls, rs);
-                assert_eq!(lx, rx);
-                assert_eq!(ly, ry);
-                let layout = ir::DataLayout::Matrix(ls.clone(), *lx, *ly);
-                ir::DataType(layout, left.1.clone())
-            }
-            _ => panic!("non-arithmetic numeric type in binary operation"),
+        let dty = {
+            let nd = match most_sig_type_dim(&left.0, &right.0) {
+                Some(nd) => nd,
+                None => panic!("non-arithmetic numeric type in binary operation"),
+            };
+
+            let st = left.0.to_scalar().unwrap();
+            assert_eq!(st, right.0.to_scalar().unwrap());
+            ir::DataType(ir::DataLayout::new(st, nd), left.1.clone())
         };
 
         match *op {
@@ -1853,10 +1863,10 @@ fn resolve_arithmetic_types
             }
             (&ir::TypeLayout::Vector(ref ls, ref x1),
              &ir::TypeLayout::Vector(ref rs, ref x2))
-                if x1 == x2 => {
+                if x1 == x2 || *x1 == 1 || *x2 == 1 => {
                 let common_scalar = try!(common_real_type(ls, rs));
-                let common_left = ir::TypeLayout::from_vector(common_scalar, *x2);
-                let common_right = common_left.clone();
+                let common_left = ir::TypeLayout::from_vector(common_scalar.clone(), *x1);
+                let common_right = ir::TypeLayout::from_vector(common_scalar, *x2);
                 (common_left, common_right)
             }
             (&ir::TypeLayout::Matrix(ref ls, ref x1, ref y1),
@@ -2095,59 +2105,84 @@ fn parse_expr_ternary(cond: &ast::Expression,
     let (lhs, lhs_ety) = try!(unwrap_value_expr(lhs_texp, context));
     let (rhs, rhs_ety) = try!(unwrap_value_expr(rhs_texp, context));
 
-    // Remove untyped ints
-    let (purge_left, purge_right) = match ((lhs_ety.0).0.to_scalar(), (rhs_ety.0).0.to_scalar()) {
-        (Some(ir::ScalarType::Int), Some(ir::ScalarType::UntypedInt)) => {
-            (None, Some(ir::ScalarType::Int))
+    let ExpressionType(lhs_ty, _) = lhs_ety.clone();
+    let ExpressionType(rhs_ty, _) = rhs_ety.clone();
+    let wrong_types_err =
+        Err(TyperError::TernaryArmsMustHaveSameType(context.ir_type_to_error_type(&lhs_ty),
+                                                    context.ir_type_to_error_type(&rhs_ty)));
+    let ir::Type(lhs_tyl, lhs_mod) = lhs_ty;
+    let ir::Type(rhs_tyl, rhs_mod) = rhs_ty;
+
+    // Attempt to find best scalar match between match arms
+    // This will return None for non-numeric types
+    let st = match (lhs_tyl.to_scalar(), rhs_tyl.to_scalar()) {
+        (Some(left_scalar), Some(right_scalar)) => {
+            Some(most_sig_scalar(&left_scalar, &right_scalar))
         }
-        (Some(ir::ScalarType::UInt), Some(ir::ScalarType::UntypedInt)) => {
-            (None, Some(ir::ScalarType::UInt))
-        }
-        (Some(ir::ScalarType::UntypedInt), Some(ir::ScalarType::Int)) => {
-            (Some(ir::ScalarType::Int), None)
-        }
-        (Some(ir::ScalarType::UntypedInt), Some(ir::ScalarType::UInt)) => {
-            (Some(ir::ScalarType::UInt), None)
-        }
-        _ => (None, None),
+        _ => None,
     };
-    fn purge_untyped(expr: ir::Expression,
-                     ety: ExpressionType,
-                     purge: Option<ir::ScalarType>)
-                     -> (ir::Expression, ir::Type) {
-        let ty = ety.0;
-        match purge {
-            Some(scalar) => {
-                let ir::Type(tyl, ty_mod) = ty;
-                let new_type = ir::Type(tyl.transform_scalar(scalar), ty_mod);
-                let casted = ir::Expression::Cast(new_type.clone(), Box::new(expr));
-                (casted, new_type)
-            }
-            None => (expr, ty),
+
+    // Attempt to find best vector match
+    // This will return None for non-numeric types
+    // This may return None for some combinations of numeric layouts
+    let nd = most_sig_type_dim(&lhs_tyl, &rhs_tyl);
+
+    // Transform the types
+    let (lhs_target_tyl, rhs_target_tyl) = match (st, nd) {
+        (Some(st), Some(nd)) => {
+            let dtyl = ir::DataLayout::new(st, nd);
+            let tyl = ir::TypeLayout::from_data(dtyl);
+            (tyl.clone(), tyl)
         }
-    }
-    let (lhs, lhs_ty) = purge_untyped(lhs, lhs_ety, purge_left);
-    let (rhs, rhs_ty) = purge_untyped(rhs, rhs_ety, purge_right);
+        (Some(st), None) => {
+            let left = lhs_tyl.transform_scalar(st.clone());
+            let right = rhs_tyl.transform_scalar(st);
+            (left, right)
+        }
+        (None, Some(_)) => {
+            panic!("internal error: most_sig_scalar failed where most_sig_type_dim succeeded")
+        }
+        (None, None) => (lhs_tyl, rhs_tyl),
+    };
+
+    let comb_tyl = if lhs_target_tyl == rhs_target_tyl {
+        lhs_target_tyl
+    } else {
+        return wrong_types_err;
+    };
+
+    let target_mod = ir::TypeModifier {
+        is_const: false,
+        row_order: lhs_mod.row_order, // TODO: ???
+        precise: lhs_mod.precise || rhs_mod.precise,
+        volatile: false,
+    };
+
+    let ety_target = ir::Type(comb_tyl, target_mod).to_rvalue();
+
+    let left_cast = match ImplicitConversion::find(&lhs_ety, &ety_target) {
+        Ok(cast) => cast,
+        Err(()) => return wrong_types_err,
+    };
+    let right_cast = match ImplicitConversion::find(&rhs_ety, &ety_target) {
+        Ok(cast) => cast,
+        Err(()) => return wrong_types_err,
+    };
+
+    let lhs_casted = Box::new(left_cast.apply(lhs));
+    let rhs_casted = Box::new(right_cast.apply(rhs));
+    assert_eq!(left_cast.get_target_type(), right_cast.get_target_type());
+    let final_type = left_cast.get_target_type();
 
     // Cast the condition
     let cond_cast = match ImplicitConversion::find(&cond_ety, &ir::Type::bool().to_rvalue()) {
         Ok(cast) => cast,
         Err(()) => return Err(TyperError::TernaryConditionRequiresBoolean(context.ir_type_to_error_type(&cond_ety.0))),
     };
-    let cond = cond_cast.apply(cond);
+    let cond_casted = Box::new(cond_cast.apply(cond));
 
-    // Find final arm type
-    let final_type = if lhs_ty == rhs_ty {
-        lhs_ty.to_rvalue()
-    } else {
-        assert!(false, "{:?} {:?}", lhs_ty, rhs_ty);
-        return Err(TyperError::TernaryArmsMustHaveSameType(context.ir_type_to_error_type(&lhs_ty),
-                                                           context.ir_type_to_error_type(&rhs_ty)));
-    };
-    Ok(TypedExpression::Value(ir::Expression::TernaryConditional(Box::new(cond),
-                                                                 Box::new(lhs),
-                                                                 Box::new(rhs)),
-                              final_type))
+    let node = ir::Expression::TernaryConditional(cond_casted, lhs_casted, rhs_casted);
+    Ok(TypedExpression::Value(node, final_type))
 }
 
 fn parse_expr_unchecked(ast: &ast::Expression,

@@ -18,6 +18,13 @@ pub enum ScalarType {
     Double,
 }
 
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub enum NumericDimension {
+    Scalar,
+    Vector(u32),
+    Matrix(u32, u32),
+}
+
 /// Layout for DataType
 #[derive(PartialEq, Debug, Clone)]
 pub enum DataLayout {
@@ -27,6 +34,13 @@ pub enum DataLayout {
 }
 
 impl DataLayout {
+    pub fn new(scalar: ScalarType, dim: NumericDimension) -> DataLayout {
+        match dim {
+            NumericDimension::Scalar => DataLayout::Scalar(scalar),
+            NumericDimension::Vector(x) => DataLayout::Vector(scalar, x),
+            NumericDimension::Matrix(x, y) => DataLayout::Matrix(scalar, x, y),
+        }
+    }
     pub fn to_scalar(&self) -> ScalarType {
         match *self {
             DataLayout::Scalar(ref scalar) |

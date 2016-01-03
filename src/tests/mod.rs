@@ -111,6 +111,13 @@ fn cons_full() {
 }
 
 #[test]
+fn ternary_full() {
+    const HLSL: &'static str = include_str!("ternary.hlsl");
+    const CL: &'static str = include_str!("ternary.cl");
+    run_full(HLSL, CL, BindMap::new());
+}
+
+#[test]
 fn include() {
     const HLSL_MAIN: &'static str = include_str!("include_main.hlsl");
     const CL: &'static str = include_str!("include.cl");
