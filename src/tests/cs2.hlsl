@@ -94,8 +94,8 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     float returnValue = outTest(4.5, u, u > 4 ? 3.4 : u);
     float vals[3];
     vals[0] = 0.0f;
-    vals[1] = 1.0f;
-    vals[2] = 2.0f;
+    vals[1] = 1e100;
+    vals[2] = -1e100;
     float val0 = vals[0] + 1.0f;
     outTest(vals[2]);
     myFunc(g_myFour);

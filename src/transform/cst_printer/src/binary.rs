@@ -261,13 +261,25 @@ fn print_literal(lit: &Literal, printer: &mut Printer) {
                     })
         }
         &Literal::Float(f) => {
-            format!("{}{}f",
-                    f,
-                    if f == f.floor() {
-                        ".0"
-                    } else {
-                        ""
-                    })
+            // Currently don't expect any way to get a negative
+            // value in here
+            assert!(f.is_sign_positive());
+            if f.is_infinite() {
+                format!("{}INFINITY",
+                        if f.is_sign_positive() {
+                            ""
+                        } else {
+                            "-"
+                        })
+            } else {
+                format!("{}{}f",
+                        f,
+                        if f == f.floor() {
+                            ".0"
+                        } else {
+                            ""
+                        })
+            }
         }
         &Literal::Double(f) => {
             format!("{}{}",

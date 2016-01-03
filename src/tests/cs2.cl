@@ -92,8 +92,8 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint
 	float returnValue = (float)outTest_1(4.5f, &u, u > (float)4 ? 3.4f : u);
 	float vals[3];
 	vals[(int)0] = 0.0f;
-	vals[(int)1] = 1.0f;
-	vals[(int)2] = 2.0f;
+	vals[(int)1] = INFINITY;
+	vals[(int)2] = -INFINITY;
 	float val0 = vals[(int)0] + 1.0f;
 	outTest_0(&vals[(int)2]);
 	myFunc_0((uint)g_myFour);
