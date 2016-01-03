@@ -156,6 +156,11 @@ pub enum Intrinsic2 {
     MaxF3,
     MaxF4,
 
+    Step,
+    Step2,
+    Step3,
+    Step4,
+
     BufferLoad(DataType),
     RWBufferLoad(DataType),
     StructuredBufferLoad(StructuredType),
@@ -358,6 +363,10 @@ impl Intrinsic for Intrinsic2 {
             Intrinsic2::MaxF2 => Type::floatn(2).to_rvalue(),
             Intrinsic2::MaxF3 => Type::floatn(3).to_rvalue(),
             Intrinsic2::MaxF4 => Type::floatn(4).to_rvalue(),
+            Intrinsic2::Step => Type::float().to_rvalue(),
+            Intrinsic2::Step2 => Type::floatn(2).to_rvalue(),
+            Intrinsic2::Step3 => Type::floatn(3).to_rvalue(),
+            Intrinsic2::Step4 => Type::floatn(4).to_rvalue(),
             Intrinsic2::BufferLoad(ref dty) => Type::from_data(dty.clone()).to_rvalue(),
             Intrinsic2::RWBufferLoad(ref dty) => Type::from_data(dty.clone()).to_rvalue(),
             Intrinsic2::StructuredBufferLoad(ref sty) => {

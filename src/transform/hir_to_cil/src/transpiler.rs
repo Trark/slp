@@ -1066,6 +1066,10 @@ fn transpile_intrinsic2(intrinsic: &src::Intrinsic2,
         I::MaxF2 |
         I::MaxF3 |
         I::MaxF4 => write_func("fmax", &[e1, e2]),
+        I::Step |
+        I::Step2 |
+        I::Step3 |
+        I::Step4 => write_func("step", &[e1, e2]),
         I::BufferLoad(_) |
         I::RWBufferLoad(_) |
         I::StructuredBufferLoad(_) |

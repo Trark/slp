@@ -204,6 +204,11 @@ const INTRINSICS: &'static [IntrinsicDefinition] = &[
     ("sqrt", &[T_FLOAT2], I1(Intrinsic1::Sqrt2)),
     ("sqrt", &[T_FLOAT3], I1(Intrinsic1::Sqrt3)),
     ("sqrt", &[T_FLOAT4], I1(Intrinsic1::Sqrt4)),
+
+    ("step", &[T_FLOAT, T_FLOAT], I2(Intrinsic2::Step)),
+    ("step", &[T_FLOAT2, T_FLOAT2], I2(Intrinsic2::Step2)),
+    ("step", &[T_FLOAT3, T_FLOAT3], I2(Intrinsic2::Step3)),
+    ("step", &[T_FLOAT4, T_FLOAT4], I2(Intrinsic2::Step4)),
 ];
 
 pub fn get_intrinsics() -> &'static [IntrinsicDefinition] {

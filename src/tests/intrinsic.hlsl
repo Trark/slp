@@ -234,4 +234,9 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     int4 max_i4 = max(ix4, iy4);
     uint packed_half = f32tof16(fx);
     float unpacked_half = f16tof32(packed_half);
+    float step_fs = step(fx, fy);
+    float1 step_f1 = step(fx1, fy1);
+    float2 step_f2 = step(fx2, fy2);
+    float3 step_f3 = step(fx3, fy3);
+    float4 step_f4 = step(fx4, fy4);
 }
