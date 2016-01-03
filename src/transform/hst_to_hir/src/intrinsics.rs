@@ -152,6 +152,11 @@ const INTRINSICS: &'static [IntrinsicDefinition] = &[
     ("clamp", &[T_FLOAT3, T_FLOAT3, T_FLOAT3], I3(Intrinsic3::ClampF3)),
     ("clamp", &[T_FLOAT4, T_FLOAT4, T_FLOAT4], I3(Intrinsic3::ClampF4)),
 
+    ("cos", &[T_FLOAT],  I1(Intrinsic1::Cos)),
+    ("cos", &[T_FLOAT2], I1(Intrinsic1::Cos2)),
+    ("cos", &[T_FLOAT3], I1(Intrinsic1::Cos3)),
+    ("cos", &[T_FLOAT4], I1(Intrinsic1::Cos4)),
+
     ("cross", &[T_FLOAT3, T_FLOAT3], I2(Intrinsic2::Cross)),
 
     ("distance", &[T_FLOAT1, T_FLOAT1], I2(Intrinsic2::Distance1)),
@@ -217,6 +222,11 @@ const INTRINSICS: &'static [IntrinsicDefinition] = &[
     ("sign", &[T_FLOAT2], I1(Intrinsic1::SignF2)),
     ("sign", &[T_FLOAT3], I1(Intrinsic1::SignF3)),
     ("sign", &[T_FLOAT4], I1(Intrinsic1::SignF4)),
+
+    ("sin", &[T_FLOAT],  I1(Intrinsic1::Sin)),
+    ("sin", &[T_FLOAT2], I1(Intrinsic1::Sin2)),
+    ("sin", &[T_FLOAT3], I1(Intrinsic1::Sin3)),
+    ("sin", &[T_FLOAT4], I1(Intrinsic1::Sin4)),
 
     ("sincos", &[T_FLOAT, T_FLOAT_OUT, T_FLOAT_OUT], I3(Intrinsic3::Sincos)),
     ("sincos", &[T_FLOAT2, T_FLOAT2_OUT, T_FLOAT2_OUT], I3(Intrinsic3::Sincos2)),

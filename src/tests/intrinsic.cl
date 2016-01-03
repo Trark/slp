@@ -302,4 +302,14 @@ kernel void MyKernel(__global uint4* g_roBuffer, __global struct testStruct* g_r
 	(void)(fy2 = sincos(fx2, &fz2));
 	(void)(fy3 = sincos(fx3, &fz3));
 	(void)(fy4 = sincos(fx4, &fz4));
+	float sin_fs = sin(fx);
+	float sin_f1 = sin(fx1);
+	float2 sin_f2 = sin(fx2);
+	float3 sin_f3 = sin(fx3);
+	float4 sin_f4 = sin(fx4);
+	float cos_fs = cos(fx);
+	float cos_f1 = cos(fx1);
+	float2 cos_f2 = cos(fx2);
+	float3 cos_f3 = cos(fx3);
+	float4 cos_f4 = cos(fx4);
 }

@@ -921,6 +921,10 @@ fn transpile_intrinsic1(intrinsic: &src::Intrinsic1,
         I::AsFloatF2 => write_func("as_float2", &[e1]),
         I::AsFloatF3 => write_func("as_float3", &[e1]),
         I::AsFloatF4 => write_func("as_float4", &[e1]),
+        I::Cos |
+        I::Cos2 |
+        I::Cos3 |
+        I::Cos4 => write_func("cos", &[e1]),
         I::Exp |
         I::Exp2 |
         I::Exp3 |
@@ -1012,6 +1016,10 @@ fn transpile_intrinsic1(intrinsic: &src::Intrinsic1,
                        false,
                        context)
         }
+        I::Sin |
+        I::Sin2 |
+        I::Sin3 |
+        I::Sin4 => write_func("sin", &[e1]),
         I::Sqrt |
         I::Sqrt2 |
         I::Sqrt3 |

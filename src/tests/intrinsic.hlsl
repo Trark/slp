@@ -258,4 +258,14 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     (void)sincos(fx2, fy2, fz2);
     (void)sincos(fx3, fy3, fz3);
     (void)sincos(fx4, fy4, fz4);
+    float sin_fs = sin(fx);
+    float1 sin_f1 = sin(fx1);
+    float2 sin_f2 = sin(fx2);
+    float3 sin_f3 = sin(fx3);
+    float4 sin_f4 = sin(fx4);
+    float cos_fs = cos(fx);
+    float1 cos_f1 = cos(fx1);
+    float2 cos_f2 = cos(fx2);
+    float3 cos_f3 = cos(fx3);
+    float4 cos_f4 = cos(fx4);
 }
