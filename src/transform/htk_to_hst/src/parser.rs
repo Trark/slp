@@ -1318,11 +1318,11 @@ fn functionattribute(input: &[LexToken]) -> IResult<&[LexToken], FunctionAttribu
                     }
                 }) ~
                 token!(Token::LeftParen) ~
-                x: token!(LexToken(Token::LiteralInt(x), _) => x) ~
+                x: expr ~
                 token!(Token::Comma) ~
-                y: token!(LexToken(Token::LiteralInt(y), _) => y) ~
+                y: expr ~
                 token!(Token::Comma) ~
-                z: token!(LexToken(Token::LiteralInt(z), _) => z) ~
+                z: expr ~
                 token!(Token::RightParen),
                 || { FunctionAttribute::NumThreads(x, y, z) }
             )
@@ -2097,6 +2097,12 @@ fn test_rootdefinition() {
     assert_eq!(functiondefinition_str(test_func_str), test_func_ast.clone());
     assert_eq!(rootdefinition_str(test_func_str),
                RootDefinition::Function(test_func_ast.clone()));
+    let untyped_int = Literal::UntypedInt;
+    let elit = Expression::Literal;
+    let loc = Located::loc;
+    let numthreads = FunctionAttribute::NumThreads(loc(1, 13, elit(untyped_int(16))),
+                                                   loc(1, 17, elit(untyped_int(16))),
+                                                   loc(1, 21, elit(untyped_int(1))));
     assert_eq!(rootdefinition_str("[numthreads(16, 16, 1)] void func(float x) { }"),
                RootDefinition::Function(FunctionDefinition {
                    name: "func".to_string(),
@@ -2107,7 +2113,7 @@ fn test_rootdefinition() {
                                     semantic: None,
                                 }],
                    body: vec![],
-                   attributes: vec![FunctionAttribute::NumThreads(16, 16, 1)],
+                   attributes: vec![numthreads],
                }));
 
     let constantvariable_str = parse_from_str(Box::new(constantvariable));

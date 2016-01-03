@@ -531,7 +531,16 @@ pub enum Semantic {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum FunctionAttribute {
-    NumThreads(u64, u64, u64),
+    NumThreads(Located<Expression>, Located<Expression>, Located<Expression>),
+}
+
+impl FunctionAttribute {
+    pub fn numthreads(x: u64, y: u64, z: u64) -> FunctionAttribute {
+        let x_node = Located::none(Expression::Literal(Literal::UntypedInt(x)));
+        let y_node = Located::none(Expression::Literal(Literal::UntypedInt(y)));
+        let z_node = Located::none(Expression::Literal(Literal::UntypedInt(z)));
+        FunctionAttribute::NumThreads(x_node, y_node, z_node)
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]

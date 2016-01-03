@@ -57,7 +57,7 @@ void unused_function()
     unused_u0[0] = unused_t0[0] + unused_constant + unused_static_constant;
 }
 
-[numthreads(8, 8, 1)]
+[numthreads(8, 4*2, 1)]
 void CSMAIN(uint3 dtid : SV_DispatchThreadID)
 {
     uint myFunc_1;

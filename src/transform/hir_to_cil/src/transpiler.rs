@@ -1920,7 +1920,7 @@ fn test_transpile() {
                         )
                     )),
                 ],
-                attributes: vec![hst::FunctionAttribute::NumThreads(8, 8, 1)],
+                attributes: vec![hst::FunctionAttribute::numthreads(8, 8, 1)],
             }),
         ],
     };

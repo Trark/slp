@@ -63,6 +63,7 @@ pub enum TyperError {
     KernelNotDefined,
     KernelDefinedMultipleTimes,
     KernelHasNoDispatchDimensions,
+    KernelDispatchDimensionMustBeConstantExpression,
     KernelHasParamWithBadSemantic(ast::FunctionParam),
     KernelHasParamWithoutSemantic(ast::FunctionParam),
 
@@ -169,6 +170,9 @@ impl error::Error for TyperError {
             TyperError::KernelDefinedMultipleTimes => "multiple entry points found",
             TyperError::KernelHasNoDispatchDimensions => {
                 "compute kernels require a dispatch dimension"
+            }
+            TyperError::KernelDispatchDimensionMustBeConstantExpression => {
+                "dispatch dimension must be constant expression"
             }
             TyperError::KernelHasParamWithBadSemantic(_) => {
                 "kernel parameter did not have a valid kernel semantic"
@@ -2838,8 +2842,28 @@ fn parse_rootdefinition_kernel(fd: &ast::FunctionDefinition,
     fn find_dispatch_dimensions(attributes: &[ast::FunctionAttribute])
                                 -> Result<ir::Dimension, TyperError> {
         for attribute in attributes {
-            match attribute {
-                &ast::FunctionAttribute::NumThreads(x, y, z) => return Ok(ir::Dimension(x, y, z)),
+            match *attribute {
+                ast::FunctionAttribute::NumThreads(ref x, ref y, ref z) => {
+                    let eval_x = match evaluate_constexpr_int(x) {
+                        Ok(val) => val,
+                        Err(()) => {
+                            return Err(TyperError::KernelDispatchDimensionMustBeConstantExpression)
+                        }
+                    };
+                    let eval_y = match evaluate_constexpr_int(y) {
+                        Ok(val) => val,
+                        Err(()) => {
+                            return Err(TyperError::KernelDispatchDimensionMustBeConstantExpression)
+                        }
+                    };
+                    let eval_z = match evaluate_constexpr_int(z) {
+                        Ok(val) => val,
+                        Err(()) => {
+                            return Err(TyperError::KernelDispatchDimensionMustBeConstantExpression)
+                        }
+                    };
+                    return Ok(ir::Dimension(eval_x, eval_y, eval_z));
+                }
             };
         }
         Err(TyperError::KernelHasNoDispatchDimensions)
@@ -3157,7 +3181,7 @@ fn test_typeparse() {
                         )
                     )),
                 ],
-                attributes: vec![ast::FunctionAttribute::NumThreads(8, 8, 1)],
+                attributes: vec![ast::FunctionAttribute::numthreads(8, 8, 1)],
             }),
         ],
     };
@@ -3183,7 +3207,7 @@ fn test_typeparse() {
                 body: vec![
                     ast::Statement::Expression(Located::none(ast::Expression::Variable("g_myFour".to_string())))
                 ],
-                attributes: vec![ast::FunctionAttribute::NumThreads(8, 8, 1)],
+                attributes: vec![ast::FunctionAttribute::numthreads(8, 8, 1)],
             }),
         ],
     };
