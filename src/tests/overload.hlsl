@@ -47,6 +47,18 @@ void testIntOrInt3(int3 x)
 {
 }
 
+void testVec3(float x, float y, float z)
+{
+}
+
+void testVec3(float2 x, float2 y, float2 z)
+{
+}
+
+void testVec3(float3 x, float3 y, float3 z)
+{
+}
+
 [numthreads(8, 8, 1)]
 void CSMAIN(uint3 dtid : SV_DispatchThreadID)
 {
@@ -74,5 +86,12 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     testIntOrInt3(0);
     testIntOrInt3(0u);
     testIntOrInt3((int)0);
-    testIntOrInt3((int3)(0, 1, 2));
+    testIntOrInt3(int3(0, 1, 2));
+
+    max(1.0f, 2.0f);
+    max(float2(3.0f, 7.0f), float2(4.0f, 3.0f));
+    max(3.0f, float3(4.0f, 3.0f, 3.5f));
+    max(float2(3.0f, 7.0f), float3(4.0f, 3.0f, 3.5f));
+
+    testVec3(2.0f, float2(1.0f, 3.0f), float3(2.0f, 7.0f, 2.9f));
 }

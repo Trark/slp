@@ -1389,7 +1389,7 @@ fn parse_localtype(local_type: &ast::LocalType,
 fn find_function_type(overloads: &Vec<FunctionOverload>,
                       param_types: &[ExpressionType])
                       -> Result<(FunctionOverload, Vec<ImplicitConversion>), TyperError> {
-
+    use casting::VectorRank;
     fn find_overload_casts(overload: &FunctionOverload,
                            param_types: &[ExpressionType])
                            -> Result<Vec<ImplicitConversion>, ()> {
@@ -1423,6 +1423,9 @@ fn find_function_type(overloads: &Vec<FunctionOverload>,
             }
         }
     }
+
+    // Cull everything that isn't equal best at matching numeric type
+    let mut winning_numeric_casts = Vec::with_capacity(1);
     for &(ref candidate, ref candidate_casts) in &casts {
         let mut winning = true;
         for &(ref against, ref against_casts) in &casts {
@@ -1430,26 +1433,61 @@ fn find_function_type(overloads: &Vec<FunctionOverload>,
                 continue;
             }
             assert_eq!(candidate_casts.len(), against_casts.len());
-            let mut at_least_one_better_than = false;
             let mut not_worse_than = true;
             for (candidate_cast, against_cast) in candidate_casts.iter().zip(against_casts) {
-                let candidate_rank = candidate_cast.get_rank();
-                let against_rank = against_cast.get_rank();
+                let candidate_rank = candidate_cast.get_rank().get_numeric_rank().clone();
+                let against_rank = against_cast.get_rank().get_numeric_rank().clone();
                 match candidate_rank.compare(&against_rank) {
-                    ConversionPriority::Better => at_least_one_better_than = true,
+                    ConversionPriority::Better => {}
                     ConversionPriority::Equal => {}
                     ConversionPriority::Worse => not_worse_than = false,
                 };
             }
-            if !at_least_one_better_than || !not_worse_than {
+            if !not_worse_than {
                 winning = false;
                 break;
             }
         }
         if winning {
-            return Ok((candidate.clone(), candidate_casts.clone()));
+            winning_numeric_casts.push((candidate.clone(), candidate_casts.clone()));
         }
     }
+
+    if winning_numeric_casts.len() > 0 {
+
+        fn count_by_rank(casts: &[ImplicitConversion], rank: &VectorRank) -> usize {
+            casts.iter()
+                 .filter(|ref cast| cast.get_rank().get_vector_rank() == rank)
+                 .count()
+        }
+
+        let map_order = |(overload, casts): (_, Vec<ImplicitConversion>)| {
+            let order = VectorRank::worst_to_best()
+                            .iter()
+                            .map(|rank| count_by_rank(&casts, rank))
+                            .collect::<Vec<_>>();
+            (overload, casts, order)
+        };
+
+        let casts = winning_numeric_casts.into_iter().map(map_order).collect::<Vec<_>>();;
+
+        let mut best_order = casts[0].2.clone();
+        for &(_, _, ref order) in &casts {
+            if *order < best_order {
+                best_order = order.clone();
+            }
+        }
+
+        let casts = casts.into_iter()
+                         .filter(|&(_, _, ref order)| *order == best_order)
+                         .collect::<Vec<_>>();
+
+        if casts.len() == 1 {
+            let (candidate, casts, _) = casts[0].clone();
+            return Ok((candidate, casts));
+        }
+    }
+
     Err(TyperError::FunctionArgumentTypeMismatch(overloads.clone(), param_types.to_vec()))
 }
 

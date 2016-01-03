@@ -40,8 +40,12 @@ pub enum NumericRank {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum VectorRank {
+    /// Same dimension
     Exact,
+    /// Expand a scalar to fill all slots in a vector
     Expand,
+    /// Cull the later elements in the vector
+    Contract,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -78,7 +82,16 @@ pub struct ImplicitConversion(ExpressionType,
                               Option<ModifierCast>);
 
 impl ConversionRank {
-    pub fn compare(&self, other: &ConversionRank) -> ConversionPriority {
+    pub fn get_numeric_rank(&self) -> &NumericRank {
+        &self.0
+    }
+    pub fn get_vector_rank(&self) -> &VectorRank {
+        &self.1
+    }
+}
+
+impl NumericRank {
+    pub fn compare(&self, other: &NumericRank) -> ConversionPriority {
         let my_order = self.order();
         let other_order = other.order();
         match (my_order < other_order, my_order <= other_order) {
@@ -89,12 +102,6 @@ impl ConversionRank {
         }
     }
 
-    fn order(&self) -> u32 {
-        self.0.order() * 2 + self.1.order()
-    }
-}
-
-impl NumericRank {
     fn order(&self) -> u32 {
         match *self {
             NumericRank::Exact => 0,
@@ -107,11 +114,11 @@ impl NumericRank {
 }
 
 impl VectorRank {
-    fn order(&self) -> u32 {
-        match *self {
-            VectorRank::Exact => 0,
-            VectorRank::Expand => 1,
-        }
+    pub fn worst_to_best() -> &'static [VectorRank] {
+        const PRIO: &'static [VectorRank] = &[VectorRank::Contract,
+                                              VectorRank::Expand,
+                                              VectorRank::Exact];
+        PRIO
     }
 }
 
@@ -339,14 +346,18 @@ impl ImplicitConversion {
     }
 
     pub fn get_rank(&self) -> ConversionRank {
+        use self::NumericDimension::Scalar;
+        use self::NumericDimension::Vector;
         let &ImplicitConversion(_, _, ref dim_cast, ref num_cast, _) = self;
         let vec = match *dim_cast {
             None |
-            Some(DimensionCast(NumericDimension::Scalar, NumericDimension::Vector(1))) |
-            Some(DimensionCast(NumericDimension::Vector(1), NumericDimension::Scalar)) => {
-                VectorRank::Exact
-            }
-            _ => VectorRank::Expand,
+            Some(DimensionCast(Scalar, Vector(1))) |
+            Some(DimensionCast(Vector(1), Scalar)) => VectorRank::Exact,
+            Some(DimensionCast(Scalar, Vector(_))) |
+            Some(DimensionCast(Vector(1), Vector(_))) => VectorRank::Expand,
+            Some(DimensionCast(Vector(_), Scalar)) => VectorRank::Contract,
+            Some(DimensionCast(Vector(ref l), Vector(ref r))) if l > r => VectorRank::Contract,
+            Some(DimensionCast(from, to)) => panic!("invalid vector cast {:?} {:?}", from, to),
         };
         let num = match *num_cast {
             Some(ref numeric) => numeric.get_rank(),

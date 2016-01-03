@@ -19,6 +19,23 @@ uint4 cast_uint_to_uint4(uint from)
 	return to;
 }
 
+float2 cast_float_to_float2(float from)
+{
+	float2 to;
+	to[0] = from;
+	to[1] = from;
+	return to;
+}
+
+float3 cast_float_to_float3(float from)
+{
+	float3 to;
+	to[0] = from;
+	to[1] = from;
+	to[2] = from;
+	return to;
+}
+
 void testIntOrUInt_0(int x)
 {
 }
@@ -67,6 +84,10 @@ void testIntOrInt3_1(int3 x)
 {
 }
 
+void testVec3(float2 x, float2 y, float2 z)
+{
+}
+
 __attribute__((reqd_work_group_size(8, 8, 1)))
 kernel void MyKernel()
 {
@@ -93,4 +114,9 @@ kernel void MyKernel()
 	testIntOrInt3_0((int)0u);
 	testIntOrInt3_0((int)0);
 	testIntOrInt3_1((int3)((int)0, (int)1, (int)2));
+	fmax(1.0f, 2.0f);
+	fmax((float2)(3.0f, 7.0f), (float2)(4.0f, 3.0f));
+	fmax(cast_float_to_float3(3.0f), (float3)(4.0f, 3.0f, 3.5f));
+	fmax((float2)(3.0f, 7.0f), (float3)(4.0f, 3.0f, 3.5f).xy);
+	testVec3(cast_float_to_float2(2.0f), (float2)(1.0f, 3.0f), (float3)(2.0f, 7.0f, 2.9f).xy);
 }
