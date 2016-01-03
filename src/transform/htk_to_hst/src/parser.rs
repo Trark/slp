@@ -852,18 +852,30 @@ fn expr_p12(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, Par
 }
 
 fn expr_p13(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, ParseErrorReason> {
-    alt!(input,
-        chain!(cond: expr_p12 ~ token!(Token::QuestionMark) ~ lhs: expr_p13 ~ token!(Token::Colon) ~ rhs: expr_p13, || {
-            let loc = cond.location.clone();
-            Located::new(Expression::TernaryConditional(Box::new(cond), Box::new(lhs), Box::new(rhs)), loc)
-        }) |
-        expr_p12
+    chain!(input,
+        main: expr_p12 ~
+        opt: opt!(chain!(
+            token!(Token::QuestionMark) ~
+            left: expr_p13 ~
+            token!(Token::Colon) ~
+            right: expr_p13,
+            || (left, right)
+        )),
+        || {
+            match opt.clone() {
+                Some((left, right)) => {
+                    let loc = main.location.clone();
+                    Located::new(Expression::TernaryConditional(Box::new(main), Box::new(left), Box::new(right)), loc)
+                }
+                None => main,
+            }
+        }
     )
 }
 
-fn expr_p15(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, ParseErrorReason> {
+fn expr_p14(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, ParseErrorReason> {
 
-    fn op_p15(input: &[LexToken]) -> IResult<&[LexToken], BinOp, ParseErrorReason> {
+    fn op_p14(input: &[LexToken]) -> IResult<&[LexToken], BinOp, ParseErrorReason> {
         alt!(input,
              token!(LexToken(Token::Equals, _) => BinOp::Assignment) |
              chain!(token!(Token::Plus) ~ token!(Token::Equals), || BinOp::SumAssignment) |
@@ -874,15 +886,23 @@ fn expr_p15(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, Par
         )
     }
 
-    alt!(input,
-         chain!(lhs: expr_p13 ~ op: op_p15 ~ rhs: expr_p15, || {
-            let loc = lhs.location.clone();
-            Located::new(Expression::BinaryOperation(op, Box::new(lhs), Box::new(rhs)), loc)
-        }) | expr_p13)
+    chain!(input,
+        lhs: expr_p13 ~
+        opt: opt!(chain!(op: op_p14 ~ rhs: expr_p14, || (op, rhs))),
+        || {
+            match opt.clone() {
+                Some((op, rhs)) => {
+                    let loc = lhs.location.clone();
+                    Located::new(Expression::BinaryOperation(op, Box::new(lhs), Box::new(rhs)), loc)
+                }
+                None => lhs,
+            }
+        }
+    )
 }
 
 fn expr(input: &[LexToken]) -> IResult<&[LexToken], Located<Expression>, ParseErrorReason> {
-    expr_p15(input)
+    expr_p14(input)
 }
 
 fn initializer(input: &[LexToken]) -> IResult<&[LexToken], Option<Initializer>, ParseErrorReason> {
