@@ -31,6 +31,8 @@ pub enum TranspileError {
 
     Intrinsic1Unimplemented(src::Intrinsic1),
     Intrinsic2Unimplemented(src::Intrinsic2),
+
+    TakingAddressOfVectorElement,
 }
 
 impl error::Error for TranspileError {
@@ -51,6 +53,7 @@ impl error::Error for TranspileError {
             TranspileError::IntsMustBeTyped => "internal error: untyped int ended up in tree",
             TranspileError::Intrinsic1Unimplemented(_) |
             TranspileError::Intrinsic2Unimplemented(_) => "intrinsic function is not implemented",
+            TranspileError::TakingAddressOfVectorElement => "can't take address of vector element",
         }
     }
 }
@@ -1171,6 +1174,7 @@ fn transpile_intrinsic2(intrinsic: &src::Intrinsic2,
         }
     }
 }
+
 fn transpile_intrinsic3(intrinsic: &src::Intrinsic3,
                         src_expr_1: &src::Expression,
                         src_expr_2: &src::Expression,
@@ -1190,6 +1194,15 @@ fn transpile_intrinsic3(intrinsic: &src::Intrinsic3,
         I::ClampF2 => write_func("clamp", &[e1, e2, e3]),
         I::ClampF3 => write_func("clamp", &[e1, e2, e3]),
         I::ClampF4 => write_func("clamp", &[e1, e2, e3]),
+        I::Sincos |
+        I::Sincos2 |
+        I::Sincos3 |
+        I::Sincos4 => {
+            let cos_val = try!(address_of(e3));
+            let f = Box::new(try!(write_func("sincos", &[e1, cos_val])));
+            let binop = dst::Expression::BinaryOperation(dst::BinOp::Assignment, Box::new(e2), f);
+            Ok(dst::Expression::Cast(dst::Type::Void, Box::new(binop)))
+        }
         I::RWByteAddressBufferStore |
         I::RWByteAddressBufferStore2 |
         I::RWByteAddressBufferStore3 |
@@ -1215,6 +1228,14 @@ fn transpile_intrinsic3(intrinsic: &src::Intrinsic3,
             ))
         }
     }
+}
+
+fn address_of(e: dst::Expression) -> Result<dst::Expression, TranspileError> {
+    match e {
+        dst::Expression::Swizzle(_, _) => return Err(TranspileError::TakingAddressOfVectorElement),
+        _ => {}
+    }
+    Ok(dst::Expression::AddressOf(Box::new(e)))
 }
 
 fn write_cast(source_cl_type: dst::Type,
@@ -1369,7 +1390,7 @@ fn transpile_expression(expression: &src::Expression,
                 let param_expr = try!(transpile_expression(param, context));
                 let param_expr = match pt {
                     ParamType::Normal => param_expr,
-                    ParamType::Pointer => dst::Expression::AddressOf(Box::new(param_expr)),
+                    ParamType::Pointer => try!(address_of(param_expr)),
                 };
                 params_exprs.push(param_expr);
             }

@@ -203,6 +203,11 @@ pub enum Intrinsic3 {
     ClampF3,
     ClampF4,
 
+    Sincos,
+    Sincos2,
+    Sincos3,
+    Sincos4,
+
     // ByteAddressBuffer methods
     RWByteAddressBufferStore,
     RWByteAddressBufferStore2,
@@ -425,6 +430,10 @@ impl Intrinsic for Intrinsic3 {
             Intrinsic3::ClampF2 => Type::floatn(2).to_rvalue(),
             Intrinsic3::ClampF3 => Type::floatn(3).to_rvalue(),
             Intrinsic3::ClampF4 => Type::floatn(4).to_rvalue(),
+            Intrinsic3::Sincos => Type::void().to_rvalue(),
+            Intrinsic3::Sincos2 => Type::void().to_rvalue(),
+            Intrinsic3::Sincos3 => Type::void().to_rvalue(),
+            Intrinsic3::Sincos4 => Type::void().to_rvalue(),
             Intrinsic3::RWByteAddressBufferStore => Type::void().to_rvalue(),
             Intrinsic3::RWByteAddressBufferStore2 => Type::void().to_rvalue(),
             Intrinsic3::RWByteAddressBufferStore3 => Type::void().to_rvalue(),

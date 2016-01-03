@@ -77,6 +77,10 @@ const T_FLOAT1: ParamType = ParamType(T_FLOAT1_TY, InputModifier::In, None);
 const T_FLOAT2: ParamType = ParamType(T_FLOAT2_TY, InputModifier::In, None);
 const T_FLOAT3: ParamType = ParamType(T_FLOAT3_TY, InputModifier::In, None);
 const T_FLOAT4: ParamType = ParamType(T_FLOAT4_TY, InputModifier::In, None);
+const T_FLOAT_OUT: ParamType = ParamType(T_FLOAT_TY, InputModifier::Out, None);
+const T_FLOAT2_OUT: ParamType = ParamType(T_FLOAT2_TY, InputModifier::Out, None);
+const T_FLOAT3_OUT: ParamType = ParamType(T_FLOAT3_TY, InputModifier::Out, None);
+const T_FLOAT4_OUT: ParamType = ParamType(T_FLOAT4_TY, InputModifier::Out, None);
 
 use self::IntrinsicFactory::Intrinsic0 as I0;
 use self::IntrinsicFactory::Intrinsic1 as I1;
@@ -213,6 +217,11 @@ const INTRINSICS: &'static [IntrinsicDefinition] = &[
     ("sign", &[T_FLOAT2], I1(Intrinsic1::SignF2)),
     ("sign", &[T_FLOAT3], I1(Intrinsic1::SignF3)),
     ("sign", &[T_FLOAT4], I1(Intrinsic1::SignF4)),
+
+    ("sincos", &[T_FLOAT, T_FLOAT_OUT, T_FLOAT_OUT], I3(Intrinsic3::Sincos)),
+    ("sincos", &[T_FLOAT2, T_FLOAT2_OUT, T_FLOAT2_OUT], I3(Intrinsic3::Sincos2)),
+    ("sincos", &[T_FLOAT3, T_FLOAT3_OUT, T_FLOAT3_OUT], I3(Intrinsic3::Sincos3)),
+    ("sincos", &[T_FLOAT4, T_FLOAT4_OUT, T_FLOAT4_OUT], I3(Intrinsic3::Sincos4)),
 
     ("sqrt", &[T_FLOAT], I1(Intrinsic1::Sqrt)),
     ("sqrt", &[T_FLOAT2], I1(Intrinsic1::Sqrt2)),
