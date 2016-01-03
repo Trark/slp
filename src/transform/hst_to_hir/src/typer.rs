@@ -2257,6 +2257,16 @@ fn parse_expr_unchecked(ast: &ast::Expression,
                         Err(err) => Err(err),
                     }
                 }
+                &ir::TypeLayout::Scalar(_) => {
+                    if member == "x" || member == "r" {
+                        let ty = ExpressionType(ir::Type(composite_tyl.clone(), composite_mod), vt);
+                        // Just emit the composite expression and drop the member / swizzle
+                        return Ok(TypedExpression::Value(composite_ir, ty));
+                    }
+
+                    // Scalars don't really have members, so return a sensible error message
+                    return Err(TyperError::TypeDoesNotHaveMembers(composite_pt));
+                }
                 &ir::TypeLayout::Vector(ref scalar, ref x) => {
                     let mut swizzle_slots = Vec::with_capacity(member.len());
                     for c in member.chars() {

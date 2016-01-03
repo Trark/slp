@@ -106,7 +106,7 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     for (uint s = 3u, arr1[2], t2 = 6u; s < t2; s++)
     {
         myFunc(s);
-        myFunc(t1);
+        myFunc(t1.x);
         myFunc(t2);
         myFunc(arr2[0]);
         myFunc(arr1[0]);
