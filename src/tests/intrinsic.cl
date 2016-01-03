@@ -1,5 +1,32 @@
 #pragma OPENCL EXTENSION cl_khr_fp16 : enable
 
+int2 cast_uint2_to_int2(uint2 from)
+{
+	int2 to;
+	to[0] = from[0];
+	to[1] = from[1];
+	return to;
+}
+
+int3 cast_uint3_to_int3(uint3 from)
+{
+	int3 to;
+	to[0] = from[0];
+	to[1] = from[1];
+	to[2] = from[2];
+	return to;
+}
+
+int4 cast_uint4_to_int4(uint4 from)
+{
+	int4 to;
+	to[0] = from[0];
+	to[1] = from[1];
+	to[2] = from[2];
+	to[3] = from[3];
+	return to;
+}
+
 int2 cast_float2_to_int2(float2 from)
 {
 	int2 to;
@@ -256,4 +283,19 @@ kernel void MyKernel(__global uint4* g_roBuffer, __global struct testStruct* g_r
 	float2 step_f2 = step(fx2, fy2);
 	float3 step_f3 = step(fx3, fy3);
 	float4 step_f4 = step(fx4, fy4);
+	float exp_fs = exp(fx);
+	float exp_f1 = exp(fx1);
+	float2 exp_f2 = exp(fx2);
+	float3 exp_f3 = exp(fx3);
+	float4 exp_f4 = exp(fx4);
+	int abs_is = (int)abs(ix);
+	int abs_i1 = (int)abs(ix1);
+	int2 abs_i2 = cast_uint2_to_int2(abs(ix2));
+	int3 abs_i3 = cast_uint3_to_int3(abs(ix3));
+	int4 abs_i4 = cast_uint4_to_int4(abs(ix4));
+	float abs_fs = fabs(fx);
+	float abs_f1 = fabs(fx1);
+	float2 abs_f2 = fabs(fx2);
+	float3 abs_f3 = fabs(fx3);
+	float4 abs_f4 = fabs(fx4);
 }

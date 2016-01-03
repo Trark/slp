@@ -23,6 +23,15 @@ pub enum Intrinsic1 {
     LogicalNot(Type),
     BitwiseNot(Type),
 
+    AbsI,
+    AbsI2,
+    AbsI3,
+    AbsI4,
+    AbsF,
+    AbsF2,
+    AbsF3,
+    AbsF4,
+
     AsIntU,
     AsIntU2,
     AsIntU3,
@@ -53,6 +62,11 @@ pub enum Intrinsic1 {
     AsFloatF2,
     AsFloatF3,
     AsFloatF4,
+
+    Exp,
+    Exp2,
+    Exp3,
+    Exp4,
 
     F16ToF32,
     F32ToF16,
@@ -230,6 +244,14 @@ impl Intrinsic for Intrinsic1 {
                 }
             }
             Intrinsic1::BitwiseNot(ref ty) => ty.to_rvalue(),
+            Intrinsic1::AbsI => Type::int().to_rvalue(),
+            Intrinsic1::AbsI2 => Type::intn(2).to_rvalue(),
+            Intrinsic1::AbsI3 => Type::intn(3).to_rvalue(),
+            Intrinsic1::AbsI4 => Type::intn(4).to_rvalue(),
+            Intrinsic1::AbsF => Type::float().to_rvalue(),
+            Intrinsic1::AbsF2 => Type::floatn(2).to_rvalue(),
+            Intrinsic1::AbsF3 => Type::floatn(3).to_rvalue(),
+            Intrinsic1::AbsF4 => Type::floatn(4).to_rvalue(),
             Intrinsic1::AsIntU => Type::int().to_rvalue(),
             Intrinsic1::AsIntU2 => Type::intn(2).to_rvalue(),
             Intrinsic1::AsIntU3 => Type::intn(3).to_rvalue(),
@@ -258,6 +280,10 @@ impl Intrinsic for Intrinsic1 {
             Intrinsic1::AsFloatF2 => Type::floatn(2).to_rvalue(),
             Intrinsic1::AsFloatF3 => Type::floatn(3).to_rvalue(),
             Intrinsic1::AsFloatF4 => Type::floatn(4).to_rvalue(),
+            Intrinsic1::Exp => Type::float().to_rvalue(),
+            Intrinsic1::Exp2 => Type::floatn(2).to_rvalue(),
+            Intrinsic1::Exp3 => Type::floatn(3).to_rvalue(),
+            Intrinsic1::Exp4 => Type::floatn(4).to_rvalue(),
             Intrinsic1::F16ToF32 => Type::float().to_rvalue(),
             Intrinsic1::F32ToF16 => Type::uint().to_rvalue(),
             Intrinsic1::Floor => Type::float().to_rvalue(),

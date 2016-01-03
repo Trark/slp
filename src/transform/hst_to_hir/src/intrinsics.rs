@@ -92,6 +92,15 @@ const INTRINSICS: &'static [IntrinsicDefinition] = &[
     ("GroupMemoryBarrier", &[], I0(Intrinsic0::GroupMemoryBarrier)),
     ("GroupMemoryBarrierWithGroupSync", &[], I0(Intrinsic0::GroupMemoryBarrierWithGroupSync)),
 
+    ("abs", &[T_INT], I1(Intrinsic1::AbsI)),
+    ("abs", &[T_INT2], I1(Intrinsic1::AbsI2)),
+    ("abs", &[T_INT3], I1(Intrinsic1::AbsI3)),
+    ("abs", &[T_INT4], I1(Intrinsic1::AbsI4)),
+    ("abs", &[T_FLOAT], I1(Intrinsic1::AbsF)),
+    ("abs", &[T_FLOAT2], I1(Intrinsic1::AbsF2)),
+    ("abs", &[T_FLOAT3], I1(Intrinsic1::AbsF3)),
+    ("abs", &[T_FLOAT4], I1(Intrinsic1::AbsF4)),
+
     ("asint", &[T_UINT], I1(Intrinsic1::AsIntU)),
     ("asint", &[T_UINT2], I1(Intrinsic1::AsIntU2)),
     ("asint", &[T_UINT3], I1(Intrinsic1::AsIntU3)),
@@ -122,6 +131,11 @@ const INTRINSICS: &'static [IntrinsicDefinition] = &[
     ("asfloat", &[T_FLOAT2], I1(Intrinsic1::AsFloatF2)),
     ("asfloat", &[T_FLOAT3], I1(Intrinsic1::AsFloatF3)),
     ("asfloat", &[T_FLOAT4], I1(Intrinsic1::AsFloatF4)),
+
+    ("exp", &[T_FLOAT], I1(Intrinsic1::Exp)),
+    ("exp", &[T_FLOAT2], I1(Intrinsic1::Exp2)),
+    ("exp", &[T_FLOAT3], I1(Intrinsic1::Exp3)),
+    ("exp", &[T_FLOAT4], I1(Intrinsic1::Exp4)),
 
     ("asdouble", &[T_UINT, T_UINT], I2(Intrinsic2::AsDouble)),
 

@@ -854,6 +854,42 @@ fn transpile_intrinsic1(intrinsic: &src::Intrinsic1,
         I::Minus(_) => write_unary(dst::UnaryOp::Minus, e1),
         I::LogicalNot(_) => write_unary(dst::UnaryOp::LogicalNot, e1),
         I::BitwiseNot(_) => write_unary(dst::UnaryOp::BitwiseNot, e1),
+        I::AbsI => {
+            let res_uint = try!(write_func("abs", &[e1]));
+            write_cast(dst::Type::Scalar(dst::Scalar::UInt),
+                       dst::Type::Scalar(dst::Scalar::Int),
+                       res_uint,
+                       false,
+                       context)
+        }
+        I::AbsI2 => {
+            let res_uint = try!(write_func("abs", &[e1]));
+            write_cast(dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Two),
+                       dst::Type::Vector(dst::Scalar::Int, dst::VectorDimension::Two),
+                       res_uint,
+                       false,
+                       context)
+        }
+        I::AbsI3 => {
+            let res_uint = try!(write_func("abs", &[e1]));
+            write_cast(dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Three),
+                       dst::Type::Vector(dst::Scalar::Int, dst::VectorDimension::Three),
+                       res_uint,
+                       false,
+                       context)
+        }
+        I::AbsI4 => {
+            let res_uint = try!(write_func("abs", &[e1]));
+            write_cast(dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Four),
+                       dst::Type::Vector(dst::Scalar::Int, dst::VectorDimension::Four),
+                       res_uint,
+                       false,
+                       context)
+        }
+        I::AbsF |
+        I::AbsF2 |
+        I::AbsF3 |
+        I::AbsF4 => write_func("fabs", &[e1]),
         I::AsIntU => write_func("as_int", &[e1]),
         I::AsIntU2 => write_func("as_int2", &[e1]),
         I::AsIntU3 => write_func("as_int3", &[e1]),
@@ -882,6 +918,10 @@ fn transpile_intrinsic1(intrinsic: &src::Intrinsic1,
         I::AsFloatF2 => write_func("as_float2", &[e1]),
         I::AsFloatF3 => write_func("as_float3", &[e1]),
         I::AsFloatF4 => write_func("as_float4", &[e1]),
+        I::Exp |
+        I::Exp2 |
+        I::Exp3 |
+        I::Exp4 => write_func("exp", &[e1]),
         I::F16ToF32 => {
             context.required_extensions.insert(dst::Extension::KhrFp16);
             let input_16u = try!(write_cast(dst::Type::Scalar(dst::Scalar::UInt),

@@ -239,4 +239,19 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     float2 step_f2 = step(fx2, fy2);
     float3 step_f3 = step(fx3, fy3);
     float4 step_f4 = step(fx4, fy4);
+    float exp_fs = exp(fx);
+    float1 exp_f1 = exp(fx1);
+    float2 exp_f2 = exp(fx2);
+    float3 exp_f3 = exp(fx3);
+    float4 exp_f4 = exp(fx4);
+    int abs_is = abs(ix);
+    int1 abs_i1 = abs(ix1);
+    int2 abs_i2 = abs(ix2);
+    int3 abs_i3 = abs(ix3);
+    int4 abs_i4 = abs(ix4);
+    float abs_fs = abs(fx);
+    float1 abs_f1 = abs(fx1);
+    float2 abs_f2 = abs(fx2);
+    float3 abs_f3 = abs(fx3);
+    float4 abs_f4 = abs(fx4);
 }
