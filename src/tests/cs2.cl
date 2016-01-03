@@ -113,6 +113,8 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint
 		myFunc_1(arr2[(int)0]);
 		myFunc_0(arr1_0[(int)0]);
 	}
+	bool b_0 = true;
+	bool b_1 = (bool)(s * (float)b_0);
 	if (true || false)
 	{
 		myFunc_0(1u);

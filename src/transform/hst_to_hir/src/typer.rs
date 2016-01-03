@@ -1665,23 +1665,22 @@ fn resolve_arithmetic_types
         // The limited number of hlsl types means these happen to always have one type being the common type
         fn get_order(ty: &ScalarType) -> Result<u32, ()> {
             match *ty {
-                ScalarType::Int => Ok(0),
-                ScalarType::UInt => Ok(1),
-                ScalarType::Half => Ok(2),
-                ScalarType::Float => Ok(3),
-                ScalarType::Double => Ok(4),
+                ScalarType::Bool => Ok(0),
+                ScalarType::Int => Ok(1),
+                ScalarType::UInt => Ok(2),
+                ScalarType::Half => Ok(3),
+                ScalarType::Float => Ok(4),
+                ScalarType::Double => Ok(5),
                 _ => Err(()),
             }
         }
 
         let left = match *left {
             ScalarType::UntypedInt => ScalarType::Int,
-            ScalarType::Bool => return Err(()),
             ref scalar => scalar.clone(),
         };
         let right = match *right {
             ScalarType::UntypedInt => ScalarType::Int,
-            ScalarType::Bool => return Err(()),
             ref scalar => scalar.clone(),
         };
 

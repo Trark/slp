@@ -111,6 +111,8 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
         myFunc(arr2[0]);
         myFunc(arr1[0]);
     }
+    bool b_0 = true;
+    bool b_1 = s * b_0;
     if (true || false)
     {
         myFunc(1u);
