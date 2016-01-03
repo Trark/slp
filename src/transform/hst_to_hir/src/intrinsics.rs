@@ -214,6 +214,11 @@ const INTRINSICS: &'static [IntrinsicDefinition] = &[
     ("normalize", &[T_FLOAT3], I1(Intrinsic1::Normalize3)),
     ("normalize", &[T_FLOAT4], I1(Intrinsic1::Normalize4)),
 
+    ("pow", &[T_FLOAT, T_FLOAT], I2(Intrinsic2::Pow)),
+    ("pow", &[T_FLOAT2, T_FLOAT2], I2(Intrinsic2::Pow2)),
+    ("pow", &[T_FLOAT3, T_FLOAT3], I2(Intrinsic2::Pow3)),
+    ("pow", &[T_FLOAT4, T_FLOAT4], I2(Intrinsic2::Pow4)),
+
     ("sign", &[T_INT], I1(Intrinsic1::SignI)),
     ("sign", &[T_INT2], I1(Intrinsic1::SignI2)),
     ("sign", &[T_INT3], I1(Intrinsic1::SignI3)),

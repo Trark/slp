@@ -1117,6 +1117,10 @@ fn transpile_intrinsic2(intrinsic: &src::Intrinsic2,
         I::MaxF2 |
         I::MaxF3 |
         I::MaxF4 => write_func("fmax", &[e1, e2]),
+        I::Pow |
+        I::Pow2 |
+        I::Pow3 |
+        I::Pow4 => write_func("pow", &[e1, e2]),
         I::Step |
         I::Step2 |
         I::Step3 |

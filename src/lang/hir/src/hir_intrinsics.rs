@@ -180,6 +180,11 @@ pub enum Intrinsic2 {
     MaxF3,
     MaxF4,
 
+    Pow,
+    Pow2,
+    Pow3,
+    Pow4,
+
     Step,
     Step2,
     Step3,
@@ -412,6 +417,10 @@ impl Intrinsic for Intrinsic2 {
             Intrinsic2::MaxF2 => Type::floatn(2).to_rvalue(),
             Intrinsic2::MaxF3 => Type::floatn(3).to_rvalue(),
             Intrinsic2::MaxF4 => Type::floatn(4).to_rvalue(),
+            Intrinsic2::Pow => Type::float().to_rvalue(),
+            Intrinsic2::Pow2 => Type::floatn(2).to_rvalue(),
+            Intrinsic2::Pow3 => Type::floatn(3).to_rvalue(),
+            Intrinsic2::Pow4 => Type::floatn(4).to_rvalue(),
             Intrinsic2::Step => Type::float().to_rvalue(),
             Intrinsic2::Step2 => Type::floatn(2).to_rvalue(),
             Intrinsic2::Step3 => Type::floatn(3).to_rvalue(),

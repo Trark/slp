@@ -312,4 +312,9 @@ kernel void MyKernel(__global uint4* g_roBuffer, __global struct testStruct* g_r
 	float2 cos_f2 = cos(fx2);
 	float3 cos_f3 = cos(fx3);
 	float4 cos_f4 = cos(fx4);
+	float pow_fs = pow(fx, fy);
+	float pow_f1 = pow(fx1, fy1);
+	float2 pow_f2 = pow(fx2, fy2);
+	float3 pow_f3 = pow(fx3, fy3);
+	float4 pow_f4 = pow(fx4, fy4);
 }
