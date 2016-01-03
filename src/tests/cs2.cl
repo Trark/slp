@@ -69,7 +69,7 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint
 	{
 		float4 alias_var_0 = 2.0f * (float4)(1.0f, 2.4f, 0.3f, 3.4f);
 		float4 receive = alias_var_0 * 4.0f;
-		uint testStruct_1 = (uint)1;
+		uint testStruct_1 = (uint)(1 & 4);
 		struct testStruct_0 data;
 	}
 	myFunc_1(4.0f);

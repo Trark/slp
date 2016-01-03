@@ -1932,6 +1932,13 @@ fn parse_expr_binop(op: &ast::BinOp,
                     (ir::ScalarType::Int, ir::ScalarType::UInt) => ir::ScalarType::UInt,
                     (ir::ScalarType::UInt, ir::ScalarType::Int) => ir::ScalarType::UInt,
                     (ir::ScalarType::UInt, ir::ScalarType::UInt) => ir::ScalarType::UInt,
+                    (ir::ScalarType::UntypedInt, ir::ScalarType::Int) => ir::ScalarType::Int,
+                    (ir::ScalarType::UntypedInt, ir::ScalarType::UInt) => ir::ScalarType::UInt,
+                    (ir::ScalarType::Int, ir::ScalarType::UntypedInt) => ir::ScalarType::Int,
+                    (ir::ScalarType::UInt, ir::ScalarType::UntypedInt) => ir::ScalarType::UInt,
+                    (ir::ScalarType::UntypedInt, ir::ScalarType::UntypedInt) => {
+                        ir::ScalarType::UntypedInt
+                    }
                     _ => return err_bad_type,
                 }
             };

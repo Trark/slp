@@ -71,7 +71,7 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     {
         float4 alias_var = 2.0 * float4(1.0f, 2.4f, 0.3f, 3.4f);
         float4 receive = alias_var * 4.0;
-        uint testStruct = 1;
+        uint testStruct = 1 & 4;
         testStruct_0 data;
     }
     myFunc(4.0f);
