@@ -96,6 +96,11 @@ pub enum Intrinsic1 {
     Normalize3,
     Normalize4,
 
+    Saturate,
+    Saturate2,
+    Saturate3,
+    Saturate4,
+
     SignI,
     SignI2,
     SignI3,
@@ -223,6 +228,11 @@ pub enum Intrinsic3 {
     Sincos3,
     Sincos4,
 
+    SmoothStep,
+    SmoothStep2,
+    SmoothStep3,
+    SmoothStep4,
+
     // ByteAddressBuffer methods
     RWByteAddressBufferStore,
     RWByteAddressBufferStore2,
@@ -326,6 +336,10 @@ impl Intrinsic for Intrinsic1 {
             Intrinsic1::Normalize2 => Type::floatn(2).to_rvalue(),
             Intrinsic1::Normalize3 => Type::floatn(3).to_rvalue(),
             Intrinsic1::Normalize4 => Type::floatn(4).to_rvalue(),
+            Intrinsic1::Saturate => Type::float().to_rvalue(),
+            Intrinsic1::Saturate2 => Type::floatn(2).to_rvalue(),
+            Intrinsic1::Saturate3 => Type::floatn(3).to_rvalue(),
+            Intrinsic1::Saturate4 => Type::floatn(4).to_rvalue(),
             Intrinsic1::SignI => Type::int().to_rvalue(),
             Intrinsic1::SignI2 => Type::intn(2).to_rvalue(),
             Intrinsic1::SignI3 => Type::intn(3).to_rvalue(),
@@ -461,6 +475,10 @@ impl Intrinsic for Intrinsic3 {
             Intrinsic3::Sincos2 => Type::void().to_rvalue(),
             Intrinsic3::Sincos3 => Type::void().to_rvalue(),
             Intrinsic3::Sincos4 => Type::void().to_rvalue(),
+            Intrinsic3::SmoothStep => Type::float().to_rvalue(),
+            Intrinsic3::SmoothStep2 => Type::floatn(2).to_rvalue(),
+            Intrinsic3::SmoothStep3 => Type::floatn(3).to_rvalue(),
+            Intrinsic3::SmoothStep4 => Type::floatn(4).to_rvalue(),
             Intrinsic3::RWByteAddressBufferStore => Type::void().to_rvalue(),
             Intrinsic3::RWByteAddressBufferStore2 => Type::void().to_rvalue(),
             Intrinsic3::RWByteAddressBufferStore3 => Type::void().to_rvalue(),

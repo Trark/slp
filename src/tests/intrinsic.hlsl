@@ -273,4 +273,14 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     float2 pow_f2 = pow(fx2, fy2);
     float3 pow_f3 = pow(fx3, fy3);
     float4 pow_f4 = pow(fx4, fy4);
+    float smoothstep_fs = smoothstep(fx, fy, fz);
+    float1 smoothstep_f1 = smoothstep(fx1, fy1, fz1);
+    float2 smoothstep_f2 = smoothstep(fx2, fy2, fz2);
+    float3 smoothstep_f3 = smoothstep(fx3, fy3, fz3);
+    float4 smoothstep_f4 = smoothstep(fx4, fy4, fz4);
+    float saturate_fs = saturate(fx);
+    float1 saturate_f1 = saturate(fx1);
+    float2 saturate_f2 = saturate(fx2);
+    float3 saturate_f3 = saturate(fx3);
+    float4 saturate_f4 = saturate(fx4);
 }

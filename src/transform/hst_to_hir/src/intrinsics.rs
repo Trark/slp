@@ -219,6 +219,11 @@ const INTRINSICS: &'static [IntrinsicDefinition] = &[
     ("pow", &[T_FLOAT3, T_FLOAT3], I2(Intrinsic2::Pow3)),
     ("pow", &[T_FLOAT4, T_FLOAT4], I2(Intrinsic2::Pow4)),
 
+    ("saturate", &[T_FLOAT], I1(Intrinsic1::Saturate)),
+    ("saturate", &[T_FLOAT2], I1(Intrinsic1::Saturate2)),
+    ("saturate", &[T_FLOAT3], I1(Intrinsic1::Saturate3)),
+    ("saturate", &[T_FLOAT4], I1(Intrinsic1::Saturate4)),
+
     ("sign", &[T_INT], I1(Intrinsic1::SignI)),
     ("sign", &[T_INT2], I1(Intrinsic1::SignI2)),
     ("sign", &[T_INT3], I1(Intrinsic1::SignI3)),
@@ -237,6 +242,11 @@ const INTRINSICS: &'static [IntrinsicDefinition] = &[
     ("sincos", &[T_FLOAT2, T_FLOAT2_OUT, T_FLOAT2_OUT], I3(Intrinsic3::Sincos2)),
     ("sincos", &[T_FLOAT3, T_FLOAT3_OUT, T_FLOAT3_OUT], I3(Intrinsic3::Sincos3)),
     ("sincos", &[T_FLOAT4, T_FLOAT4_OUT, T_FLOAT4_OUT], I3(Intrinsic3::Sincos4)),
+
+    ("smoothstep", &[T_FLOAT, T_FLOAT, T_FLOAT], I3(Intrinsic3::SmoothStep)),
+    ("smoothstep", &[T_FLOAT2, T_FLOAT2, T_FLOAT2], I3(Intrinsic3::SmoothStep2)),
+    ("smoothstep", &[T_FLOAT3, T_FLOAT3, T_FLOAT3], I3(Intrinsic3::SmoothStep3)),
+    ("smoothstep", &[T_FLOAT4, T_FLOAT4, T_FLOAT4], I3(Intrinsic3::SmoothStep4)),
 
     ("sqrt", &[T_FLOAT], I1(Intrinsic1::Sqrt)),
     ("sqrt", &[T_FLOAT2], I1(Intrinsic1::Sqrt2)),

@@ -317,4 +317,14 @@ kernel void MyKernel(__global uint4* g_roBuffer, __global struct testStruct* g_r
 	float2 pow_f2 = pow(fx2, fy2);
 	float3 pow_f3 = pow(fx3, fy3);
 	float4 pow_f4 = pow(fx4, fy4);
+	float smoothstep_fs = smoothstep(fx, fy, fz);
+	float smoothstep_f1 = smoothstep(fx1, fy1, fz1);
+	float2 smoothstep_f2 = smoothstep(fx2, fy2, fz2);
+	float3 smoothstep_f3 = smoothstep(fx3, fy3, fz3);
+	float4 smoothstep_f4 = smoothstep(fx4, fy4, fz4);
+	float saturate_fs = clamp(fx, 0.0f, 1.0f);
+	float saturate_f1 = clamp(fx1, 0.0f, 1.0f);
+	float2 saturate_f2 = clamp(fx2, 0.0f, 1.0f);
+	float3 saturate_f3 = clamp(fx3, 0.0f, 1.0f);
+	float4 saturate_f4 = clamp(fx4, 0.0f, 1.0f);
 }

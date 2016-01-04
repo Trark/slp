@@ -997,6 +997,14 @@ fn transpile_intrinsic1(intrinsic: &src::Intrinsic1,
         I::Normalize2 |
         I::Normalize3 |
         I::Normalize4 => write_func("normalize", &[e1]),
+        I::Saturate |
+        I::Saturate2 |
+        I::Saturate3 |
+        I::Saturate4 => {
+            let zero = dst::Expression::Literal(dst::Literal::Float(0f32));
+            let one = dst::Expression::Literal(dst::Literal::Float(1f32));
+            write_func("clamp", &[e1, zero, one])
+        }
         I::SignI => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
         I::SignI2 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
         I::SignI3 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
@@ -1231,6 +1239,10 @@ fn transpile_intrinsic3(intrinsic: &src::Intrinsic3,
             let binop = dst::Expression::BinaryOperation(dst::BinOp::Assignment, Box::new(e2), f);
             Ok(dst::Expression::Cast(dst::Type::Void, Box::new(binop)))
         }
+        I::SmoothStep |
+        I::SmoothStep2 |
+        I::SmoothStep3 |
+        I::SmoothStep4 => write_func("smoothstep", &[e1, e2, e3]),
         I::RWByteAddressBufferStore |
         I::RWByteAddressBufferStore2 |
         I::RWByteAddressBufferStore3 |
