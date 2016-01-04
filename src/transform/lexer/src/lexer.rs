@@ -382,11 +382,11 @@ named!(line_comment<()>, chain!(tag!("//") ~ many0!(is_not!("\n")) ~ tag!("\n"),
 named!(not_block_comment_end<()>, alt!(is_not!("*") => { |_| () } | chain!(tag!("*") ~ none_of!("/"), || ())));
 named!(block_comment<()>, chain!(tag!("/*") ~ many0!(not_block_comment_end) ~ tag!("*/"), || ()));
 named!(whitespace<()>, map_res!(
-    many1!(alt!(
+    complete!(many1!(alt!(
         whitespace_simple |
         line_comment |
         block_comment
-    )),
+    ))),
     whitespace_ignore
 ));
 
@@ -680,7 +680,7 @@ named!(token_no_whitespace_words<Token>, alt!(
 named!(token_no_whitespace_intermediate<Token>, alt!(
 
     identifier => { |id| Token::Id(id) } |
-    literal_float => { |tok| tok } |
+    complete!(literal_float) => { |tok| tok } |
     literal_int => { |tok| tok } |
     reserved_word_true => { |_| Token::True } |
     reserved_word_false => { |_| Token::False } |
