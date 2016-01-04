@@ -193,6 +193,13 @@ impl GlobalIdAllocator {
         identifier
     }
 
+    fn make_function(&mut self, name: String) -> dst::FunctionId {
+        let identifier = self.last_function_id.clone();
+        self.last_function_id = dst::FunctionId(self.last_function_id.0 + 1);
+        self.function_name_map.insert(identifier, name.clone());
+        identifier
+    }
+
     fn fetch_fragment(&mut self, fragment: Fragment) -> dst::FunctionId {
         match self.fragments.entry(fragment.clone()) {
             Entry::Occupied(occupied) => occupied.get().clone(),
@@ -240,6 +247,7 @@ struct Context {
     global_type_map: HashMap<src::GlobalId, dst::Type>,
     kernel_arguments: Vec<GlobalArgument>,
     required_extensions: HashSet<dst::Extension>,
+    root_definitions: Vec<dst::RootDefinition>,
 }
 
 impl Context {
@@ -276,6 +284,7 @@ impl Context {
             global_type_map: HashMap::new(),
             kernel_arguments: vec![],
             required_extensions: HashSet::new(),
+            root_definitions: vec![],
         };
 
         let usage = globals_analysis::GlobalUsage::analyse(root_defs);
@@ -409,6 +418,10 @@ impl Context {
             Some(v) => Ok(v.clone()),
             None => Err(TranspileError::UnknownFunctionId(id.clone())),
         }
+    }
+
+    fn make_function_name(&mut self, name: String) -> dst::FunctionId {
+        self.global_ids.make_function(name)
     }
 
     /// Get the expression to access an in scope variable
@@ -630,7 +643,10 @@ impl Context {
         decls
     }
 
-    fn destruct(self) -> (dst::GlobalDeclarations, HashMap<Fragment, dst::FunctionId>) {
+    fn destruct(self)
+                -> (Vec<dst::RootDefinition>,
+                    dst::GlobalDeclarations,
+                    HashMap<Fragment, dst::FunctionId>) {
         let mut decls = dst::GlobalDeclarations {
             globals: HashMap::new(),
             structs: HashMap::new(),
@@ -645,7 +661,7 @@ impl Context {
         for (id, name) in self.global_ids.function_name_map {
             decls.functions.insert(id, name);
         }
-        (decls, self.global_ids.fragments)
+        (self.root_definitions, decls, self.global_ids.fragments)
     }
 }
 
@@ -1250,6 +1266,251 @@ fn address_of(e: dst::Expression) -> Result<dst::Expression, TranspileError> {
     Ok(dst::Expression::AddressOf(Box::new(e)))
 }
 
+fn write_lifted_func_with_types(lifted_args: Vec<dst::Expression>,
+                                local_args: Vec<(&src::Expression, dst::Expression, ParamType)>,
+                                func_id: dst::FunctionId,
+                                context: &mut Context)
+                                -> Result<dst::Expression, TranspileError> {
+
+    enum LiftType {
+        // Input expression + type
+        Normal(dst::Expression, dst::Type),
+        // Input expression + type for out params that don't need swizzle
+        Pointer(dst::Expression, dst::Type),
+        // Input expression + deswizzled type + input type + required type + swizzle
+        Swizzle(dst::Expression, dst::Type, dst::Type, dst::Type, Vec<dst::SwizzleSlot>),
+    }
+
+    let mut lifted_types: Vec<LiftType> = Vec::with_capacity(lifted_args.len() + local_args.len());
+
+    for _ in lifted_args {
+        return Err(TranspileError::TakingAddressOfVectorElement);
+    }
+
+    for (expr_src, expr_dst, pt) in local_args {
+        let get = src::TypeParser::get_expression_type;
+        let lt = match pt {
+            ParamType::Normal => {
+                let src_ty = match get(expr_src, &context.type_context) {
+                    Ok(ty) => ty,
+                    Err(err) => return Err(TranspileError::InternalTypeError(err)),
+                };
+                let dst_ty = try!(transpile_type(&src_ty.0, context));
+                LiftType::Normal(expr_dst, dst_ty)
+            }
+            ParamType::Pointer => {
+                match (expr_src, expr_dst) {
+                    (&src::Expression::Swizzle(ref inner_src, _),
+                     dst::Expression::Swizzle(ref inner, ref sw)) => {
+                        let inner_dst = *inner.clone();
+                        let swizzle = sw.clone();
+
+                        let required_ty_src = match get(expr_src, &context.type_context) {
+                            Ok(ty) => ty,
+                            Err(err) => return Err(TranspileError::InternalTypeError(err)),
+                        };
+                        let required_ty_dst = try!(transpile_type(&required_ty_src.0, context));
+                        let deswizzled_ty_src = match get(inner_src, &context.type_context) {
+                            Ok(ty) => ty,
+                            Err(err) => return Err(TranspileError::InternalTypeError(err)),
+                        };
+                        let deswizzled_ty_dst = try!(transpile_type(&deswizzled_ty_src.0, context));
+
+                        // Only works for private variables (similar to current out param code)
+                        let ty = dst::Type::Pointer(dst::AddressSpace::Private,
+                                                    Box::new(deswizzled_ty_dst.clone()));
+                        LiftType::Swizzle(inner_dst,
+                                          deswizzled_ty_dst,
+                                          ty,
+                                          required_ty_dst,
+                                          swizzle)
+                    }
+                    (&src::Expression::Swizzle(_, _), _) => {
+                        return Err(TranspileError::TakingAddressOfVectorElement);
+                    }
+                    (_, dst::Expression::Swizzle(_, _)) => {
+                        return Err(TranspileError::TakingAddressOfVectorElement);
+                    }
+                    (expr_src, expr_dst) => {
+                        let ty_src = match get(expr_src, &context.type_context) {
+                            Ok(ty) => ty,
+                            Err(err) => return Err(TranspileError::InternalTypeError(err)),
+                        };
+                        let ty_dst = Box::new(try!(transpile_type(&ty_src.0, context)));
+
+                        // Again only works for private variables
+                        let ty = dst::Type::Pointer(dst::AddressSpace::Private, ty_dst.clone());
+                        LiftType::Pointer(expr_dst, ty)
+                    }
+                }
+            }
+        };
+        lifted_types.push(lt);
+    }
+
+    // Decide on a function name for our intermediate function
+    let name = {
+        let base_name = match context.global_ids.function_name_map.get(&func_id) {
+            Some(name) => &name[..],
+            None => "unknown",
+        };
+        format!("{}_shim", base_name)
+    };
+    // Register the new function
+    let id = context.make_function_name(name);
+
+    enum ForwardType {
+        Normal(dst::LocalId),
+        Swizzle(dst::LocalId, dst::Type, dst::LocalId, Vec<dst::SwizzleSlot>),
+    }
+
+    let mut params = Vec::with_capacity(lifted_types.len());
+    let mut locals = HashMap::new();
+    let mut forwards = Vec::with_capacity(lifted_types.len());
+    let mut local_id = 0;
+    for lt in &lifted_types {
+        let ty = match *lt {
+            LiftType::Normal(_, ref ty) => ty.clone(),
+            LiftType::Pointer(_, ref ty) => ty.clone(),
+            LiftType::Swizzle(_, _, ref ty, _, _) => ty.clone(),
+        };
+        let param_id = dst::LocalId(local_id);
+        local_id += 1;
+        locals.insert(param_id, "p".to_string());
+        let param = dst::FunctionParam {
+            id: param_id.clone(),
+            typename: ty,
+        };
+        params.push(param);
+        let ft = match *lt {
+            LiftType::Normal(_, _) => ForwardType::Normal(param_id.clone()),
+            LiftType::Pointer(_, _) => ForwardType::Normal(param_id.clone()),
+            LiftType::Swizzle(_, _, _, ref ty, ref swizzle) => {
+                let var = dst::LocalId(local_id);
+                local_id += 1;
+                locals.insert(var.clone(), "v".to_string());
+                ForwardType::Swizzle(param_id.clone(), ty.clone(), var, swizzle.clone())
+            }
+        };
+        forwards.push(ft);
+    }
+
+    let mut statements_before = vec![];
+    let mut statements_after = vec![];
+    let mut args = vec![];
+
+    for ft in &forwards {
+        match *ft {
+            ForwardType::Normal(ref param_id) => {
+                let param = dst::Expression::Local(param_id.clone());
+                args.push(param);
+            }
+            ForwardType::Swizzle(ref param_id, ref ty, ref var_id, ref sw) => {
+                let param = Box::new(dst::Expression::Local(param_id.clone()));
+                let param_deref = Box::new(dst::Expression::Deref(param));
+                let swizzle = dst::Expression::Swizzle(param_deref, sw.clone());
+
+                let init = dst::Initializer::Expression(swizzle.clone());
+                let vd = dst::VarDef {
+                    id: var_id.clone(),
+                    typename: ty.clone(),
+                    init: Some(init),
+                };
+                let st = dst::Statement::Var(vd);
+                statements_before.push(st);
+
+                let var = dst::Expression::Local(var_id.clone());
+                let var_ref = dst::Expression::AddressOf(Box::new(var.clone()));
+                args.push(var_ref);
+
+                let wb = dst::Expression::BinaryOperation(dst::BinOp::Assignment,
+                                                          Box::new(swizzle),
+                                                          Box::new(var));
+                let st = dst::Statement::Expression(wb);
+                statements_after.push(st);
+            }
+        }
+    }
+
+    let call_st = dst::Statement::Expression(dst::Expression::Call(func_id, args));
+
+    let mut statements = Vec::with_capacity(statements_before.len() + statements_after.len() + 1);
+    statements.append(&mut statements_before);
+    statements.push(call_st);
+    statements.append(&mut statements_after);
+
+    let fd = dst::FunctionDefinition {
+        id: id,
+        returntype: dst::Type::Void,
+        params: params,
+        body: statements,
+        local_declarations: dst::LocalDeclarations { locals: locals },
+    };
+
+    context.root_definitions.push(dst::RootDefinition::Function(fd));
+
+    let mut outer_args = Vec::with_capacity(lifted_types.len());
+    for lt in lifted_types {
+        let arg = match lt {
+            LiftType::Normal(e, _) => e,
+            LiftType::Pointer(e, _) |
+            LiftType::Swizzle(e, _, _, _, _) => try!(address_of(e)),
+        };
+        outer_args.push(arg);
+    }
+
+    Ok(dst::Expression::Call(id, outer_args))
+}
+
+fn write_inplace_func_with_types(lifted_args: Vec<dst::Expression>,
+                                 local_args: Vec<(&src::Expression, dst::Expression, ParamType)>,
+                                 func: dst::FunctionId)
+                                 -> Result<dst::Expression, TranspileError> {
+    let fold_fn = |vec_opt: Result<Vec<dst::Expression>, TranspileError>, (_, expr, pt)| {
+        let mut vec = try!(vec_opt);
+        vec.push(match pt {
+            ParamType::Normal => expr,
+            ParamType::Pointer => try!(address_of(expr)),
+        });
+        Ok(vec)
+    };
+    let fold_initial = Ok(Vec::with_capacity(local_args.len()));
+    let mut local_args = try!(local_args.into_iter().fold(fold_initial, fold_fn));
+    let mut final_arguments = Vec::with_capacity(lifted_args.len() + local_args.len());
+    for expr in lifted_args {
+        final_arguments.push(expr);
+    }
+    final_arguments.append(&mut local_args);
+
+    Ok(dst::Expression::Call(func, final_arguments))
+}
+
+fn write_func_with_types(lifted_args: Vec<dst::Expression>,
+                         local_args: Vec<(&src::Expression, dst::Expression, ParamType)>,
+                         func: dst::FunctionId,
+                         context: &mut Context)
+                         -> Result<dst::Expression, TranspileError> {
+    let mut use_inplace = true;
+    for &(_, ref expr, ref pt) in &local_args {
+        match *pt {
+            ParamType::Normal => {}
+            ParamType::Pointer => {
+                match *expr {
+                    dst::Expression::Swizzle(_, _) => {
+                        use_inplace = false;
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    if use_inplace {
+        write_inplace_func_with_types(lifted_args, local_args, func)
+    } else {
+        write_lifted_func_with_types(lifted_args, local_args, func, context)
+    }
+}
+
 fn write_cast(source_cl_type: dst::Type,
               dest_cl_type: dst::Type,
               cl_expr: dst::Expression,
@@ -1397,26 +1658,23 @@ fn transpile_expression(expression: &src::Expression,
         &src::Expression::Call(ref func_id, ref params) => {
             let (func_expr, decl) = try!(context.get_function(func_id));
             assert_eq!(params.len(), decl.param_types.len());
-            let mut params_exprs: Vec<dst::Expression> = vec![];
-            for (param, pt) in params.iter().zip(decl.param_types) {
-                let param_expr = try!(transpile_expression(param, context));
-                let param_expr = match pt {
-                    ParamType::Normal => param_expr,
-                    ParamType::Pointer => try!(address_of(param_expr)),
-                };
-                params_exprs.push(param_expr);
-            }
-            let mut final_arguments = vec![];
+            let mut lifted_args = vec![];
             for global in &decl.additional_arguments {
-                final_arguments.push(dst::Expression::Local(match *global {
+                let arg = dst::Expression::Local(match *global {
                     GlobalArgument::Global(ref id) => try!(context.get_global_lifted_id(id)),
                     GlobalArgument::ConstantBuffer(ref id) => {
                         try!(context.get_cbuffer_instance_id(id))
                     }
-                }));
+                });
+                lifted_args.push(arg);
             }
-            final_arguments.append(&mut params_exprs);
-            Ok(dst::Expression::Call(func_expr, final_arguments))
+            let mut local_args = Vec::with_capacity(params.len());
+            for (param, pt) in params.iter().zip(decl.param_types) {
+                let param_expr = try!(transpile_expression(param, context));
+                local_args.push((param, param_expr, pt));
+            }
+
+            write_func_with_types(lifted_args, local_args, func_expr, context)
         }
         &src::Expression::NumericConstructor(ref dtyl, ref slots) => {
 
@@ -1867,20 +2125,21 @@ fn transpile_kernel(kernel: &src::Kernel,
 
 fn transpile_roots(root_defs: &[src::RootDefinition],
                    context: &mut Context)
-                   -> Result<Vec<dst::RootDefinition>, TranspileError> {
-    let mut cl_defs = vec![];
+                   -> Result<(), TranspileError> {
 
     for rootdef in root_defs {
         match *rootdef {
             src::RootDefinition::Struct(ref structdefinition) => {
-                cl_defs.push(try!(transpile_structdefinition(structdefinition, context)));
+                let def = try!(transpile_structdefinition(structdefinition, context));
+                context.root_definitions.push(def);
             }
             src::RootDefinition::ConstantBuffer(ref cb) => {
-                cl_defs.push(try!(transpile_cbuffer(cb, context)));
+                let def = try!(transpile_cbuffer(cb, context));
+                context.root_definitions.push(def);
             }
             src::RootDefinition::GlobalVariable(ref gv) => {
                 match try!(transpile_globalvariable(gv, context)) {
-                    Some(root) => cl_defs.push(root),
+                    Some(root) => context.root_definitions.push(root),
                     None => {}
                 }
             }
@@ -1892,16 +2151,18 @@ fn transpile_roots(root_defs: &[src::RootDefinition],
     for rootdef in root_defs {
         match *rootdef {
             src::RootDefinition::Function(ref func) => {
-                cl_defs.push(try!(transpile_functiondefinition(func, context)));
+                let def = try!(transpile_functiondefinition(func, context));
+                context.root_definitions.push(def);
             }
             src::RootDefinition::Kernel(ref kernel) => {
-                cl_defs.push(try!(transpile_kernel(kernel, context)));
+                let def = try!(transpile_kernel(kernel, context));
+                context.root_definitions.push(def);
             }
             _ => {}
         };
     }
 
-    Ok(cl_defs)
+    Ok(())
 }
 
 pub fn transpile(module: &src::Module) -> Result<dst::Module, TranspileError> {
@@ -1910,10 +2171,10 @@ pub fn transpile(module: &src::Module) -> Result<dst::Module, TranspileError> {
                                                           &module.global_declarations,
                                                           &module.root_definitions));
 
-    let cl_defs = try!(transpile_roots(&module.root_definitions, &mut context));
+    try!(transpile_roots(&module.root_definitions, &mut context));
 
     let required_extensions = context.required_extensions.clone();
-    let (decls, fragments) = context.destruct();
+    let (cl_defs, decls, fragments) = context.destruct();
 
     let cl_module = dst::Module {
         root_definitions: cl_defs,

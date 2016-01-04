@@ -43,8 +43,33 @@ void vector_int_2()
     int4 i3_yyyy = v.yyyy;
 }
 
+void test_call_f0(float3 x) {}
+
+void test_call_f1(out float3 y)
+{
+    y = float3(1.0, 2.0, 3.0);
+}
+
+void test_call_f2(float x, out float3 y, out float z, out float2 u, float v)
+{
+    y = float3(x, x, x);
+    z = v;
+    u = float2(x, v);
+}
+
+void test_call()
+{
+    float4 f4;
+    test_call_f0(f4.xyz);
+    test_call_f1(f4.xyz);
+    float output_z;
+    float3 output_u;
+    test_call_f2(3.0, f4.xyz, output_z, output_u.yz, 3.0);
+}
+
 [numthreads(8, 8, 1)]
 void CSMAIN()
 {
     vector_int_2();
+    test_call();
 }
