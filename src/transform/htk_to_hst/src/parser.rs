@@ -1019,10 +1019,15 @@ fn vardef(input: &[LexToken]) -> IResult<&[LexToken], VarDef, ParseErrorReason> 
 }
 
 fn init_statement(input: &[LexToken]) -> IResult<&[LexToken], InitStatement, ParseErrorReason> {
-    alt!(input,
+    let res: IResult<&[LexToken], InitStatement, ParseErrorReason> = alt!(input,
         vardef => { |variable_definition| InitStatement::Declaration(variable_definition) } |
         expr => { |expression| InitStatement::Expression(expression) }
-    )
+    );
+    match res {
+        IResult::Done(rest, res) => IResult::Done(rest, res),
+        IResult::Incomplete(rem) => IResult::Incomplete(rem),
+        IResult::Error(_) => IResult::Done(input, InitStatement::Empty),
+    }
 }
 
 fn statement_attribute(input: &[LexToken]) -> IResult<&[LexToken], (), ParseErrorReason> {

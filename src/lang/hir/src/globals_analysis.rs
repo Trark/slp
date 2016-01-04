@@ -191,6 +191,7 @@ fn search_vardef(vd: &VarDef, usage: &mut LocalFunctionGlobalUsage) {
 
 fn search_initexpression(init: &ForInit, usage: &mut LocalFunctionGlobalUsage) {
     match *init {
+        ForInit::Empty => {}
         ForInit::Expression(ref expr) => search_expression(expr, usage),
         ForInit::Definitions(ref vds) => {
             for vd in vds {

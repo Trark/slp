@@ -133,4 +133,7 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     {
         myFunc(5u);
     }
+    for (; false; 0)
+    {
+    }
 }

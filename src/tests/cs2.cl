@@ -138,4 +138,7 @@ kernel void MyKernel(__constant struct myConstants_t* myConstants, __global uint
 			myFunc_0(5u);
 		}
 	}
+	for (; false; 0)
+	{
+	}
 }

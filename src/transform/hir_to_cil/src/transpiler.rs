@@ -1831,6 +1831,7 @@ fn transpile_statement(statement: &src::Statement,
             context.push_scope(scope_block);
 
             let (cl_init, defs) = match *init {
+                src::ForInit::Empty => (dst::InitStatement::Empty, vec![]),
                 src::ForInit::Expression(ref expr) => {
                     let expr_ir = try!(transpile_expression(expr, context));
                     (dst::InitStatement::Expression(expr_ir), vec![])

@@ -2606,15 +2606,16 @@ fn parse_vardef(ast: &ast::VarDef,
 fn parse_for_init(ast: &ast::InitStatement,
                   context: ScopeContext)
                   -> Result<(ir::ForInit, ScopeContext), TyperError> {
-    match ast {
-        &ast::InitStatement::Expression(ref expr) => {
+    match *ast {
+        ast::InitStatement::Empty => Ok((ir::ForInit::Empty, context)),
+        ast::InitStatement::Expression(ref expr) => {
             let expr_ir = match try!(parse_expr(expr, &context)) {
                 TypedExpression::Value(expr_ir, _) => expr_ir,
                 _ => return Err(TyperError::FunctionNotCalled),
             };
             Ok((ir::ForInit::Expression(expr_ir), context))
         }
-        &ast::InitStatement::Declaration(ref vd) => {
+        ast::InitStatement::Declaration(ref vd) => {
             let (vd_ir, context) = try!(parse_vardef(vd, context));
             Ok((ir::ForInit::Definitions(vd_ir), context))
         }

@@ -532,6 +532,7 @@ fn print_vardef(vardef: &VarDef, printer: &mut Printer) {
 
 fn print_init_statement(cond: &InitStatement, printer: &mut Printer) {
     match *cond {
+        InitStatement::Empty => {}
         InitStatement::Expression(ref expr) => print_expression(expr, printer),
         InitStatement::Declaration(ref vd) => print_vardef(vd, printer),
     }

@@ -368,6 +368,7 @@ fn untype_init_expression(member: &src::InitStatement,
                           context: &mut Context)
                           -> Result<dst::InitStatement, UntyperError> {
     Ok(match *member {
+        src::InitStatement::Empty => dst::InitStatement::Empty,
         src::InitStatement::Expression(ref expr) => {
             dst::InitStatement::Expression(try!(untype_expression(expr, context)))
         }

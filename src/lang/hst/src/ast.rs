@@ -428,6 +428,7 @@ impl VarDef {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum InitStatement {
+    Empty,
     Expression(Located<Expression>),
     Declaration(VarDef),
 }

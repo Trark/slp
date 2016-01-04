@@ -641,6 +641,7 @@ pub struct VarDef {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum ForInit {
+    Empty,
     Expression(Expression),
     Definitions(Vec<VarDef>),
 }

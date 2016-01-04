@@ -124,6 +124,7 @@ pub struct VarDef {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum InitStatement {
+    Empty,
     Expression(Expression),
     Declaration(VarDef),
 }
