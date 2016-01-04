@@ -6,6 +6,7 @@ extern crate slp_sequence_hlsl_to_cl;
 use std::io::Read;
 use std::io::Write;
 use std::fs::File;
+use std::thread;
 use std::path::Path;
 use std::path::PathBuf;
 use docopt::Docopt;
@@ -106,15 +107,34 @@ fn main() {
         }
     }
 
-    let include_handler = Box::new(FileLoader { include_paths: paths });
+    let join_handle_res = thread::Builder::new().stack_size(8 * 1024 * 1024).spawn(move || {
+        let include_handler = Box::new(FileLoader { include_paths: paths });
 
-    let input = Input {
-        entry_point: flag_entry_point,
-        main_file: source_contents,
-        file_loader: include_handler,
+        let input = Input {
+            entry_point: flag_entry_point,
+            main_file: source_contents,
+            file_loader: include_handler,
+        };
+
+        hlsl_to_cl(input)
+    });
+
+    let join_handle = match join_handle_res {
+        Ok(jh) => jh,
+        Err(_) => {
+            println!("Failed to start worker thread");
+            return;
+        }
     };
 
-    let output_res = hlsl_to_cl(input);
+    let output_res = match join_handle.join() {
+        Ok(output) => output,
+        Err(_) => {
+            println!("Failed to join worker thread");
+            return;
+        }
+    };
+
     match output_res {
         Ok(output) => {
             match flag_output_file {
