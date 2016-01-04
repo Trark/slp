@@ -76,6 +76,7 @@ fn parse_scalartype_str(input: &[u8]) -> IResult<&[u8], ScalarType> {
         complete!(tag!("int")) => { |_| ScalarType::Int } |
         complete!(tag!("uint")) => { |_| ScalarType::UInt } |
         complete!(tag!("dword")) => { |_| ScalarType::UInt } |
+        complete!(tag!("half")) => { |_| ScalarType::Half } |
         complete!(tag!("float")) => { |_| ScalarType::Float } |
         complete!(tag!("double")) => { |_| ScalarType::Double }
     )

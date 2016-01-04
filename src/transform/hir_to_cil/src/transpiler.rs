@@ -27,6 +27,7 @@ pub enum TranspileError {
     UnknownVariableId,
 
     BoolVectorsNotSupported,
+    HalfVariablesNotSupported,
     IntsMustBeTyped,
 
     Intrinsic1Unimplemented(src::Intrinsic1),
@@ -50,6 +51,7 @@ impl error::Error for TranspileError {
             TranspileError::InvalidVariableRef => "invalid variable ref",
             TranspileError::UnknownVariableId => "unknown variable id",
             TranspileError::BoolVectorsNotSupported => "bool vectors not supported",
+            TranspileError::HalfVariablesNotSupported => "half variables are not supported",
             TranspileError::IntsMustBeTyped => "internal error: untyped int ended up in tree",
             TranspileError::Intrinsic1Unimplemented(_) |
             TranspileError::Intrinsic2Unimplemented(_) => "intrinsic function is not implemented",
@@ -729,7 +731,7 @@ fn transpile_scalartype(scalartype: &src::ScalarType) -> Result<dst::Scalar, Tra
         &src::ScalarType::Bool => Err(TranspileError::BoolVectorsNotSupported),
         &src::ScalarType::Int => Ok(dst::Scalar::Int),
         &src::ScalarType::UInt => Ok(dst::Scalar::UInt),
-        &src::ScalarType::Half => Ok(dst::Scalar::Half),
+        &src::ScalarType::Half => Err(TranspileError::HalfVariablesNotSupported),
         &src::ScalarType::Float => Ok(dst::Scalar::Float),
         &src::ScalarType::Double => Ok(dst::Scalar::Double),
         &src::ScalarType::UntypedInt => Err(TranspileError::IntsMustBeTyped),
