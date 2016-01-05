@@ -255,6 +255,7 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     float3 abs_f3 = abs(fx3);
     float4 abs_f4 = abs(fx4);
     (void)sincos(fx, fy, fz);
+    (void)sincos(fx1, fy1, fz1);
     (void)sincos(fx2, fy2, fz2);
     (void)sincos(fx3, fy3, fz3);
     (void)sincos(fx4, fy4, fz4);

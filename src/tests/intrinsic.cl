@@ -299,6 +299,7 @@ kernel void MyKernel(__global uint4* g_roBuffer, __global struct testStruct* g_r
 	float3 abs_f3 = fabs(fx3);
 	float4 abs_f4 = fabs(fx4);
 	(void)(fy = sincos(fx, &fz));
+	(void)(fy1 = sincos(fx1, &fz1));
 	(void)(fy2 = sincos(fx2, &fz2));
 	(void)(fy3 = sincos(fx3, &fz3));
 	(void)(fy4 = sincos(fx4, &fz4));
