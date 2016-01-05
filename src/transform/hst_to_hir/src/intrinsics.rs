@@ -181,6 +181,11 @@ const INTRINSICS: &'static [IntrinsicDefinition] = &[
     ("floor", &[T_FLOAT3], I1(Intrinsic1::Floor3)),
     ("floor", &[T_FLOAT4], I1(Intrinsic1::Floor4)),
 
+    ("lerp", &[T_FLOAT, T_FLOAT, T_FLOAT], I3(Intrinsic3::Lerp)),
+    ("lerp", &[T_FLOAT2, T_FLOAT2, T_FLOAT2], I3(Intrinsic3::Lerp2)),
+    ("lerp", &[T_FLOAT3, T_FLOAT3, T_FLOAT3], I3(Intrinsic3::Lerp3)),
+    ("lerp", &[T_FLOAT4, T_FLOAT4, T_FLOAT4], I3(Intrinsic3::Lerp4)),
+
     ("isnan", &[T_FLOAT], I1(Intrinsic1::IsNaN)),
     ("isnan", &[T_FLOAT2], I1(Intrinsic1::IsNaN2)),
     ("isnan", &[T_FLOAT3], I1(Intrinsic1::IsNaN3)),

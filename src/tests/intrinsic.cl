@@ -327,4 +327,9 @@ kernel void MyKernel(__global uint4* g_roBuffer, __global struct testStruct* g_r
 	float2 saturate_f2 = clamp(fx2, 0.0f, 1.0f);
 	float3 saturate_f3 = clamp(fx3, 0.0f, 1.0f);
 	float4 saturate_f4 = clamp(fx4, 0.0f, 1.0f);
+	float lerp_fs = mix(fx, fy, fz);
+	float lerp_f1 = mix(fx1, fy1, fz1);
+	float2 lerp_f2 = mix(fx2, fy2, fz2);
+	float3 lerp_f3 = mix(fx3, fy3, fz3);
+	float4 lerp_f4 = mix(fx4, fy4, fz4);
 }

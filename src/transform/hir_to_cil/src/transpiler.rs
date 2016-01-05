@@ -1232,6 +1232,10 @@ fn transpile_intrinsic3(intrinsic: &src::Intrinsic3,
         I::ClampF2 => write_func("clamp", &[e1, e2, e3]),
         I::ClampF3 => write_func("clamp", &[e1, e2, e3]),
         I::ClampF4 => write_func("clamp", &[e1, e2, e3]),
+        I::Lerp |
+        I::Lerp2 |
+        I::Lerp3 |
+        I::Lerp4 => write_func("mix", &[e1, e2, e3]),
         I::Sincos |
         I::Sincos2 |
         I::Sincos3 |

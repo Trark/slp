@@ -283,4 +283,9 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     float2 saturate_f2 = saturate(fx2);
     float3 saturate_f3 = saturate(fx3);
     float4 saturate_f4 = saturate(fx4);
+    float lerp_fs = lerp(fx, fy, fz);
+    float1 lerp_f1 = lerp(fx1, fy1, fz1);
+    float2 lerp_f2 = lerp(fx2, fy2, fz2);
+    float3 lerp_f3 = lerp(fx3, fy3, fz3);
+    float4 lerp_f4 = lerp(fx4, fy4, fz4);
 }
