@@ -88,6 +88,11 @@ void testVec3(float2 x, float2 y, float2 z)
 {
 }
 
+void testOut(__private float* x)
+{
+	*x = 3.0f;
+}
+
 __attribute__((reqd_work_group_size(8, 8, 1)))
 kernel void MyKernel()
 {
@@ -119,4 +124,8 @@ kernel void MyKernel()
 	fmax(cast_float_to_float3(3.0f), (float3)(4.0f, 3.0f, 3.5f));
 	fmax((float2)(3.0f, 7.0f), (float3)(4.0f, 3.0f, 3.5f).xy);
 	testVec3(cast_float_to_float2(2.0f), (float2)(1.0f, 3.0f), (float3)(2.0f, 7.0f, 2.9f).xy);
+	float out_param_scalar;
+	float out_param_vector1;
+	testOut(&out_param_scalar);
+	testOut(&out_param_vector1);
 }

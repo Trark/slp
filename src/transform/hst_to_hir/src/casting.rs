@@ -252,6 +252,20 @@ impl ImplicitConversion {
             (ref ty1, ref ty2, _) if ty1 == ty2 => None,
             // Scalar to scalar
             (&TypeLayout::Scalar(_), &TypeLayout::Scalar(_), false) => None,
+            // Scalar to vector1 of same type (works for lvalues)
+            (&TypeLayout::Scalar(ref s1),
+             &TypeLayout::Vector(ref s2, ref x2),
+             _)
+                if s1 == s2 && *x2 == 1 => {
+                Some(DimensionCast(NumericDimension::Scalar, NumericDimension::Vector(1)))
+            }
+            // vector1 to scalar of same type (works for lvalues)
+            (&TypeLayout::Vector(ref s1, ref x1),
+             &TypeLayout::Scalar(ref s2),
+             _)
+                if s1 == s2 && *x1 == 1 => {
+                Some(DimensionCast(NumericDimension::Vector(1), NumericDimension::Scalar))
+            }
             // Scalar to vector (mirror)
             (&TypeLayout::Scalar(_),
              &TypeLayout::Vector(_, ref x2),
@@ -288,8 +302,8 @@ impl ImplicitConversion {
             _ => return Err(()),
         };
 
-        let numeric_cast = match (source_l, dest_l, dest.1 == ValueType::Lvalue) {
-            (ref ty1, ref ty2, _) if ty1 == ty2 => None,
+        let numeric_cast = match (source_l, dest_l) {
+            (ref ty1, ref ty2) if ty1 == ty2 => None,
             _ => {
                 let source_scalar = match *source_l {
                     TypeLayout::Scalar(ref s) => s,
@@ -474,6 +488,21 @@ fn test_implicitconversion() {
                                      None,
                                      Some(DimensionCast(NumericDimension::Vector(1),
                                                         NumericDimension::Vector(4))),
+                                     None,
+                                     None)));
+
+    assert_eq!(ImplicitConversion::find(&Type::int().to_lvalue(), &Type::intn(1).to_lvalue()),
+               Ok(ImplicitConversion(Type::int().to_lvalue(),
+                                     None,
+                                     Some(DimensionCast(NumericDimension::Scalar,
+                                                        NumericDimension::Vector(1))),
+                                     None,
+                                     None)));
+    assert_eq!(ImplicitConversion::find(&Type::intn(1).to_lvalue(), &Type::int().to_lvalue()),
+               Ok(ImplicitConversion(Type::intn(1).to_lvalue(),
+                                     None,
+                                     Some(DimensionCast(NumericDimension::Vector(1),
+                                                        NumericDimension::Scalar)),
                                      None,
                                      None)));
 }

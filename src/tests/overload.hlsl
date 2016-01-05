@@ -59,6 +59,11 @@ void testVec3(float3 x, float3 y, float3 z)
 {
 }
 
+void testOut(out float x)
+{
+    x = 3.0;
+}
+
 [numthreads(8, 8, 1)]
 void CSMAIN(uint3 dtid : SV_DispatchThreadID)
 {
@@ -94,4 +99,9 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     max(float2(3.0f, 7.0f), float3(4.0f, 3.0f, 3.5f));
 
     testVec3(2.0f, float2(1.0f, 3.0f), float3(2.0f, 7.0f, 2.9f));
+
+    float out_param_scalar;
+    float1 out_param_vector1;
+    testOut(out_param_scalar);
+    testOut(out_param_vector1);
 }
