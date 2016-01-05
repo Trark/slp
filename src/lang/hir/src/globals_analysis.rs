@@ -222,6 +222,10 @@ fn search_expression(expression: &Expression, usage: &mut LocalFunctionGlobalUsa
             search_expression(arr, usage);
             search_expression(index, usage);
         }
+        Expression::TextureIndex(_, ref tex, ref index) => {
+            search_expression(tex, usage);
+            search_expression(index, usage);
+        }
         Expression::Member(ref expr, _) => search_expression(expr, usage),
         Expression::Call(ref id, ref exprs) => {
             usage.functions.insert(id.clone());

@@ -87,6 +87,9 @@ void test_texture_2d(read_only image2d_t g_rwRTexture2DFloat, read_only image2d_
 	float4 read_load_f = read_imagef(g_rwRTexture2DFloat, coord);
 	int4 read_load_i = read_imagei(g_rwRTexture2DInt, coord);
 	uint4 read_load_ui = read_imageui(g_rwRTexture2DUInt, coord);
+	write_imagef(g_rwRTexture2DFloat, coord, read_load_f);
+	write_imagei(g_rwRTexture2DInt, coord, read_load_i);
+	write_imageui(g_rwRTexture2DUInt, coord, read_load_ui);
 }
 
 void test_byte_address_buffer(__global uchar* g_roRawBuffer, __global uchar* g_rwRawBuffer, uint3 dtid)

@@ -610,6 +610,8 @@ pub enum Expression {
     TernaryConditional(Box<Expression>, Box<Expression>, Box<Expression>),
     Swizzle(Box<Expression>, Vec<SwizzleSlot>),
     ArraySubscript(Box<Expression>, Box<Expression>),
+    /// Indexing a texture object
+    TextureIndex(DataType, Box<Expression>, Box<Expression>),
     Member(Box<Expression>, String),
     Call(FunctionId, Vec<Expression>),
     /// Constructors for builtin numeric types, such as `float2(1.0, 0.0)`
@@ -1049,6 +1051,7 @@ impl TypeParser {
             }
             Expression::ArraySubscript(ref array, _) => {
                 let array_ty = try!(TypeParser::get_expression_type(&array, context));
+                // Todo: Modifiers on object type template parameters
                 Ok(match (array_ty.0).0 {
                     TypeLayout::Array(ref element, _) => {
                         Type::from_layout(*element.clone()).to_lvalue()
@@ -1067,6 +1070,9 @@ impl TypeParser {
                     }
                     tyl => return Err(TypeError::ArrayIndexMustBeUsedOnArrayType(tyl)),
                 })
+            }
+            Expression::TextureIndex(ref data_type, _, _) => {
+                Ok(Type::from_data(data_type.clone()).to_lvalue())
             }
             Expression::Member(ref expr, ref name) => {
                 let expr_type = try!(TypeParser::get_expression_type(&expr, context));

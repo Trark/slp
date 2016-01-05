@@ -2213,35 +2213,42 @@ fn parse_expr_unchecked(ast: &ast::Expression,
                 _ => return Err(TyperError::ArrayIndexingNonArrayType),
             };
             let ExpressionType(ir::Type(array_tyl, _), _) = array_ty;
-            let indexed_type = match array_tyl {
-                ir::TypeLayout::Array(ref element, _) => {
-                    ir::Type::from_layout(*element.clone()).to_lvalue()
+            let node = try!(match array_tyl {
+                ir::TypeLayout::Array(_, _) |
+                ir::TypeLayout::Object(ir::ObjectType::Buffer(_)) |
+                ir::TypeLayout::Object(ir::ObjectType::RWBuffer(_)) |
+                ir::TypeLayout::Object(ir::ObjectType::StructuredBuffer(_)) |
+                ir::TypeLayout::Object(ir::ObjectType::RWStructuredBuffer(_)) => {
+                    let index = ir::Type::int().to_rvalue();
+                    let cast_to_int_result = ImplicitConversion::find(&subscript_ty, &index);
+                    let subscript_final = match cast_to_int_result {
+                        Err(_) => return Err(TyperError::ArraySubscriptIndexNotInteger),
+                        Ok(cast) => cast.apply(subscript_ir),
+                    };
+                    let array = Box::new(array_ir);
+                    let sub = Box::new(subscript_final);
+                    let sub_node = ir::Expression::ArraySubscript(array, sub);
+                    Ok(sub_node)
                 }
-                ir::TypeLayout::Object(ir::ObjectType::Buffer(data_type)) => {
-                    // Todo: const
-                    ir::Type::from_data(data_type).to_lvalue()
-                }
-                ir::TypeLayout::Object(ir::ObjectType::RWBuffer(data_type)) => {
-                    ir::Type::from_data(data_type).to_lvalue()
-                }
-                ir::TypeLayout::Object(ir::ObjectType::StructuredBuffer(structured_type)) => {
-                    // Todo: const
-                    ir::Type::from_structured(structured_type).to_lvalue()
-                }
-                ir::TypeLayout::Object(ir::ObjectType::RWStructuredBuffer(structured_type)) => {
-                    ir::Type::from_structured(structured_type).to_lvalue()
+                ir::TypeLayout::Object(ir::ObjectType::RWTexture2D(data_type)) => {
+                    let index = ir::Type::intn(2).to_rvalue();
+                    let cast = ImplicitConversion::find(&subscript_ty, &index);
+                    let subscript_final = match cast {
+                        Err(_) => return Err(TyperError::ArraySubscriptIndexNotInteger),
+                        Ok(cast) => cast.apply(subscript_ir),
+                    };
+                    let array = Box::new(array_ir);
+                    let sub = Box::new(subscript_final);
+                    let sub_node = ir::Expression::TextureIndex(data_type, array, sub);
+                    Ok(sub_node)
                 }
                 _ => return Err(TyperError::ArrayIndexingNonArrayType),
+            });
+            let ety = match ir::TypeParser::get_expression_type(&node, context.as_type_context()) {
+                Ok(ety) => ety,
+                Err(_) => panic!("internal error: type unknown"),
             };
-            let cast_to_int_result = ImplicitConversion::find(&subscript_ty,
-                                                              &ir::Type::int().to_rvalue());
-            let subscript_final = match cast_to_int_result {
-                Err(_) => return Err(TyperError::ArraySubscriptIndexNotInteger),
-                Ok(cast) => cast.apply(subscript_ir),
-            };
-            Ok(TypedExpression::Value(ir::Expression::ArraySubscript(Box::new(array_ir),
-                                                                     Box::new(subscript_final)),
-                                      indexed_type))
+            Ok(TypedExpression::Value(node, ety))
         }
         &ast::Expression::Member(ref composite, ref member) => {
             let composite_texp = try!(parse_expr(composite, context));

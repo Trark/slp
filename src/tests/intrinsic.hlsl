@@ -41,6 +41,9 @@ void test_texture_2d(uint3 dtid)
     float4 read_load_f = g_rwRTexture2DFloat.Load(coord);
     int4 read_load_i = g_rwRTexture2DInt.Load(coord);
     uint4 read_load_ui = g_rwRTexture2DUInt.Load(coord);
+    g_rwRTexture2DFloat[coord] = read_load_f;
+    g_rwRTexture2DInt[coord] = read_load_i;
+    g_rwRTexture2DUInt[coord] = read_load_ui;
 }
 
 ByteAddressBuffer g_roRawBuffer : register(t5);
