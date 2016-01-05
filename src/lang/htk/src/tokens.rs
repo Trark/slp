@@ -1,7 +1,7 @@
 
 use slp_shared::*;
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone)]
 pub struct Identifier(pub String);
 
 #[derive(PartialEq, Debug, Clone)]
