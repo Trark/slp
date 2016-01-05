@@ -333,6 +333,7 @@ pub enum BinOp {
     ProductAssignment,
     QuotientAssignment,
     RemainderAssignment,
+    Sequence,
 }
 
 #[derive(PartialEq, Debug, Clone)]

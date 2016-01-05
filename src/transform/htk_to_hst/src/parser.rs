@@ -606,7 +606,7 @@ fn parse_arraydim<'t>(input: &'t [LexToken],
                       -> ParseResult<'t, Option<Located<Expression>>> {
     chain!(input,
         token!(Token::LeftSquareBracket) ~
-        constant_expression: opt!(parse!(Expression, st)) ~
+        constant_expression: opt!(parse!(ExpressionNoSeq, st)) ~
         token!(Token::RightSquareBracket),
         || { constant_expression }
     )
@@ -648,8 +648,8 @@ fn expr_p1<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
                 chain!(
                     start: token!(Token::LeftParen) ~
                     params: opt!(chain!(
-                        first: parse!(Expression, st) ~
-                        rest: many0!(chain!(token!(Token::Comma) ~ next: parse!(Expression, st), || { next })),
+                        first: parse!(ExpressionNoSeq, st) ~
+                        rest: many0!(chain!(token!(Token::Comma) ~ next: parse!(ExpressionNoSeq, st), || { next })),
                         || {
                             let mut v = Vec::new();
                             v.push(first);
@@ -669,7 +669,7 @@ fn expr_p1<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
                 ) |
                 chain!(
                     start: token!(Token::LeftSquareBracket) ~
-                    subscript: parse!(Expression, st) ~
+                    subscript: parse!(ExpressionNoSeq, st) ~
                     token!(Token::RightSquareBracket),
                     || Located::new(Precedence1Postfix::ArraySubscript(subscript), start.to_loc())
                 )
@@ -677,6 +677,27 @@ fn expr_p1<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
             || right
         )
     }
+
+    fn cons<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
+        let loc = if input.len() > 0 {
+            input[0].1.clone()
+        } else {
+            return IResult::Incomplete(Needed::Size(1));
+        };
+        chain!(input,
+            dtyl: parse!(DataLayout, st) ~
+            token!(Token::LeftParen) ~
+            list: separated_list!(token!(Token::Comma), parse!(ExpressionNoSeq, st)) ~
+            token!(Token::RightParen),
+            || Located::new(Expression::NumericConstructor(dtyl, list), loc)
+        )
+    }
+
+    let input = match cons(input, st) {
+        IResult::Done(rest, rem) => return IResult::Done(rest, rem),
+        IResult::Incomplete(rem) => return IResult::Incomplete(rem),
+        IResult::Error(_) => input,
+    };
 
     chain!(input,
         left: call!(expr_paren, st) ~
@@ -688,16 +709,7 @@ fn expr_p1<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
                 final_expression = Located::new(match val.node.clone() {
                     Precedence1Postfix::Increment => Expression::UnaryOperation(UnaryOp::PostfixIncrement, Box::new(final_expression)),
                     Precedence1Postfix::Decrement => Expression::UnaryOperation(UnaryOp::PostfixDecrement, Box::new(final_expression)),
-                    Precedence1Postfix::Call(params) => {
-                        let ty_opt = match *final_expression {
-                            Expression::Variable(ref name) => parse_datalayout_str(name),
-                            _ => None,
-                        };
-                        match ty_opt {
-                            Some(dty) => Expression::NumericConstructor(dty, params),
-                            None => Expression::Call(Box::new(final_expression), params),
-                        }
-                    },
+                    Precedence1Postfix::Call(params) => Expression::Call(Box::new(final_expression), params),
                     Precedence1Postfix::ArraySubscript(expr) => Expression::ArraySubscript(Box::new(final_expression), Box::new(expr)),
                     Precedence1Postfix::Member(name) => Expression::Member(Box::new(final_expression), name),
                 }, loc.clone())
@@ -994,8 +1006,31 @@ fn expr_p14<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Loca
     )
 }
 
+fn expr_p15<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
+    chain!(input,
+        left: call!(expr_p14, st) ~
+        rights: many0!(chain!(
+            op: token!(LexToken(Token::Comma, _) => BinOp::Sequence) ~
+            right: call!(expr_p14, st),
+            || (op, right)
+        )),
+        || combine_rights(left, rights)
+    )
+}
+
 impl Parse for Expression {
     type Output = Located<Self>;
+    fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self::Output> {
+        expr_p15(input, st)
+    }
+}
+
+/// Fake node for parsing an expression where the comma has a different meaning
+/// at the top level, so skip that node
+struct ExpressionNoSeq;
+
+impl Parse for ExpressionNoSeq {
+    type Output = Located<Expression>;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self::Output> {
         expr_p14(input, st)
     }
@@ -1006,7 +1041,7 @@ impl Parse for Initializer {
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self::Output> {
         fn init_expr<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Initializer> {
             map!(input,
-                 parse!(Expression, st),
+                 parse!(ExpressionNoSeq, st),
                  |expr| Initializer::Expression(expr))
         }
 
@@ -1487,11 +1522,11 @@ impl Parse for FunctionAttribute {
                         }
                     }) ~
                     token!(Token::LeftParen) ~
-                    x: parse!(Expression, st) ~
+                    x: parse!(ExpressionNoSeq, st) ~
                     token!(Token::Comma) ~
-                    y: parse!(Expression, st) ~
+                    y: parse!(ExpressionNoSeq, st) ~
                     token!(Token::Comma) ~
-                    z: parse!(Expression, st) ~
+                    z: parse!(ExpressionNoSeq, st) ~
                     token!(Token::RightParen),
                     || { FunctionAttribute::NumThreads(x, y, z) }
                 )
@@ -1968,6 +2003,16 @@ fn test_expr() {
         Located::loc(1, 1, cons)
     };
     assert_eq!(expr_str(numeric_cons), numeric_cons_out);
+
+    let fake_cons = "(float2)(x, y)";
+    let fake_cons_out = {
+        let x = bexp_var("x", 1, 10);
+        let y = bexp_var("y", 1, 13);
+        let binop = Located::loc(1, 9, Expression::BinaryOperation(BinOp::Sequence, x, y));
+        let cons = Expression::Cast(Type::floatn(2), Box::new(binop));
+        Located::loc(1, 1, cons)
+    };
+    assert_eq!(expr_str(fake_cons), fake_cons_out);
 
     assert_eq!(expr_str("a++"),
                Located::loc(1,

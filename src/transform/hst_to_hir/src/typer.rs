@@ -16,6 +16,7 @@ use super::casting::ConversionPriority;
 #[derive(PartialEq, Debug, Clone)]
 pub enum TyperError {
     Unimplemented,
+    ExpressionSequenceOperatorNotImplemented,
 
     ValueAlreadyDefined(String, ErrorType, ErrorType),
     StructAlreadyDefined(String),
@@ -108,6 +109,7 @@ impl error::Error for TyperError {
     fn description(&self) -> &str {
         match *self {
             TyperError::Unimplemented => "unimplemented",
+            TyperError::ExpressionSequenceOperatorNotImplemented => "operator ',' not implemented",
 
             TyperError::ValueAlreadyDefined(_, _, _) => "identifier already defined",
             TyperError::StructAlreadyDefined(_) => "struct aready defined",
@@ -2080,6 +2082,7 @@ fn parse_expr_binop(op: &ast::BinOp,
                 Err(()) => err_bad_type,
             }
         }
+        ast::BinOp::Sequence => return Err(TyperError::ExpressionSequenceOperatorNotImplemented),
     }
 }
 
