@@ -50,11 +50,12 @@ void test_call_f1(out float3 y)
     y = float3(1.0, 2.0, 3.0);
 }
 
-void test_call_f2(float x, out float3 y, out float z, out float2 u, float v)
+uint test_call_f2(float x, out float3 y, out float z, out float2 u, float v)
 {
     y = float3(x, x, x);
     z = v;
     u = float2(x, v);
+    return 0u;
 }
 
 void test_call()

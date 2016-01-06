@@ -1336,6 +1336,7 @@ fn address_of(e: dst::Expression) -> Result<dst::Expression, TranspileError> {
 fn write_lifted_func_with_types(lifted_args: Vec<dst::Expression>,
                                 local_args: Vec<(&src::Expression, dst::Expression, ParamType)>,
                                 func_id: dst::FunctionId,
+                                ret_ty: dst::Type,
                                 context: &mut Context)
                                 -> Result<dst::Expression, TranspileError> {
 
@@ -1462,6 +1463,15 @@ fn write_lifted_func_with_types(lifted_args: Vec<dst::Expression>,
         forwards.push(ft);
     }
 
+    let ret = if ret_ty != dst::Type::Void {
+        let var = dst::LocalId(local_id);
+        drop(local_id);
+        locals.insert(var.clone(), "ret".to_string());
+        Some(var)
+    } else {
+        None
+    };
+
     let mut statements_before = vec![];
     let mut statements_after = vec![];
     let mut args = vec![];
@@ -1499,16 +1509,31 @@ fn write_lifted_func_with_types(lifted_args: Vec<dst::Expression>,
         }
     }
 
-    let call_st = dst::Statement::Expression(dst::Expression::Call(func_id, args));
+    let call_pre = dst::Expression::Call(func_id, args);
+    let call_st = match ret {
+        Some(id) => {
+            let vd = dst::VarDef {
+                id: id,
+                typename: ret_ty.clone(),
+                init: Some(dst::Initializer::Expression(call_pre)),
+            };
+            dst::Statement::Var(vd)
+        }
+        None => dst::Statement::Expression(call_pre),
+    };
 
     let mut statements = Vec::with_capacity(statements_before.len() + statements_after.len() + 1);
     statements.append(&mut statements_before);
     statements.push(call_st);
     statements.append(&mut statements_after);
 
+    if let Some(id) = ret {
+        statements.push(dst::Statement::Return(dst::Expression::Local(id)));
+    }
+
     let fd = dst::FunctionDefinition {
         id: id,
-        returntype: dst::Type::Void,
+        returntype: ret_ty,
         params: params,
         body: statements,
         local_declarations: dst::LocalDeclarations { locals: locals },
@@ -1555,6 +1580,7 @@ fn write_inplace_func_with_types(lifted_args: Vec<dst::Expression>,
 fn write_func_with_types(lifted_args: Vec<dst::Expression>,
                          local_args: Vec<(&src::Expression, dst::Expression, ParamType)>,
                          func: dst::FunctionId,
+                         ret_ty: dst::Type,
                          context: &mut Context)
                          -> Result<dst::Expression, TranspileError> {
     let mut use_inplace = true;
@@ -1574,7 +1600,7 @@ fn write_func_with_types(lifted_args: Vec<dst::Expression>,
     if use_inplace {
         write_inplace_func_with_types(lifted_args, local_args, func)
     } else {
-        write_lifted_func_with_types(lifted_args, local_args, func, context)
+        write_lifted_func_with_types(lifted_args, local_args, func, ret_ty, context)
     }
 }
 
@@ -1744,7 +1770,11 @@ fn transpile_expression(expression: &src::Expression,
                 local_args.push((param, param_expr, pt));
             }
 
-            write_func_with_types(lifted_args, local_args, func_expr, context)
+            let ty_res = src::TypeParser::get_expression_type(expression, &context.type_context);
+            let ret_ty_src = ty_res.expect("internal error: call return type parse failed");
+            let ret_ty_dst = try!(transpile_type(&ret_ty_src.0, context));
+
+            write_func_with_types(lifted_args, local_args, func_expr, ret_ty_dst, context)
         }
         &src::Expression::NumericConstructor(ref dtyl, ref slots) => {
 

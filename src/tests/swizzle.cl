@@ -47,11 +47,12 @@ void test_call_f1(__private float3* y)
 	*y = (float3)(1.0f, 2.0f, 3.0f);
 }
 
-void test_call_f2(float x, __private float3* y, __private float* z, __private float2* u, float v)
+uint test_call_f2(float x, __private float3* y, __private float* z, __private float2* u, float v)
 {
 	*y = (float3)(x, x, x);
 	*z = v;
 	*u = (float2)(x, v);
+	return 0u;
 }
 
 void test_call_f1_shim(__private float4* p)
@@ -61,13 +62,14 @@ void test_call_f1_shim(__private float4* p)
 	(*p).xyz = v;
 }
 
-void test_call_f2_shim(float p, __private float4* p_0, __private float* p_1, __private float3* p_2, float p_3)
+uint test_call_f2_shim(float p, __private float4* p_0, __private float* p_1, __private float3* p_2, float p_3)
 {
 	float3 v = (*p_0).xyz;
 	float2 v_0 = (*p_2).yz;
-	test_call_f2(p, &v, p_1, &v_0, p_3);
+	uint ret = test_call_f2(p, &v, p_1, &v_0, p_3);
 	(*p_0).xyz = v;
 	(*p_2).yz = v_0;
+	return ret;
 }
 
 void test_call()
