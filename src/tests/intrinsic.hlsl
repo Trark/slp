@@ -292,4 +292,14 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     float2 lerp_f2 = lerp(fx2, fy2, fz2);
     float3 lerp_f3 = lerp(fx3, fy3, fz3);
     float4 lerp_f4 = lerp(fx4, fy4, fz4);
+    float acos_fs = acos(fx);
+    float1 acos_f1 = acos(fx1);
+    float2 acos_f2 = acos(fx2);
+    float3 acos_f3 = acos(fx3);
+    float4 acos_f4 = acos(fx4);
+    float asin_fs = asin(fx);
+    float1 asin_f1 = asin(fx1);
+    float2 asin_f2 = asin(fx2);
+    float3 asin_f3 = asin(fx3);
+    float4 asin_f4 = asin(fx4);
 }

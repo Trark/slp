@@ -105,6 +105,16 @@ const INTRINSICS: &'static [IntrinsicDefinition] = &[
     ("abs", &[T_FLOAT3], I1(Intrinsic1::AbsF3)),
     ("abs", &[T_FLOAT4], I1(Intrinsic1::AbsF4)),
 
+    ("acos", &[T_FLOAT], I1(Intrinsic1::Acos)),
+    ("acos", &[T_FLOAT2], I1(Intrinsic1::Acos2)),
+    ("acos", &[T_FLOAT3], I1(Intrinsic1::Acos3)),
+    ("acos", &[T_FLOAT4], I1(Intrinsic1::Acos4)),
+
+    ("asin", &[T_FLOAT], I1(Intrinsic1::Asin)),
+    ("asin", &[T_FLOAT2], I1(Intrinsic1::Asin2)),
+    ("asin", &[T_FLOAT3], I1(Intrinsic1::Asin3)),
+    ("asin", &[T_FLOAT4], I1(Intrinsic1::Asin4)),
+
     ("asint", &[T_UINT], I1(Intrinsic1::AsIntU)),
     ("asint", &[T_UINT2], I1(Intrinsic1::AsIntU2)),
     ("asint", &[T_UINT3], I1(Intrinsic1::AsIntU3)),

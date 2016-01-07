@@ -915,6 +915,14 @@ fn transpile_intrinsic1(intrinsic: &src::Intrinsic1,
         I::AbsF2 |
         I::AbsF3 |
         I::AbsF4 => write_func("fabs", &[e1]),
+        I::Acos |
+        I::Acos2 |
+        I::Acos3 |
+        I::Acos4 => write_func("acos", &[e1]),
+        I::Asin |
+        I::Asin2 |
+        I::Asin3 |
+        I::Asin4 => write_func("asin", &[e1]),
         I::AsIntU => write_func("as_int", &[e1]),
         I::AsIntU2 => write_func("as_int2", &[e1]),
         I::AsIntU3 => write_func("as_int3", &[e1]),

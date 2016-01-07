@@ -336,4 +336,14 @@ kernel void MyKernel(__global uint4* g_roBuffer, __global struct testStruct* g_r
 	float2 lerp_f2 = mix(fx2, fy2, fz2);
 	float3 lerp_f3 = mix(fx3, fy3, fz3);
 	float4 lerp_f4 = mix(fx4, fy4, fz4);
+	float acos_fs = acos(fx);
+	float acos_f1 = acos(fx1);
+	float2 acos_f2 = acos(fx2);
+	float3 acos_f3 = acos(fx3);
+	float4 acos_f4 = acos(fx4);
+	float asin_fs = asin(fx);
+	float asin_f1 = asin(fx1);
+	float2 asin_f2 = asin(fx2);
+	float3 asin_f3 = asin(fx3);
+	float4 asin_f4 = asin(fx4);
 }
