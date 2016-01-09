@@ -209,6 +209,7 @@ pub enum Intrinsic2 {
     RWBufferLoad(DataType),
     StructuredBufferLoad(StructuredType),
     RWStructuredBufferLoad(StructuredType),
+    Texture2DLoad(DataType),
     RWTexture2DLoad(DataType),
 
     // ByteAddressBuffer methods
@@ -473,6 +474,7 @@ impl Intrinsic for Intrinsic2 {
             Intrinsic2::RWStructuredBufferLoad(ref sty) => {
                 Type::from_structured(sty.clone()).to_rvalue()
             }
+            Intrinsic2::Texture2DLoad(ref dty) => Type::from_data(dty.clone()).to_rvalue(),
             Intrinsic2::RWTexture2DLoad(ref dty) => Type::from_data(dty.clone()).to_rvalue(),
             Intrinsic2::ByteAddressBufferLoad => Type::uint().to_rvalue(),
             Intrinsic2::ByteAddressBufferLoad2 => Type::uintn(2).to_rvalue(),
@@ -687,6 +689,7 @@ impl Intrinsic2 {
             Intrinsic2::RWBufferLoad(_) |
             Intrinsic2::StructuredBufferLoad(_) |
             Intrinsic2::RWStructuredBufferLoad(_) |
+            Intrinsic2::Texture2DLoad(_) |
             Intrinsic2::RWTexture2DLoad(_) |
             Intrinsic2::ByteAddressBufferLoad |
             Intrinsic2::ByteAddressBufferLoad2 |
@@ -774,6 +777,7 @@ impl Intrinsic2 {
             Intrinsic2::RWBufferLoad(_) |
             Intrinsic2::StructuredBufferLoad(_) |
             Intrinsic2::RWStructuredBufferLoad(_) |
+            Intrinsic2::Texture2DLoad(_) |
             Intrinsic2::RWTexture2DLoad(_) |
             Intrinsic2::ByteAddressBufferLoad |
             Intrinsic2::ByteAddressBufferLoad2 |

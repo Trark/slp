@@ -83,20 +83,20 @@ void test_pass_texture_read(float4 t)
 {
 }
 
-void test_texture_2d(read_write image2d_t g_rwRTexture2DFloat, read_write image2d_t g_rwRTexture2DInt, read_write image2d_t g_rwRTexture2DUInt, uint3 dtid)
+void test_texture_2d(read_only image2d_t g_roTexture2DFloat, read_only image2d_t g_roTexture2DInt, read_only image2d_t g_roTexture2DUInt, read_write image2d_t g_rwTexture2DFloat, write_only image2d_t g_rwTexture2DInt, write_only image2d_t g_rwTexture2DUInt, uint3 dtid)
 {
 	int2 coord;
 	coord.x = (int)dtid.x;
 	coord.y = (int)dtid.y;
-	float4 read_load_f = read_imagef(g_rwRTexture2DFloat, coord);
-	int4 read_load_i = read_imagei(g_rwRTexture2DInt, coord);
+	float4 read_load_f = read_imagef(g_rwTexture2DFloat, coord);
+	int4 read_load_i = read_imagei(g_roTexture2DInt, coord);
 	uint4 tmp;
-	uint4 read_load_ui = tmp = read_imageui(g_rwRTexture2DUInt, coord);
-	read_load_i = read_imagei(g_rwRTexture2DInt, coord);
-	test_pass_texture_read(read_imagef(g_rwRTexture2DFloat, coord));
-	write_imagef(g_rwRTexture2DFloat, coord, read_load_f);
-	write_imagei(g_rwRTexture2DInt, coord, read_load_i);
-	write_imageui(g_rwRTexture2DUInt, coord, read_load_ui);
+	uint4 read_load_ui = tmp = read_imageui(g_roTexture2DUInt, coord);
+	read_load_i = read_imagei(g_roTexture2DInt, coord);
+	test_pass_texture_read(read_imagef(g_roTexture2DFloat, coord));
+	write_imagef(g_rwTexture2DFloat, coord, read_load_f);
+	write_imagei(g_rwTexture2DInt, coord, read_load_i);
+	write_imageui(g_rwTexture2DUInt, coord, read_load_ui);
 }
 
 void test_byte_address_buffer(__global uchar* g_roRawBuffer, __global uchar* g_rwRawBuffer, uint3 dtid)
@@ -116,12 +116,12 @@ void test_byte_address_buffer(__global uchar* g_roRawBuffer, __global uchar* g_r
 }
 
 __attribute__((reqd_work_group_size(8, 8, 1)))
-kernel void MyKernel(__global uint4* g_roBuffer, __global struct testStruct* g_roStructuredBuffer, __global uchar* g_roRawBuffer, __global uint4* g_rwBuffer, __global struct testStruct* g_rwStructuredBuffer, read_write image2d_t g_rwRTexture2DFloat, read_write image2d_t g_rwRTexture2DInt, read_write image2d_t g_rwRTexture2DUInt, __global uchar* g_rwRawBuffer)
+kernel void MyKernel(__global uint4* g_roBuffer, __global struct testStruct* g_roStructuredBuffer, read_only image2d_t g_roTexture2DFloat, read_only image2d_t g_roTexture2DInt, read_only image2d_t g_roTexture2DUInt, __global uchar* g_roRawBuffer, __global uint4* g_rwBuffer, __global struct testStruct* g_rwStructuredBuffer, read_write image2d_t g_rwTexture2DFloat, write_only image2d_t g_rwTexture2DInt, write_only image2d_t g_rwTexture2DUInt, __global uchar* g_rwRawBuffer)
 {
 	uint3 dtid = (uint3)(get_global_id(0u), get_global_id(1u), get_global_id(2u));
 	test_buffer(g_roBuffer, g_rwBuffer, dtid);
 	test_structured_buffer(g_roStructuredBuffer, g_rwStructuredBuffer, dtid);
-	test_texture_2d(g_rwRTexture2DFloat, g_rwRTexture2DInt, g_rwRTexture2DUInt, dtid);
+	test_texture_2d(g_roTexture2DFloat, g_roTexture2DInt, g_roTexture2DUInt, g_rwTexture2DFloat, g_rwTexture2DInt, g_rwTexture2DUInt, dtid);
 	test_byte_address_buffer(g_roRawBuffer, g_rwRawBuffer, dtid);
 	barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 	barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);

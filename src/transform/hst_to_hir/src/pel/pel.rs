@@ -64,7 +64,8 @@ pub enum Expression {
     TernaryConditional(Box<Expression>, Box<Expression>, Box<Expression>),
     Swizzle(Box<Expression>, Vec<SwizzleSlot>),
     ArraySubscript(Box<Expression>, Box<Expression>),
-    TextureIndex(DataType, Box<Expression>, Box<Expression>),
+    Texture2DIndex(DataType, Box<Expression>, Box<Expression>),
+    RWTexture2DIndex(DataType, Box<Expression>, Box<Expression>),
     Member(Box<Expression>, String),
     Call(FunctionId, Vec<Expression>),
     NumericConstructor(DataLayout, Vec<ConstructorSlot>),
@@ -118,7 +119,8 @@ impl Expression {
                 let index_hir = Box::new(try!(index.direct_to_hir_recur(RequiredVt::Rvt)));
                 Ok(hir::Expression::ArraySubscript(arr_hir, index_hir))
             }
-            Expression::TextureIndex(_, _, _) => {
+            Expression::Texture2DIndex(_, _, _) |
+            Expression::RWTexture2DIndex(_, _, _) => {
                 // Else we're complex and can't handle this
                 Err(DirectToHirError::TextureIndex)
             }
@@ -186,7 +188,7 @@ impl Expression {
     pub fn ignore_return(self) -> Expression {
         // Rewrite common way of writing textures as texture store intrinsic
         if let &Expression::Intrinsic2(Intrinsic2::Assignment(_), ref e1, ref e2) = &self {
-            if let Expression::TextureIndex(ref dty, ref tex, ref index) = **e1 {
+            if let Expression::RWTexture2DIndex(ref dty, ref tex, ref index) = **e1 {
                 let new_i = Intrinsic3::RWTexture2DStore(dty.clone());
                 return Expression::Intrinsic3(new_i, tex.clone(), index.clone(), e2.clone());
             }
@@ -251,7 +253,10 @@ impl TypeParser {
                     tyl => return Err(TypeError::ArrayIndexMustBeUsedOnArrayType(tyl)),
                 })
             }
-            Expression::TextureIndex(ref data_type, _, _) => {
+            Expression::Texture2DIndex(ref data_type, _, _) => {
+                Ok(Type::from_data(data_type.clone()).to_lvalue())
+            }
+            Expression::RWTexture2DIndex(ref data_type, _, _) => {
                 Ok(Type::from_data(data_type.clone()).to_lvalue())
             }
             Expression::Member(ref expr, ref name) => {

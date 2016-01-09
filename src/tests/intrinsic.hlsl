@@ -29,9 +29,12 @@ void test_structured_buffer(uint3 dtid)
     g_rwStructuredBuffer[dtid.x] = modified;
 }
 
-RWTexture2D<float4> g_rwRTexture2DFloat : register(u2);
-RWTexture2D<int4> g_rwRTexture2DInt : register(u3);
-RWTexture2D<uint4> g_rwRTexture2DUInt : register(u4);
+Texture2D<float4> g_roTexture2DFloat : register(t2);
+Texture2D<int4> g_roTexture2DInt : register(t3);
+Texture2D<uint4> g_roTexture2DUInt : register(t4);
+RWTexture2D<float4> g_rwTexture2DFloat : register(u2);
+RWTexture2D<int4> g_rwTexture2DInt : register(u3);
+RWTexture2D<uint4> g_rwTexture2DUInt : register(u4);
 
 void test_pass_texture_read(float4 t) { }
 
@@ -40,15 +43,15 @@ void test_texture_2d(uint3 dtid)
     int2 coord;
     coord.x = dtid.x;
     coord.y = dtid.y;
-    float4 read_load_f = g_rwRTexture2DFloat.Load(coord);
-    int4 read_load_i = g_rwRTexture2DInt[coord];
+    float4 read_load_f = g_rwTexture2DFloat.Load(coord);
+    int4 read_load_i = g_roTexture2DInt[coord];
     uint4 tmp;
-    uint4 read_load_ui = tmp = g_rwRTexture2DUInt[coord];
-    read_load_i = g_rwRTexture2DInt[coord];
-    test_pass_texture_read(g_rwRTexture2DFloat[coord]);
-    g_rwRTexture2DFloat[coord] = read_load_f;
-    g_rwRTexture2DInt[coord] = read_load_i;
-    g_rwRTexture2DUInt[coord] = read_load_ui;
+    uint4 read_load_ui = tmp = g_roTexture2DUInt[coord];
+    read_load_i = g_roTexture2DInt[coord];
+    test_pass_texture_read(g_roTexture2DFloat[coord]);
+    g_rwTexture2DFloat[coord] = read_load_f;
+    g_rwTexture2DInt[coord] = read_load_i;
+    g_rwTexture2DUInt[coord] = read_load_ui;
 }
 
 ByteAddressBuffer g_roRawBuffer : register(t5);

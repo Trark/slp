@@ -697,6 +697,10 @@ fn get_cl_global_type(id: &src::GlobalId,
             dst::Type::Pointer(dst::AddressSpace::Global,
                                Box::new(try!(transpile_structuredtype(structured_type, &context))))
         }
+        src::TypeLayout::Object(src::ObjectType::Texture2D(_)) => {
+            let access = dst::AccessModifier::ReadOnly;
+            dst::Type::Image2D(access)
+        }
         src::TypeLayout::Object(src::ObjectType::RWTexture2D(_)) => {
             let read = usage.image_reads.contains(id);
             let write = usage.image_writes.contains(id);
@@ -1166,6 +1170,7 @@ fn transpile_intrinsic2(intrinsic: &src::Intrinsic2,
         I::RWStructuredBufferLoad(_) => {
             Ok(dst::Expression::ArraySubscript(Box::new(e1), Box::new(e2)))
         }
+        I::Texture2DLoad(ref data_type) |
         I::RWTexture2DLoad(ref data_type) => {
             let (func_name, read_type) = match data_type.0 {
                 src::DataLayout::Scalar(ref scalar) | src::DataLayout::Vector(ref scalar, _) => {

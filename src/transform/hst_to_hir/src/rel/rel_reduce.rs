@@ -93,7 +93,17 @@ fn reduce_node(expr: pel::Expression,
             let bt = BindType::Direct(Command::ArraySubscript(arr_id, index_id));
             (sb, bt)
         }
-        pel::Expression::TextureIndex(dty, tex, index) => {
+        pel::Expression::Texture2DIndex(dty, tex, index) => {
+            let (sb, tex_id) = try!(reduce_node(*tex, InputModifier::In, sb, context));
+            let (sb, index_id) = try!(reduce_node(*index, InputModifier::In, sb, context));
+            let bt = BindType::Direct(if input_modifier == InputModifier::In {
+                Command::Intrinsic2(hir::Intrinsic2::Texture2DLoad(dty), tex_id, index_id)
+            } else {
+                Command::TextureIndex(dty, tex_id, index_id)
+            });
+            (sb, bt)
+        }
+        pel::Expression::RWTexture2DIndex(dty, tex, index) => {
             let (sb, tex_id) = try!(reduce_node(*tex, InputModifier::In, sb, context));
             let (sb, index_id) = try!(reduce_node(*index, InputModifier::In, sb, context));
             let bt = BindType::Direct(if input_modifier == InputModifier::In {

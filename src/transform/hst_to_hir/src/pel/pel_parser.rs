@@ -909,6 +909,18 @@ fn parse_expr_unchecked(ast: &hst::Expression,
                     let sub_node = pel::Expression::ArraySubscript(array, sub);
                     Ok(sub_node)
                 }
+                hir::TypeLayout::Object(hir::ObjectType::Texture2D(data_type)) => {
+                    let index = hir::Type::intn(2).to_rvalue();
+                    let cast = ImplicitConversion::find(&subscript_ty, &index);
+                    let subscript_final = match cast {
+                        Err(_) => return Err(TyperError::ArraySubscriptIndexNotInteger),
+                        Ok(cast) => cast.apply_pel(subscript_ir),
+                    };
+                    let array = Box::new(array_ir);
+                    let sub = Box::new(subscript_final);
+                    let sub_node = pel::Expression::Texture2DIndex(data_type, array, sub);
+                    Ok(sub_node)
+                }
                 hir::TypeLayout::Object(hir::ObjectType::RWTexture2D(data_type)) => {
                     let index = hir::Type::intn(2).to_rvalue();
                     let cast = ImplicitConversion::find(&subscript_ty, &index);
@@ -918,7 +930,7 @@ fn parse_expr_unchecked(ast: &hst::Expression,
                     };
                     let array = Box::new(array_ir);
                     let sub = Box::new(subscript_final);
-                    let sub_node = pel::Expression::TextureIndex(data_type, array, sub);
+                    let sub_node = pel::Expression::RWTexture2DIndex(data_type, array, sub);
                     Ok(sub_node)
                 }
                 _ => Err(TyperError::ArrayIndexingNonArrayType),
