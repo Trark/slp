@@ -734,21 +734,29 @@ fn print_rootdefinition_kernel(kernel: &Kernel, printer: &mut Printer) {
     printer.print("void");
     printer.space();
     printer.print("MyKernel");
-    printer.separator();
-    printer.print("(");
-    let mut first = true;
-    for param in &kernel.params {
-        if !first {
-            printer.print(",");
+    if kernel.params.len() == 0 {
+        printer.print("(");
+        printer.print(")");
+    } else {
+        printer.line();
+        printer.print("(");
+        printer.indent();
+        let mut first = true;
+        for param in &kernel.params {
+            if !first {
+                printer.print(",");
+            } else {
+                first = false;
+            }
+            printer.line();
+            print_typename(&param.typename, printer);
             printer.space();
-        } else {
-            first = false;
+            printer.print(&param.name[..]);
         }
-        print_typename(&param.typename, printer);
-        printer.space();
-        printer.print(&param.name[..]);
+        printer.unindent();
+        printer.line();
+        printer.print(")");
     }
-    printer.print(")");
     printer.line();
     printer.print("{");
     printer.indent();

@@ -116,7 +116,21 @@ void test_byte_address_buffer(__global uchar* g_roRawBuffer, __global uchar* g_r
 }
 
 __attribute__((reqd_work_group_size(8, 8, 1)))
-kernel void MyKernel(__global uint4* g_roBuffer, __global struct testStruct* g_roStructuredBuffer, read_only image2d_t g_roTexture2DFloat, read_only image2d_t g_roTexture2DInt, read_only image2d_t g_roTexture2DUInt, __global uchar* g_roRawBuffer, __global uint4* g_rwBuffer, __global struct testStruct* g_rwStructuredBuffer, read_write image2d_t g_rwTexture2DFloat, write_only image2d_t g_rwTexture2DInt, write_only image2d_t g_rwTexture2DUInt, __global uchar* g_rwRawBuffer)
+kernel void MyKernel
+(
+	__global uint4* g_roBuffer,
+	__global struct testStruct* g_roStructuredBuffer,
+	read_only image2d_t g_roTexture2DFloat,
+	read_only image2d_t g_roTexture2DInt,
+	read_only image2d_t g_roTexture2DUInt,
+	__global uchar* g_roRawBuffer,
+	__global uint4* g_rwBuffer,
+	__global struct testStruct* g_rwStructuredBuffer,
+	read_write image2d_t g_rwTexture2DFloat,
+	write_only image2d_t g_rwTexture2DInt,
+	write_only image2d_t g_rwTexture2DUInt,
+	__global uchar* g_rwRawBuffer
+)
 {
 	uint3 dtid = (uint3)(get_global_id(0u), get_global_id(1u), get_global_id(2u));
 	test_buffer(g_roBuffer, g_rwBuffer, dtid);
