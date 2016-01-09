@@ -5,8 +5,6 @@ use super::rel::*;
 use slp_lang_hir as hir;
 use std::error;
 use std::fmt;
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum CombineError {
@@ -31,21 +29,26 @@ impl fmt::Display for CombineError {
     }
 }
 
-struct BuiltQueue(HashMap<BindId, hir::Expression>);
+struct BuiltQueue(Vec<(BindId, hir::Expression)>);
 
 impl BuiltQueue {
     fn new() -> BuiltQueue {
-        BuiltQueue(HashMap::new())
+        BuiltQueue(Vec::new())
     }
     fn take(mut self, id: &BindId) -> Option<(BuiltQueue, hir::Expression)> {
-        let expr = match self.0.entry(id.clone()) {
-            Entry::Occupied(occupied) => occupied.remove(),
-            Entry::Vacant(_) => return None,
-        };
-        Some((self, expr))
+        match self.0.pop() {
+            Some((pop_id, expr)) => {
+                if *id == pop_id {
+                    Some((self, expr))
+                } else {
+                    None
+                }
+            }
+            None => None,
+        }
     }
     fn with_next(mut self, id: BindId, expr: hir::Expression) -> BuiltQueue {
-        self.0.insert(id, expr);
+        self.0.push((id, expr));
         self
     }
     fn empty(&self) -> bool {
@@ -79,11 +82,11 @@ fn combine_trivial(seq: &Sequence) -> Option<hir::Expression> {
                 Some((q, hir::Expression::Swizzle(Box::new(e), swizzle.clone())))
             }
             Command::ArraySubscript(ref arr_val, ref ind_val) => {
-                let (q, arr) = match q.take(arr_val) {
+                let (q, index) = match q.take(ind_val) {
                     Some((q, e)) => (q, Box::new(e)),
                     None => return None,
                 };
-                let (q, index) = match q.take(ind_val) {
+                let (q, arr) = match q.take(arr_val) {
                     Some((q, e)) => (q, Box::new(e)),
                     None => return None,
                 };
@@ -100,7 +103,7 @@ fn combine_trivial(seq: &Sequence) -> Option<hir::Expression> {
             Command::Call(ref id, ref params) => {
                 let mut exprs = vec![];
                 let mut q = q;
-                for param in params {
+                for param in params.iter().rev() {
                     match q.take(param) {
                         Some((next_q, e)) => {
                             q = next_q;
@@ -109,12 +112,13 @@ fn combine_trivial(seq: &Sequence) -> Option<hir::Expression> {
                         None => return None,
                     };
                 }
+                let exprs = exprs.into_iter().rev().collect::<Vec<_>>();
                 Some((q, hir::Expression::Call(id.clone(), exprs)))
             }
             Command::NumericConstructor(ref dtyl, ref cons_slot) => {
                 let mut slots = vec![];
                 let mut q = q;
-                for slot in cons_slot {
+                for slot in cons_slot.iter().rev() {
                     match q.take(&slot.expr) {
                         Some((next_q, e)) => {
                             q = next_q;
@@ -127,6 +131,7 @@ fn combine_trivial(seq: &Sequence) -> Option<hir::Expression> {
                         None => return None,
                     };
                 }
+                let slots = slots.into_iter().rev().collect::<Vec<_>>();
                 Some((q, hir::Expression::NumericConstructor(dtyl.clone(), slots)))
             }
             Command::Cast(ref ty, ref val) => {
@@ -149,11 +154,11 @@ fn combine_trivial(seq: &Sequence) -> Option<hir::Expression> {
                 Some((q, r))
             }
             Command::Intrinsic2(ref i, ref p1, ref p2) => {
-                let (q, e1) = match q.take(p1) {
+                let (q, e2) = match q.take(p2) {
                     Some((q, e)) => (q, Box::new(e)),
                     None => return None,
                 };
-                let (q, e2) = match q.take(p2) {
+                let (q, e1) = match q.take(p1) {
                     Some((q, e)) => (q, Box::new(e)),
                     None => return None,
                 };
@@ -161,7 +166,7 @@ fn combine_trivial(seq: &Sequence) -> Option<hir::Expression> {
                 Some((q, r))
             }
             Command::Intrinsic3(ref i, ref p1, ref p2, ref p3) => {
-                let (q, e1) = match q.take(p1) {
+                let (q, e3) = match q.take(p3) {
                     Some((q, e)) => (q, Box::new(e)),
                     None => return None,
                 };
@@ -169,7 +174,7 @@ fn combine_trivial(seq: &Sequence) -> Option<hir::Expression> {
                     Some((q, e)) => (q, Box::new(e)),
                     None => return None,
                 };
-                let (q, e3) = match q.take(p3) {
+                let (q, e1) = match q.take(p1) {
                     Some((q, e)) => (q, Box::new(e)),
                     None => return None,
                 };
