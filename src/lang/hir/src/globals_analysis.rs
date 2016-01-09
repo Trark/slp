@@ -1,7 +1,7 @@
 
 use std::collections::HashSet;
 use std::collections::HashMap;
-use super::ir::*;
+use super::*;
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct FunctionGlobalUsage {
@@ -222,10 +222,6 @@ fn search_expression(expression: &Expression, usage: &mut LocalFunctionGlobalUsa
             search_expression(arr, usage);
             search_expression(index, usage);
         }
-        Expression::TextureIndex(_, ref tex, ref index) => {
-            search_expression(tex, usage);
-            search_expression(index, usage);
-        }
         Expression::Member(ref expr, _) => search_expression(expr, usage),
         Expression::Call(ref id, ref exprs) => {
             usage.functions.insert(id.clone());
@@ -243,11 +239,33 @@ fn search_expression(expression: &Expression, usage: &mut LocalFunctionGlobalUsa
         Expression::Intrinsic1(_, ref e1) => {
             search_expression(e1, usage);
         }
-        Expression::Intrinsic2(_, ref e1, ref e2) => {
+        Expression::Intrinsic2(ref i, ref e1, ref e2) => {
+            match *i {
+                Intrinsic2::RWTexture2DLoad(_) => {
+                    match **e1 {
+                        Expression::Global(ref id) => {
+                            usage.image_reads.insert(id.clone());
+                        }
+                        _ => panic!("internal error: texture load called on complex expression"),
+                    }
+                }
+                _ => {}
+            }
             search_expression(e1, usage);
             search_expression(e2, usage);
         }
-        Expression::Intrinsic3(_, ref e1, ref e2, ref e3) => {
+        Expression::Intrinsic3(ref i, ref e1, ref e2, ref e3) => {
+            match *i {
+                Intrinsic3::RWTexture2DStore(_) => {
+                    match **e1 {
+                        Expression::Global(ref id) => {
+                            usage.image_writes.insert(id.clone());
+                        }
+                        _ => panic!("internal error: texture store called on complex expression"),
+                    }
+                }
+                _ => {}
+            }
             search_expression(e1, usage);
             search_expression(e2, usage);
             search_expression(e3, usage);

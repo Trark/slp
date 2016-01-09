@@ -33,14 +33,19 @@ RWTexture2D<float4> g_rwRTexture2DFloat : register(u2);
 RWTexture2D<int4> g_rwRTexture2DInt : register(u3);
 RWTexture2D<uint4> g_rwRTexture2DUInt : register(u4);
 
+void test_pass_texture_read(float4 t) { }
+
 void test_texture_2d(uint3 dtid)
 {
     int2 coord;
     coord.x = dtid.x;
     coord.y = dtid.y;
     float4 read_load_f = g_rwRTexture2DFloat.Load(coord);
-    int4 read_load_i = g_rwRTexture2DInt.Load(coord);
-    uint4 read_load_ui = g_rwRTexture2DUInt.Load(coord);
+    int4 read_load_i = g_rwRTexture2DInt[coord];
+    uint4 tmp;
+    uint4 read_load_ui = tmp = g_rwRTexture2DUInt[coord];
+    read_load_i = g_rwRTexture2DInt[coord];
+    test_pass_texture_read(g_rwRTexture2DFloat[coord]);
     g_rwRTexture2DFloat[coord] = read_load_f;
     g_rwRTexture2DInt[coord] = read_load_i;
     g_rwRTexture2DUInt[coord] = read_load_ui;

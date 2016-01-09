@@ -1,5 +1,6 @@
 
 use slp_lang_hir::*;
+use pel;
 
 // Overload priority
 // =================
@@ -431,6 +432,13 @@ impl ImplicitConversion {
         match *self {
             ImplicitConversion(_, _, None, None, None) => expr,
             _ => Expression::Cast(self.get_target_type().0, Box::new(expr)),
+        }
+    }
+
+    pub fn apply_pel(&self, expr: pel::Expression) -> pel::Expression {
+        match *self {
+            ImplicitConversion(_, _, None, None, None) => expr,
+            _ => pel::Expression::Cast(self.get_target_type().0, Box::new(expr)),
         }
     }
 }

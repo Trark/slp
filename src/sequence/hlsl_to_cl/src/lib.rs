@@ -1,3 +1,6 @@
+
+//! Compiles source Hlsl to OpenCL C and exports bindmaps
+
 extern crate slp_shared;
 extern crate slp_lang_htk;
 extern crate slp_lang_hst;

@@ -610,8 +610,6 @@ pub enum Expression {
     TernaryConditional(Box<Expression>, Box<Expression>, Box<Expression>),
     Swizzle(Box<Expression>, Vec<SwizzleSlot>),
     ArraySubscript(Box<Expression>, Box<Expression>),
-    /// Indexing a texture object
-    TextureIndex(DataType, Box<Expression>, Box<Expression>),
     Member(Box<Expression>, String),
     Call(FunctionId, Vec<Expression>),
     /// Constructors for builtin numeric types, such as `float2(1.0, 0.0)`
@@ -1004,7 +1002,7 @@ impl TypeContext for TypeState {
 pub struct TypeParser;
 
 impl TypeParser {
-    fn get_literal_type(literal: &Literal) -> ExpressionType {
+    pub fn get_literal_type(literal: &Literal) -> ExpressionType {
         (match *literal {
             Literal::Bool(_) => Type::bool(),
             Literal::UntypedInt(_) => Type::from_scalar(ScalarType::UntypedInt),
@@ -1070,9 +1068,6 @@ impl TypeParser {
                     }
                     tyl => return Err(TypeError::ArrayIndexMustBeUsedOnArrayType(tyl)),
                 })
-            }
-            Expression::TextureIndex(ref data_type, _, _) => {
-                Ok(Type::from_data(data_type.clone()).to_lvalue())
             }
             Expression::Member(ref expr, ref name) => {
                 let expr_type = try!(TypeParser::get_expression_type(&expr, context));

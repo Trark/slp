@@ -1,5 +1,6 @@
 
 use slp_lang_hir::*;
+use pel;
 
 /// Creates intrinsic nodes from argument expressions
 #[derive(PartialEq, Debug, Clone)]
@@ -11,29 +12,29 @@ pub enum IntrinsicFactory {
 }
 
 impl IntrinsicFactory {
-    pub fn create_intrinsic(&self, param_values: &[Expression]) -> Expression {
+    pub fn create_intrinsic(&self, param_values: &[pel::Expression]) -> pel::Expression {
         match *self {
             IntrinsicFactory::Intrinsic0(ref i) => {
                 assert_eq!(param_values.len(), 0);
-                Expression::Intrinsic0(i.clone())
+                pel::Expression::Intrinsic0(i.clone())
             }
             IntrinsicFactory::Intrinsic1(ref i) => {
                 assert_eq!(param_values.len(), 1);
                 let p1 = Box::new(param_values[0].clone());
-                Expression::Intrinsic1(i.clone(), p1)
+                pel::Expression::Intrinsic1(i.clone(), p1)
             }
             IntrinsicFactory::Intrinsic2(ref i) => {
                 assert_eq!(param_values.len(), 2);
                 let p1 = Box::new(param_values[0].clone());
                 let p2 = Box::new(param_values[1].clone());
-                Expression::Intrinsic2(i.clone(), p1, p2)
+                pel::Expression::Intrinsic2(i.clone(), p1, p2)
             }
             IntrinsicFactory::Intrinsic3(ref i) => {
                 assert_eq!(param_values.len(), 3);
                 let p1 = Box::new(param_values[0].clone());
                 let p2 = Box::new(param_values[1].clone());
                 let p3 = Box::new(param_values[2].clone());
-                Expression::Intrinsic3(i.clone(), p1, p2, p3)
+                pel::Expression::Intrinsic3(i.clone(), p1, p2, p3)
             }
         }
     }

@@ -28,7 +28,6 @@ pub enum TranspileError {
 
     BoolVectorsNotSupported,
     HalfVariablesNotSupported,
-    AdvancedTextureIndexingNotSupported,
     IntsMustBeTyped,
 
     Intrinsic1Unimplemented(src::Intrinsic1),
@@ -53,9 +52,6 @@ impl error::Error for TranspileError {
             TranspileError::UnknownVariableId => "unknown variable id",
             TranspileError::BoolVectorsNotSupported => "bool vectors not supported",
             TranspileError::HalfVariablesNotSupported => "half variables are not supported",
-            TranspileError::AdvancedTextureIndexingNotSupported => {
-                "advanced texture indexing not supported"
-            }
             TranspileError::IntsMustBeTyped => "internal error: untyped int ended up in tree",
             TranspileError::Intrinsic1Unimplemented(_) |
             TranspileError::Intrinsic2Unimplemented(_) => "intrinsic function is not implemented",
@@ -705,7 +701,8 @@ fn get_cl_global_type(id: &src::GlobalId,
             let read = usage.image_reads.contains(id);
             let write = usage.image_writes.contains(id);
             let access = match (read, write) {
-                (false, false) | (true, false) => dst::AccessModifier::ReadOnly,
+                (false, false) => panic!("texture exists that is neither read nor written"),
+                (true, false) => dst::AccessModifier::ReadOnly,
                 (false, true) => dst::AccessModifier::WriteOnly,
                 (true, true) => dst::AccessModifier::ReadWrite, // OpenCL 2.0 only
             };
@@ -1078,51 +1075,6 @@ fn transpile_intrinsic2(intrinsic: &src::Intrinsic2,
                         context: &mut Context)
                         -> Result<dst::Expression, TranspileError> {
     use slp_lang_hir::Intrinsic2 as I;
-
-    // Special parsing phase
-    match *intrinsic {
-        I::Assignment(_) => {
-            match *src_expr_1 {
-                src::Expression::TextureIndex(ref data_type, ref tex, ref index) => {
-                    // If we detect a write to an image location, emit
-                    // a write_image function. We can't currently handle ending
-                    // up in a position with a naked texture index operation
-                    let rhs = try!(transpile_expression(src_expr_2, context));
-                    let tex_dst = try!(transpile_expression(tex, context));
-                    let index_dst = try!(transpile_expression(index, context));
-
-                    // Find the right cl function to call
-                    let (func_name, read_type) = match data_type.0 {
-                        src::DataLayout::Scalar(ref scalar) |
-                        src::DataLayout::Vector(ref scalar, _) => {
-                            let dim = dst::VectorDimension::Four;
-                            match *scalar {
-                                src::ScalarType::Int => {
-                                    ("write_imagei", dst::Type::Vector(dst::Scalar::Int, dim))
-                                }
-                                src::ScalarType::UInt => {
-                                    ("write_imageui", dst::Type::Vector(dst::Scalar::UInt, dim))
-                                }
-                                src::ScalarType::Float => {
-                                    ("write_imagef", dst::Type::Vector(dst::Scalar::Float, dim))
-                                }
-                                _ => return Err(TranspileError::Unknown),
-                            }
-                        }
-                        src::DataLayout::Matrix(_, _, _) => return Err(TranspileError::Unknown),
-                    };
-                    let cast_type = try!(transpile_datatype(data_type, context));
-                    let args = vec![tex_dst, index_dst, rhs];
-                    let expr = dst::Expression::UntypedIntrinsic(func_name.to_string(), args);
-                    return write_cast(read_type, cast_type, expr, false, context);
-                }
-                _ => {}
-            }
-        }
-        _ => {}
-    };
-
-    // Normal parsing
     let e1 = try!(transpile_expression(src_expr_1, context));
     let e2 = try!(transpile_expression(src_expr_2, context));
     match *intrinsic {
@@ -1306,6 +1258,39 @@ fn transpile_intrinsic3(intrinsic: &src::Intrinsic3,
         I::SmoothStep2 |
         I::SmoothStep3 |
         I::SmoothStep4 => write_func("smoothstep", &[e1, e2, e3]),
+        I::RWTexture2DStore(ref data_type) => {
+            // If we detect a write to an image location, emit
+            // a write_image function. We can't currently handle ending
+            // up in a position with a naked texture index operation
+            let tex_dst = e1;
+            let index_dst = e2;
+            let rhs = e3;
+
+            // Find the right cl function to call
+            let (func_name, read_type) = match data_type.0 {
+                src::DataLayout::Scalar(ref scalar) |
+                src::DataLayout::Vector(ref scalar, _) => {
+                    let dim = dst::VectorDimension::Four;
+                    match *scalar {
+                        src::ScalarType::Int => {
+                            ("write_imagei", dst::Type::Vector(dst::Scalar::Int, dim))
+                        }
+                        src::ScalarType::UInt => {
+                            ("write_imageui", dst::Type::Vector(dst::Scalar::UInt, dim))
+                        }
+                        src::ScalarType::Float => {
+                            ("write_imagef", dst::Type::Vector(dst::Scalar::Float, dim))
+                        }
+                        _ => return Err(TranspileError::Unknown),
+                    }
+                }
+                src::DataLayout::Matrix(_, _, _) => return Err(TranspileError::Unknown),
+            };
+            let cast_type = try!(transpile_datatype(data_type, context));
+            let args = vec![tex_dst, index_dst, rhs];
+            let expr = dst::Expression::UntypedIntrinsic(func_name.to_string(), args);
+            write_cast(read_type, cast_type, expr, false, context)
+        }
         I::RWByteAddressBufferStore |
         I::RWByteAddressBufferStore2 |
         I::RWByteAddressBufferStore3 |
@@ -1751,9 +1736,6 @@ fn transpile_expression(expression: &src::Expression,
             let cl_expr = Box::new(try!(transpile_expression(expr, context)));
             let cl_sub = Box::new(try!(transpile_expression(sub, context)));
             Ok(dst::Expression::ArraySubscript(cl_expr, cl_sub))
-        }
-        &src::Expression::TextureIndex(_, _, _) => {
-            Err(TranspileError::AdvancedTextureIndexingNotSupported)
         }
         &src::Expression::Member(ref expr, ref member_name) => {
             let cl_expr = Box::new(try!(transpile_expression(expr, context)));

@@ -248,6 +248,9 @@ pub enum Intrinsic3 {
     SmoothStep3,
     SmoothStep4,
 
+    // RWTexture2D methods
+    RWTexture2DStore(DataType),
+
     // ByteAddressBuffer methods
     RWByteAddressBufferStore,
     RWByteAddressBufferStore2,
@@ -506,10 +509,374 @@ impl Intrinsic for Intrinsic3 {
             Intrinsic3::SmoothStep2 => Type::floatn(2).to_rvalue(),
             Intrinsic3::SmoothStep3 => Type::floatn(3).to_rvalue(),
             Intrinsic3::SmoothStep4 => Type::floatn(4).to_rvalue(),
+            Intrinsic3::RWTexture2DStore(_) => Type::void().to_rvalue(),
             Intrinsic3::RWByteAddressBufferStore => Type::void().to_rvalue(),
             Intrinsic3::RWByteAddressBufferStore2 => Type::void().to_rvalue(),
             Intrinsic3::RWByteAddressBufferStore3 => Type::void().to_rvalue(),
             Intrinsic3::RWByteAddressBufferStore4 => Type::void().to_rvalue(),
+        }
+    }
+}
+
+impl Intrinsic1 {
+    pub fn get_param1_input_modifier(&self) -> InputModifier {
+        match *self {
+            Intrinsic1::Plus(_) |
+            Intrinsic1::Minus(_) |
+            Intrinsic1::LogicalNot(_) |
+            Intrinsic1::BitwiseNot(_) |
+            Intrinsic1::AbsI |
+            Intrinsic1::AbsI2 |
+            Intrinsic1::AbsI3 |
+            Intrinsic1::AbsI4 |
+            Intrinsic1::AbsF |
+            Intrinsic1::AbsF2 |
+            Intrinsic1::AbsF3 |
+            Intrinsic1::AbsF4 |
+            Intrinsic1::Acos |
+            Intrinsic1::Acos2 |
+            Intrinsic1::Acos3 |
+            Intrinsic1::Acos4 |
+            Intrinsic1::Asin |
+            Intrinsic1::Asin2 |
+            Intrinsic1::Asin3 |
+            Intrinsic1::Asin4 |
+            Intrinsic1::AsIntU |
+            Intrinsic1::AsIntU2 |
+            Intrinsic1::AsIntU3 |
+            Intrinsic1::AsIntU4 |
+            Intrinsic1::AsIntF |
+            Intrinsic1::AsIntF2 |
+            Intrinsic1::AsIntF3 |
+            Intrinsic1::AsIntF4 |
+            Intrinsic1::AsUIntI |
+            Intrinsic1::AsUIntI2 |
+            Intrinsic1::AsUIntI3 |
+            Intrinsic1::AsUIntI4 |
+            Intrinsic1::AsUIntF |
+            Intrinsic1::AsUIntF2 |
+            Intrinsic1::AsUIntF3 |
+            Intrinsic1::AsUIntF4 |
+            Intrinsic1::AsFloatI |
+            Intrinsic1::AsFloatI2 |
+            Intrinsic1::AsFloatI3 |
+            Intrinsic1::AsFloatI4 |
+            Intrinsic1::AsFloatU |
+            Intrinsic1::AsFloatU2 |
+            Intrinsic1::AsFloatU3 |
+            Intrinsic1::AsFloatU4 |
+            Intrinsic1::AsFloatF |
+            Intrinsic1::AsFloatF2 |
+            Intrinsic1::AsFloatF3 |
+            Intrinsic1::AsFloatF4 |
+            Intrinsic1::Cos |
+            Intrinsic1::Cos2 |
+            Intrinsic1::Cos3 |
+            Intrinsic1::Cos4 |
+            Intrinsic1::Exp |
+            Intrinsic1::Exp2 |
+            Intrinsic1::Exp3 |
+            Intrinsic1::Exp4 |
+            Intrinsic1::F16ToF32 |
+            Intrinsic1::F32ToF16 |
+            Intrinsic1::Floor |
+            Intrinsic1::Floor2 |
+            Intrinsic1::Floor3 |
+            Intrinsic1::Floor4 |
+            Intrinsic1::IsNaN |
+            Intrinsic1::IsNaN2 |
+            Intrinsic1::IsNaN3 |
+            Intrinsic1::IsNaN4 |
+            Intrinsic1::Length1 |
+            Intrinsic1::Length2 |
+            Intrinsic1::Length3 |
+            Intrinsic1::Length4 |
+            Intrinsic1::Normalize1 |
+            Intrinsic1::Normalize2 |
+            Intrinsic1::Normalize3 |
+            Intrinsic1::Normalize4 |
+            Intrinsic1::Saturate |
+            Intrinsic1::Saturate2 |
+            Intrinsic1::Saturate3 |
+            Intrinsic1::Saturate4 |
+            Intrinsic1::SignI |
+            Intrinsic1::SignI2 |
+            Intrinsic1::SignI3 |
+            Intrinsic1::SignI4 |
+            Intrinsic1::SignF |
+            Intrinsic1::SignF2 |
+            Intrinsic1::SignF3 |
+            Intrinsic1::SignF4 |
+            Intrinsic1::Sin |
+            Intrinsic1::Sin2 |
+            Intrinsic1::Sin3 |
+            Intrinsic1::Sin4 |
+            Intrinsic1::Sqrt |
+            Intrinsic1::Sqrt2 |
+            Intrinsic1::Sqrt3 |
+            Intrinsic1::Sqrt4 => InputModifier::In,
+
+            Intrinsic1::PrefixIncrement(_) |
+            Intrinsic1::PrefixDecrement(_) |
+            Intrinsic1::PostfixIncrement(_) |
+            Intrinsic1::PostfixDecrement(_) => InputModifier::InOut,
+        }
+    }
+}
+
+impl Intrinsic2 {
+    pub fn get_param1_input_modifier(&self) -> InputModifier {
+        match *self {
+            Intrinsic2::Add(_) |
+            Intrinsic2::Subtract(_) |
+            Intrinsic2::Multiply(_) |
+            Intrinsic2::Divide(_) |
+            Intrinsic2::Modulus(_) |
+            Intrinsic2::LeftShift(_) |
+            Intrinsic2::RightShift(_) |
+            Intrinsic2::BitwiseAnd(_) |
+            Intrinsic2::BitwiseOr(_) |
+            Intrinsic2::BitwiseXor(_) |
+            Intrinsic2::BooleanAnd(_) |
+            Intrinsic2::BooleanOr(_) |
+            Intrinsic2::LessThan(_) |
+            Intrinsic2::LessEqual(_) |
+            Intrinsic2::GreaterThan(_) |
+            Intrinsic2::GreaterEqual(_) |
+            Intrinsic2::Equality(_) |
+            Intrinsic2::Inequality(_) |
+            Intrinsic2::AsDouble |
+            Intrinsic2::Cross |
+            Intrinsic2::Distance1 |
+            Intrinsic2::Distance2 |
+            Intrinsic2::Distance3 |
+            Intrinsic2::Distance4 |
+            Intrinsic2::DotI1 |
+            Intrinsic2::DotI2 |
+            Intrinsic2::DotI3 |
+            Intrinsic2::DotI4 |
+            Intrinsic2::DotF1 |
+            Intrinsic2::DotF2 |
+            Intrinsic2::DotF3 |
+            Intrinsic2::DotF4 |
+            Intrinsic2::MinI |
+            Intrinsic2::MinI2 |
+            Intrinsic2::MinI3 |
+            Intrinsic2::MinI4 |
+            Intrinsic2::MinF |
+            Intrinsic2::MinF2 |
+            Intrinsic2::MinF3 |
+            Intrinsic2::MinF4 |
+            Intrinsic2::MaxI |
+            Intrinsic2::MaxI2 |
+            Intrinsic2::MaxI3 |
+            Intrinsic2::MaxI4 |
+            Intrinsic2::MaxF |
+            Intrinsic2::MaxF2 |
+            Intrinsic2::MaxF3 |
+            Intrinsic2::MaxF4 |
+            Intrinsic2::Pow |
+            Intrinsic2::Pow2 |
+            Intrinsic2::Pow3 |
+            Intrinsic2::Pow4 |
+            Intrinsic2::Step |
+            Intrinsic2::Step2 |
+            Intrinsic2::Step3 |
+            Intrinsic2::Step4 |
+            Intrinsic2::BufferLoad(_) |
+            Intrinsic2::RWBufferLoad(_) |
+            Intrinsic2::StructuredBufferLoad(_) |
+            Intrinsic2::RWStructuredBufferLoad(_) |
+            Intrinsic2::RWTexture2DLoad(_) |
+            Intrinsic2::ByteAddressBufferLoad |
+            Intrinsic2::ByteAddressBufferLoad2 |
+            Intrinsic2::ByteAddressBufferLoad3 |
+            Intrinsic2::ByteAddressBufferLoad4 |
+            Intrinsic2::RWByteAddressBufferLoad |
+            Intrinsic2::RWByteAddressBufferLoad2 |
+            Intrinsic2::RWByteAddressBufferLoad3 |
+            Intrinsic2::RWByteAddressBufferLoad4 => InputModifier::In,
+
+            Intrinsic2::Assignment(_) |
+            Intrinsic2::SumAssignment(_) |
+            Intrinsic2::DifferenceAssignment(_) |
+            Intrinsic2::ProductAssignment(_) |
+            Intrinsic2::QuotientAssignment(_) |
+            Intrinsic2::RemainderAssignment(_) => InputModifier::InOut,
+        }
+    }
+
+    pub fn get_param2_input_modifier(&self) -> InputModifier {
+        match *self {
+            Intrinsic2::Add(_) |
+            Intrinsic2::Subtract(_) |
+            Intrinsic2::Multiply(_) |
+            Intrinsic2::Divide(_) |
+            Intrinsic2::Modulus(_) |
+            Intrinsic2::LeftShift(_) |
+            Intrinsic2::RightShift(_) |
+            Intrinsic2::BitwiseAnd(_) |
+            Intrinsic2::BitwiseOr(_) |
+            Intrinsic2::BitwiseXor(_) |
+            Intrinsic2::BooleanAnd(_) |
+            Intrinsic2::BooleanOr(_) |
+            Intrinsic2::LessThan(_) |
+            Intrinsic2::LessEqual(_) |
+            Intrinsic2::GreaterThan(_) |
+            Intrinsic2::GreaterEqual(_) |
+            Intrinsic2::Equality(_) |
+            Intrinsic2::Inequality(_) |
+            Intrinsic2::Assignment(_) |
+            Intrinsic2::SumAssignment(_) |
+            Intrinsic2::DifferenceAssignment(_) |
+            Intrinsic2::ProductAssignment(_) |
+            Intrinsic2::QuotientAssignment(_) |
+            Intrinsic2::RemainderAssignment(_) |
+            Intrinsic2::AsDouble |
+            Intrinsic2::Cross |
+            Intrinsic2::Distance1 |
+            Intrinsic2::Distance2 |
+            Intrinsic2::Distance3 |
+            Intrinsic2::Distance4 |
+            Intrinsic2::DotI1 |
+            Intrinsic2::DotI2 |
+            Intrinsic2::DotI3 |
+            Intrinsic2::DotI4 |
+            Intrinsic2::DotF1 |
+            Intrinsic2::DotF2 |
+            Intrinsic2::DotF3 |
+            Intrinsic2::DotF4 |
+            Intrinsic2::MinI |
+            Intrinsic2::MinI2 |
+            Intrinsic2::MinI3 |
+            Intrinsic2::MinI4 |
+            Intrinsic2::MinF |
+            Intrinsic2::MinF2 |
+            Intrinsic2::MinF3 |
+            Intrinsic2::MinF4 |
+            Intrinsic2::MaxI |
+            Intrinsic2::MaxI2 |
+            Intrinsic2::MaxI3 |
+            Intrinsic2::MaxI4 |
+            Intrinsic2::MaxF |
+            Intrinsic2::MaxF2 |
+            Intrinsic2::MaxF3 |
+            Intrinsic2::MaxF4 |
+            Intrinsic2::Pow |
+            Intrinsic2::Pow2 |
+            Intrinsic2::Pow3 |
+            Intrinsic2::Pow4 |
+            Intrinsic2::Step |
+            Intrinsic2::Step2 |
+            Intrinsic2::Step3 |
+            Intrinsic2::Step4 |
+            Intrinsic2::BufferLoad(_) |
+            Intrinsic2::RWBufferLoad(_) |
+            Intrinsic2::StructuredBufferLoad(_) |
+            Intrinsic2::RWStructuredBufferLoad(_) |
+            Intrinsic2::RWTexture2DLoad(_) |
+            Intrinsic2::ByteAddressBufferLoad |
+            Intrinsic2::ByteAddressBufferLoad2 |
+            Intrinsic2::ByteAddressBufferLoad3 |
+            Intrinsic2::ByteAddressBufferLoad4 |
+            Intrinsic2::RWByteAddressBufferLoad |
+            Intrinsic2::RWByteAddressBufferLoad2 |
+            Intrinsic2::RWByteAddressBufferLoad3 |
+            Intrinsic2::RWByteAddressBufferLoad4 => InputModifier::In,
+        }
+    }
+}
+
+impl Intrinsic3 {
+    pub fn get_param1_input_modifier(&self) -> InputModifier {
+        match *self {
+            Intrinsic3::ClampI |
+            Intrinsic3::ClampI2 |
+            Intrinsic3::ClampI3 |
+            Intrinsic3::ClampI4 |
+            Intrinsic3::ClampF |
+            Intrinsic3::ClampF2 |
+            Intrinsic3::ClampF3 |
+            Intrinsic3::ClampF4 |
+            Intrinsic3::Lerp |
+            Intrinsic3::Lerp2 |
+            Intrinsic3::Lerp3 |
+            Intrinsic3::Lerp4 |
+            Intrinsic3::Sincos |
+            Intrinsic3::Sincos2 |
+            Intrinsic3::Sincos3 |
+            Intrinsic3::Sincos4 |
+            Intrinsic3::SmoothStep |
+            Intrinsic3::SmoothStep2 |
+            Intrinsic3::SmoothStep3 |
+            Intrinsic3::SmoothStep4 |
+            Intrinsic3::RWTexture2DStore(_) |
+            Intrinsic3::RWByteAddressBufferStore |
+            Intrinsic3::RWByteAddressBufferStore2 |
+            Intrinsic3::RWByteAddressBufferStore3 |
+            Intrinsic3::RWByteAddressBufferStore4 => InputModifier::In,
+        }
+    }
+
+    pub fn get_param2_input_modifier(&self) -> InputModifier {
+        match *self {
+            Intrinsic3::ClampI |
+            Intrinsic3::ClampI2 |
+            Intrinsic3::ClampI3 |
+            Intrinsic3::ClampI4 |
+            Intrinsic3::ClampF |
+            Intrinsic3::ClampF2 |
+            Intrinsic3::ClampF3 |
+            Intrinsic3::ClampF4 |
+            Intrinsic3::Lerp |
+            Intrinsic3::Lerp2 |
+            Intrinsic3::Lerp3 |
+            Intrinsic3::Lerp4 |
+            Intrinsic3::SmoothStep |
+            Intrinsic3::SmoothStep2 |
+            Intrinsic3::SmoothStep3 |
+            Intrinsic3::SmoothStep4 |
+            Intrinsic3::RWTexture2DStore(_) |
+            Intrinsic3::RWByteAddressBufferStore |
+            Intrinsic3::RWByteAddressBufferStore2 |
+            Intrinsic3::RWByteAddressBufferStore3 |
+            Intrinsic3::RWByteAddressBufferStore4 => InputModifier::In,
+
+            Intrinsic3::Sincos |
+            Intrinsic3::Sincos2 |
+            Intrinsic3::Sincos3 |
+            Intrinsic3::Sincos4 => InputModifier::Out,
+        }
+    }
+
+    pub fn get_param3_input_modifier(&self) -> InputModifier {
+        match *self {
+            Intrinsic3::ClampI |
+            Intrinsic3::ClampI2 |
+            Intrinsic3::ClampI3 |
+            Intrinsic3::ClampI4 |
+            Intrinsic3::ClampF |
+            Intrinsic3::ClampF2 |
+            Intrinsic3::ClampF3 |
+            Intrinsic3::ClampF4 |
+            Intrinsic3::Lerp |
+            Intrinsic3::Lerp2 |
+            Intrinsic3::Lerp3 |
+            Intrinsic3::Lerp4 |
+            Intrinsic3::SmoothStep |
+            Intrinsic3::SmoothStep2 |
+            Intrinsic3::SmoothStep3 |
+            Intrinsic3::SmoothStep4 |
+            Intrinsic3::RWTexture2DStore(_) |
+            Intrinsic3::RWByteAddressBufferStore |
+            Intrinsic3::RWByteAddressBufferStore2 |
+            Intrinsic3::RWByteAddressBufferStore3 |
+            Intrinsic3::RWByteAddressBufferStore4 => InputModifier::In,
+
+            Intrinsic3::Sincos |
+            Intrinsic3::Sincos2 |
+            Intrinsic3::Sincos3 |
+            Intrinsic3::Sincos4 => InputModifier::Out,
         }
     }
 }

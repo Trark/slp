@@ -79,14 +79,21 @@ void test_structured_buffer(__global struct testStruct* g_roStructuredBuffer, __
 	g_rwStructuredBuffer[(int)dtid.x] = modified;
 }
 
-void test_texture_2d(read_only image2d_t g_rwRTexture2DFloat, read_only image2d_t g_rwRTexture2DInt, read_only image2d_t g_rwRTexture2DUInt, uint3 dtid)
+void test_pass_texture_read(float4 t)
+{
+}
+
+void test_texture_2d(read_write image2d_t g_rwRTexture2DFloat, read_write image2d_t g_rwRTexture2DInt, read_write image2d_t g_rwRTexture2DUInt, uint3 dtid)
 {
 	int2 coord;
 	coord.x = (int)dtid.x;
 	coord.y = (int)dtid.y;
 	float4 read_load_f = read_imagef(g_rwRTexture2DFloat, coord);
 	int4 read_load_i = read_imagei(g_rwRTexture2DInt, coord);
-	uint4 read_load_ui = read_imageui(g_rwRTexture2DUInt, coord);
+	uint4 tmp;
+	uint4 read_load_ui = tmp = read_imageui(g_rwRTexture2DUInt, coord);
+	read_load_i = read_imagei(g_rwRTexture2DInt, coord);
+	test_pass_texture_read(read_imagef(g_rwRTexture2DFloat, coord));
 	write_imagef(g_rwRTexture2DFloat, coord, read_load_f);
 	write_imagei(g_rwRTexture2DInt, coord, read_load_i);
 	write_imageui(g_rwRTexture2DUInt, coord, read_load_ui);
@@ -109,7 +116,7 @@ void test_byte_address_buffer(__global uchar* g_roRawBuffer, __global uchar* g_r
 }
 
 __attribute__((reqd_work_group_size(8, 8, 1)))
-kernel void MyKernel(__global uint4* g_roBuffer, __global struct testStruct* g_roStructuredBuffer, __global uchar* g_roRawBuffer, __global uint4* g_rwBuffer, __global struct testStruct* g_rwStructuredBuffer, read_only image2d_t g_rwRTexture2DFloat, read_only image2d_t g_rwRTexture2DInt, read_only image2d_t g_rwRTexture2DUInt, __global uchar* g_rwRawBuffer)
+kernel void MyKernel(__global uint4* g_roBuffer, __global struct testStruct* g_roStructuredBuffer, __global uchar* g_roRawBuffer, __global uint4* g_rwBuffer, __global struct testStruct* g_rwStructuredBuffer, read_write image2d_t g_rwRTexture2DFloat, read_write image2d_t g_rwRTexture2DInt, read_write image2d_t g_rwRTexture2DUInt, __global uchar* g_rwRawBuffer)
 {
 	uint3 dtid = (uint3)(get_global_id(0u), get_global_id(1u), get_global_id(2u));
 	test_buffer(g_roBuffer, g_rwBuffer, dtid);
