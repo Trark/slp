@@ -231,3 +231,50 @@ fn test_reduce_binary_operation() {
     };
     assert_eq!(rel, Ok(expected_rel));
 }
+
+#[test]
+fn test_reduce_texture_assignment() {
+
+    let lit_zero = hir::Literal::Int(0);
+    let lit_zero_pel = pel::Expression::Literal(lit_zero.clone());
+    let dtyl_index = hir::DataLayout::Vector(hir::ScalarType::Int, 2);
+    let cons = vec![
+        pel::ConstructorSlot { arity: 1, expr: lit_zero_pel.clone() },
+        pel::ConstructorSlot { arity: 1, expr: lit_zero_pel },
+    ];
+    let lit_zero2 = Box::new(pel::Expression::NumericConstructor(dtyl_index.clone(), cons));
+
+    let dtyl = hir::DataLayout::Vector(hir::ScalarType::Float, 4);
+    let dty = hir::DataType(dtyl, hir::TypeModifier::default());
+    let tex_0 = hir::GlobalId(0);
+    let tex_0_pel = Box::new(pel::Expression::Global(tex_0.clone()));
+    let ti_0 = pel::Expression::RWTexture2DIndex(dty.clone(), tex_0_pel, lit_zero2.clone());
+    let tex_1 = hir::GlobalId(1);
+    let tex_1_pel = Box::new(pel::Expression::Global(tex_1.clone()));
+    let ti_1 = pel::Expression::Texture2DIndex(dty.clone(), tex_1_pel, lit_zero2.clone());
+
+    let add = hir::Intrinsic2::Assignment(hir::Type::from_data(dty.clone()));
+    let pel = pel::Expression::Intrinsic2(add.clone(), Box::new(ti_0), Box::new(ti_1));
+
+    let rel = reduce(pel, &TestReduceContext);
+    let expected_rel = Sequence {
+        binds: vec![
+            Bind::direct(0, Command::Global(tex_0)),
+            Bind::direct(1, Command::Literal(lit_zero.clone())),
+            Bind::direct(2, Command::Literal(lit_zero.clone())),
+            Bind::direct(3, Command::NumericConstructor(dtyl_index.clone(), vec![ConstructorSlot { arity: 1, expr: BindId(1) }, ConstructorSlot { arity: 1, expr: BindId(2) }])),
+            Bind {
+                id: BindId(4),
+                bind_type: BindType::Direct(Command::TextureIndex(dty.clone(), BindId(0), BindId(3))),
+                required_input: InputModifier::InOut,
+            },
+            Bind::direct(5, Command::Global(tex_1)),
+            Bind::direct(6, Command::Literal(lit_zero.clone())),
+            Bind::direct(7, Command::Literal(lit_zero.clone())),
+            Bind::direct(8, Command::NumericConstructor(dtyl_index, vec![ConstructorSlot { arity: 1, expr: BindId(6) }, ConstructorSlot { arity: 1, expr: BindId(7) }])),
+            Bind::direct(9, Command::Intrinsic2(hir::Intrinsic2::Texture2DLoad(dty), BindId(5), BindId(8))),
+        ],
+        last: BindType::Direct(Command::Intrinsic2(add, BindId(4), BindId(9))),
+    };
+    assert_eq!(rel, Ok(expected_rel));
+}
