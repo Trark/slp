@@ -700,7 +700,8 @@ impl Intrinsic2 {
             Intrinsic2::RWByteAddressBufferLoad3 |
             Intrinsic2::RWByteAddressBufferLoad4 => InputModifier::In,
 
-            Intrinsic2::Assignment(_) |
+            Intrinsic2::Assignment(_) => InputModifier::Out,
+
             Intrinsic2::SumAssignment(_) |
             Intrinsic2::DifferenceAssignment(_) |
             Intrinsic2::ProductAssignment(_) |

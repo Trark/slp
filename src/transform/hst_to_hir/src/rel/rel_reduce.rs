@@ -266,7 +266,7 @@ fn test_reduce_texture_assignment() {
             Bind {
                 id: BindId(4),
                 bind_type: BindType::Direct(Command::RWTexture2DIndex(dty.clone(), BindId(0), BindId(3))),
-                required_input: InputModifier::InOut,
+                required_input: InputModifier::Out,
             },
             Bind::direct(5, Command::Global(tex_1)),
             Bind::direct(6, Command::Literal(lit_zero.clone())),
