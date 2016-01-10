@@ -99,7 +99,7 @@ fn reduce_node(expr: pel::Expression,
             let bt = BindType::Direct(if input_modifier == InputModifier::In {
                 Command::Intrinsic2(hir::Intrinsic2::Texture2DLoad(dty), tex_id, index_id)
             } else {
-                Command::TextureIndex(dty, tex_id, index_id)
+                Command::Texture2DIndex(dty, tex_id, index_id)
             });
             (sb, bt)
         }
@@ -109,7 +109,7 @@ fn reduce_node(expr: pel::Expression,
             let bt = BindType::Direct(if input_modifier == InputModifier::In {
                 Command::Intrinsic2(hir::Intrinsic2::RWTexture2DLoad(dty), tex_id, index_id)
             } else {
-                Command::TextureIndex(dty, tex_id, index_id)
+                Command::RWTexture2DIndex(dty, tex_id, index_id)
             });
             (sb, bt)
         }
@@ -253,8 +253,8 @@ fn test_reduce_texture_assignment() {
     let tex_1_pel = Box::new(pel::Expression::Global(tex_1.clone()));
     let ti_1 = pel::Expression::Texture2DIndex(dty.clone(), tex_1_pel, lit_zero2.clone());
 
-    let add = hir::Intrinsic2::Assignment(hir::Type::from_data(dty.clone()));
-    let pel = pel::Expression::Intrinsic2(add.clone(), Box::new(ti_0), Box::new(ti_1));
+    let assign = hir::Intrinsic2::Assignment(hir::Type::from_data(dty.clone()));
+    let pel = pel::Expression::Intrinsic2(assign.clone(), Box::new(ti_0), Box::new(ti_1));
 
     let rel = reduce(pel, &TestReduceContext);
     let expected_rel = Sequence {
@@ -265,7 +265,7 @@ fn test_reduce_texture_assignment() {
             Bind::direct(3, Command::NumericConstructor(dtyl_index.clone(), vec![ConstructorSlot { arity: 1, expr: BindId(1) }, ConstructorSlot { arity: 1, expr: BindId(2) }])),
             Bind {
                 id: BindId(4),
-                bind_type: BindType::Direct(Command::TextureIndex(dty.clone(), BindId(0), BindId(3))),
+                bind_type: BindType::Direct(Command::RWTexture2DIndex(dty.clone(), BindId(0), BindId(3))),
                 required_input: InputModifier::InOut,
             },
             Bind::direct(5, Command::Global(tex_1)),
@@ -274,7 +274,7 @@ fn test_reduce_texture_assignment() {
             Bind::direct(8, Command::NumericConstructor(dtyl_index, vec![ConstructorSlot { arity: 1, expr: BindId(6) }, ConstructorSlot { arity: 1, expr: BindId(7) }])),
             Bind::direct(9, Command::Intrinsic2(hir::Intrinsic2::Texture2DLoad(dty), BindId(5), BindId(8))),
         ],
-        last: BindType::Direct(Command::Intrinsic2(add, BindId(4), BindId(9))),
+        last: BindType::Direct(Command::Intrinsic2(assign, BindId(4), BindId(9))),
     };
     assert_eq!(rel, Ok(expected_rel));
 }

@@ -92,7 +92,8 @@ fn combine_trivial(seq: &Sequence) -> Option<hir::Expression> {
                 };
                 Some((q, hir::Expression::ArraySubscript(arr, index)))
             }
-            Command::TextureIndex(_, _, _) => None,
+            Command::Texture2DIndex(_, _, _) => None,
+            Command::RWTexture2DIndex(_, _, _) => None,
             Command::Member(ref val, ref name) => {
                 let (q, e) = match q.take(val) {
                     Some((q, e)) => (q, Box::new(e)),
