@@ -291,7 +291,6 @@ pub trait ExpressionContext : StructIdFinder + ir::TypeContext + ReduceContext {
     fn get_return_type(&self) -> ir::Type;
 
     fn as_struct_id_finder(&self) -> &StructIdFinder;
-    fn as_type_context(&self) -> &ir::TypeContext;
     fn as_reduce_context(&self) -> &ReduceContext;
 }
 
@@ -625,10 +624,6 @@ impl ExpressionContext for GlobalContext {
         self
     }
 
-    fn as_type_context(&self) -> &ir::TypeContext {
-        self
-    }
-
     fn as_reduce_context(&self) -> &ReduceContext {
         self
     }
@@ -784,10 +779,6 @@ impl ExpressionContext for ScopeContext {
     }
 
     fn as_struct_id_finder(&self) -> &StructIdFinder {
-        self
-    }
-
-    fn as_type_context(&self) -> &ir::TypeContext {
         self
     }
 
@@ -1217,18 +1208,12 @@ fn parse_localtype(local_type: &ast::LocalType,
 }
 
 /// Parse an expression
-fn parse_expr_impl(expr: &ast::Expression,
-                   ignore_return: bool,
-                   context: &ExpressionContext)
-                   -> Result<(ir::Expression, ExpressionType), TyperError> {
+fn parse_expr(expr: &ast::Expression,
+              context: &ExpressionContext)
+              -> Result<(ir::Expression, ExpressionType), TyperError> {
 
     // Type errors should error out here
     let (expr_pel, expr_ety) = try!(pel::parse_expr_value_only(expr, context));
-    let expr_pel = if ignore_return {
-        expr_pel.ignore_return()
-    } else {
-        expr_pel
-    };
 
     let expr_ir = match expr_pel.direct_to_hir() {
         Ok(expr_ir) => {
@@ -1239,7 +1224,7 @@ fn parse_expr_impl(expr: &ast::Expression,
             // Else reduce the pel expression to a rel sequence
             let expr_rel = try!(rel::reduce(expr_pel.clone(), context.as_reduce_context()));
             // Then turn it into a hir expression
-            match try!(rel::combine(expr_rel.clone())) {
+            match try!(rel::combine(expr_rel.clone(), &mut rel::FakeCombineContext)) {
                 rel::CombinedExpression::Single(expr_ir) => {
                     // The expression is representable as a single
                     // output expression
@@ -1268,27 +1253,65 @@ fn parse_expr_impl(expr: &ast::Expression,
         // array load)
         let ty = &ety.0;
         let expr_ty = &expr_ety.0;
-        if !ignore_return || ty.0 != ir::TypeLayout::Void {
-            assert!(ty == expr_ty, "{:?} == {:?}: {:?}", ty, expr_ty, expr_ir);
-        }
+        assert!(ty == expr_ty, "{:?} == {:?}: {:?}", ty, expr_ty, expr_ir);
     }
 
     Ok((expr_ir, ety))
 }
 
 /// Parse an expression
-fn parse_expr(expr: &ast::Expression,
-              context: &ExpressionContext)
-              -> Result<(ir::Expression, ExpressionType), TyperError> {
-    parse_expr_impl(expr, false, context)
-}
+fn parse_expr_statement(expr: &ast::Expression,
+                        context: &ExpressionContext)
+                        -> Result<ir::Statement, TyperError> {
 
-/// Parse an expression where the return value is ignored. This lets the
-/// expression parser modify the final return value if it makes code gen easier
-fn parse_expr_discard(expr: &ast::Expression,
-                      context: &ExpressionContext)
-                      -> Result<(ir::Expression, ExpressionType), TyperError> {
-    parse_expr_impl(expr, true, context)
+    // Type errors should error out here
+    let (expr_pel, expr_ety) = try!(pel::parse_expr_value_only(expr, context));
+    let expr_pel = expr_pel.ignore_return();
+
+    let single = match expr_pel.direct_to_hir() {
+        Ok(expr_ir) => {
+            // If the expression is trivial then go straight from pel to hir
+            expr_ir
+        }
+        Err(_) => {
+            // Else reduce the pel expression to a rel sequence
+            let expr_rel = try!(rel::reduce(expr_pel.clone(), context.as_reduce_context()));
+            // Then turn it into a hir expression
+            let mut combine_context = rel::ScopeCombineContext::new();
+            match try!(rel::combine(expr_rel.clone(), &mut combine_context)) {
+                rel::CombinedExpression::Single(expr_ir) => {
+                    // The expression is representable as a single
+                    // output expression
+                    expr_ir
+                }
+                rel::CombinedExpression::Multi(res) => {
+                    // The expression requires multiple statements
+                    // For example, to create local variables to pass as
+                    // out parameters when the source type is different
+                    let block = combine_context.finalize(res);
+                    return Ok(ir::Statement::Block(block));
+                }
+            }
+        }
+    };
+
+    // If we only returned one expression (most expressions) then ensure the
+    // result type is the same as the type the pel parser returns
+    {
+        let ety_res = ir::TypeParser::get_expression_type(&single, context.as_type_context());
+        let ety = ety_res.expect("type unknown");
+        // Only compare Type not ValueType - the rel parser parses self
+        // contained expressions and thinks the root level only needs an rvalue,
+        // so may modify the output value type (for example from array index to
+        // array load)
+        let ty = &ety.0;
+        let expr_ty = &expr_ety.0;
+        if ty.0 != ir::TypeLayout::Void {
+            assert!(ty == expr_ty, "{:?} == {:?}: {:?}", ty, expr_ty, single);
+        }
+    }
+
+    Ok(ir::Statement::Expression(single))
 }
 
 fn evaluate_constexpr_int(expr: &ast::Expression) -> Result<u64, ()> {
@@ -1507,8 +1530,8 @@ fn parse_statement(ast: &ast::Statement,
     match ast {
         &ast::Statement::Empty => Ok((vec![], context)),
         &ast::Statement::Expression(ref expr) => {
-            let expr_ir = try!(parse_expr_discard(expr, &context)).0;
-            Ok((vec![ir::Statement::Expression(expr_ir)], context))
+            let statement = try!(parse_expr_statement(expr, &context));
+            Ok((vec![statement], context))
         }
         &ast::Statement::Var(ref vd) => {
             let (vd_ir, context) = try!(parse_vardef(vd, context));

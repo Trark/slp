@@ -5,12 +5,18 @@ use super::rel::*;
 use pel;
 use typer::FunctionOverload;
 use slp_lang_hir as hir;
+use slp_lang_hir::Type;
+#[cfg(test)]
+use slp_lang_hir::ToExpressionType;
 use std::error;
 use std::fmt;
+#[cfg(test)]
+use std::collections::HashMap;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum ReduceError {
     EmptyReduction,
+    FailedTypeParse,
 }
 
 pub type ReduceResult<T> = Result<T, ReduceError>;
@@ -19,6 +25,7 @@ impl error::Error for ReduceError {
     fn description(&self) -> &str {
         match *self {
             ReduceError::EmptyReduction => "reduced expression is empty",
+            ReduceError::FailedTypeParse => "failed to parse type reducing pel to rel",
         }
     }
 }
@@ -29,7 +36,7 @@ impl fmt::Display for ReduceError {
     }
 }
 
-pub trait ReduceContext {
+pub trait ReduceContext : hir::TypeContext {
     fn find_overload(&self, id: &hir::FunctionId) -> FunctionOverload;
 }
 
@@ -42,26 +49,26 @@ impl SequenceBuilder {
         SequenceBuilder { binds: vec![] }
     }
 
-    fn push(mut self, bt: BindType, im: InputModifier) -> (SequenceBuilder, BindId) {
+    fn push(mut self, bt: BindType, im: InputModifier, ty: Type) -> (SequenceBuilder, BindId) {
         let id = BindId(self.binds.len() as u64);
         self.binds.push(Bind {
             id: id.clone(),
             bind_type: bt,
             required_input: im,
+            ty: ty,
         });
         (self, id)
     }
 
-    fn finalize(mut self) -> ReduceResult<Sequence> {
-        match self.binds.pop() {
-            Some(last) => {
-                Ok(Sequence {
-                    binds: self.binds,
-                    last: last.bind_type,
-                })
-            }
-            None => Err(ReduceError::EmptyReduction),
-        }
+    fn finalize(self) -> ReduceResult<Sequence> {
+        let id = match self.binds.last() {
+            Some(last) => last.id.clone(),
+            None => return Err(ReduceError::EmptyReduction),
+        };
+        Ok(Sequence {
+            binds: self.binds,
+            last: id,
+        })
     }
 }
 
@@ -70,6 +77,10 @@ fn reduce_node(expr: pel::Expression,
                sb: SequenceBuilder,
                context: &ReduceContext)
                -> ReduceResult<(SequenceBuilder, BindId)> {
+    let ty = match pel::TypeParser::get_expression_type(&expr, context.as_type_context()) {
+        Ok(ety) => ety.0,
+        Err(_) => return Err(ReduceError::FailedTypeParse),
+    };
     let (sb, bt) = match expr {
         pel::Expression::Literal(lit) => (sb, BindType::Direct(Command::Literal(lit))),
         pel::Expression::Variable(var) => (sb, BindType::Direct(Command::Variable(var))),
@@ -179,7 +190,7 @@ fn reduce_node(expr: pel::Expression,
             (sb, bt)
         }
     };
-    let (sb, id) = sb.push(bt, input_modifier);
+    let (sb, id) = sb.push(bt, input_modifier, ty);
     Ok((sb, id))
 }
 
@@ -190,7 +201,10 @@ pub fn reduce(root_expr: pel::Expression, context: &ReduceContext) -> ReduceResu
 }
 
 #[cfg(test)]
-struct TestReduceContext;
+struct TestReduceContext {
+    locals: HashMap<hir::VariableRef, Type>,
+    globals: HashMap<hir::GlobalId, Type>,
+}
 
 #[cfg(test)]
 impl ReduceContext for TestReduceContext {
@@ -199,14 +213,66 @@ impl ReduceContext for TestReduceContext {
     }
 }
 
+#[cfg(test)]
+impl hir::TypeContext for TestReduceContext {
+    fn get_local(&self, var: &hir::VariableRef) -> Result<hir::ExpressionType, hir::TypeError> {
+        match self.locals.get(var) {
+            Some(ty) => Ok(ty.clone().to_lvalue()),
+            None => panic!("TestReduceContext::get_local"),
+        }
+    }
+    fn get_global(&self, id: &hir::GlobalId) -> Result<hir::ExpressionType, hir::TypeError> {
+        match self.globals.get(id) {
+            Some(ty) => Ok(ty.clone().to_lvalue()),
+            None => panic!("TestReduceContext::get_global"),
+        }
+    }
+    fn get_constant(&self,
+                    _: &hir::ConstantBufferId,
+                    _: &str)
+                    -> Result<hir::ExpressionType, hir::TypeError> {
+        panic!("TestReduceContext::get_constant")
+    }
+    fn get_struct_member(&self,
+                         _: &hir::StructId,
+                         _: &str)
+                         -> Result<hir::ExpressionType, hir::TypeError> {
+        panic!("TestReduceContext::get_struct_member")
+    }
+    fn get_function_return(&self,
+                           _: &hir::FunctionId)
+                           -> Result<hir::ExpressionType, hir::TypeError> {
+        panic!("TestReduceContext::get_function_return")
+    }
+}
+
+#[cfg(test)]
+impl TestReduceContext {
+    fn new() -> TestReduceContext {
+        TestReduceContext {
+            locals: HashMap::new(),
+            globals: HashMap::new(),
+        }
+    }
+    fn local(mut self, var: hir::VariableRef, ty: Type) -> TestReduceContext {
+        self.locals.insert(var, ty);
+        self
+    }
+    fn global(mut self, id: hir::GlobalId, ty: Type) -> TestReduceContext {
+        self.globals.insert(id, ty);
+        self
+    }
+}
+
 #[test]
 fn test_reduce_single_variable() {
     let var = hir::VariableRef(hir::VariableId(0), hir::ScopeRef(0));
     let pel = pel::Expression::Variable(var.clone());
-    let rel = reduce(pel, &TestReduceContext);
+    let c = TestReduceContext::new().local(var.clone(), Type::float());
+    let rel = reduce(pel, &c);
     let expected_rel = Sequence {
-        binds: vec![],
-        last: BindType::Direct(Command::Variable(var)),
+        binds: vec![Bind::direct(0, Command::Variable(var), Type::float())],
+        last: BindId(0),
     };
     assert_eq!(rel, Ok(expected_rel));
 }
@@ -219,15 +285,20 @@ fn test_reduce_binary_operation() {
     let var_1 = pel::Expression::Variable(var_1_ref.clone());
     let dty = hir::DataType(hir::DataLayout::Scalar(hir::ScalarType::Float),
                             hir::TypeModifier::default());
+    let ty = Type::from_data(dty.clone());
     let add = hir::Intrinsic2::Add(dty.clone());
     let pel = pel::Expression::Intrinsic2(add.clone(), Box::new(var_0), Box::new(var_1));
-    let rel = reduce(pel, &TestReduceContext);
+    let c = TestReduceContext::new()
+                .local(var_0_ref.clone(), ty.clone())
+                .local(var_1_ref.clone(), ty.clone());
+    let rel = reduce(pel, &c);
     let expected_rel = Sequence {
         binds: vec![
-            Bind::direct(0, Command::Variable(var_0_ref)),
-            Bind::direct(1, Command::Variable(var_1_ref)),
+            Bind::direct(0, Command::Variable(var_0_ref), ty.clone()),
+            Bind::direct(1, Command::Variable(var_1_ref), ty.clone()),
+            Bind::direct(2, Command::Intrinsic2(add, BindId(0), BindId(1)), ty),
         ],
-        last: BindType::Direct(Command::Intrinsic2(add, BindId(0), BindId(1))),
+        last: BindId(2),
     };
     assert_eq!(rel, Ok(expected_rel));
 }
@@ -246,6 +317,7 @@ fn test_reduce_texture_assignment() {
 
     let dtyl = hir::DataLayout::Vector(hir::ScalarType::Float, 4);
     let dty = hir::DataType(dtyl, hir::TypeModifier::default());
+    let ty = Type::from_data(dty.clone());
     let tex_0 = hir::GlobalId(0);
     let tex_0_pel = Box::new(pel::Expression::Global(tex_0.clone()));
     let ti_0 = pel::Expression::RWTexture2DIndex(dty.clone(), tex_0_pel, lit_zero2.clone());
@@ -253,28 +325,35 @@ fn test_reduce_texture_assignment() {
     let tex_1_pel = Box::new(pel::Expression::Global(tex_1.clone()));
     let ti_1 = pel::Expression::Texture2DIndex(dty.clone(), tex_1_pel, lit_zero2.clone());
 
-    let assign = hir::Intrinsic2::Assignment(hir::Type::from_data(dty.clone()));
+    let assign = hir::Intrinsic2::Assignment(Type::from_data(dty.clone()));
     let pel = pel::Expression::Intrinsic2(assign.clone(), Box::new(ti_0), Box::new(ti_1));
 
-    let rel = reduce(pel, &TestReduceContext);
+    let tex_ty =
+        Type::from_layout(hir::TypeLayout::Object(hir::ObjectType::RWTexture2D(dty.clone())));
+    let c = TestReduceContext::new()
+                .global(tex_0, tex_ty.clone())
+                .global(tex_1, tex_ty.clone());
+    let rel = reduce(pel, &c);
     let expected_rel = Sequence {
         binds: vec![
-            Bind::direct(0, Command::Global(tex_0)),
-            Bind::direct(1, Command::Literal(lit_zero.clone())),
-            Bind::direct(2, Command::Literal(lit_zero.clone())),
-            Bind::direct(3, Command::NumericConstructor(dtyl_index.clone(), vec![ConstructorSlot { arity: 1, expr: BindId(1) }, ConstructorSlot { arity: 1, expr: BindId(2) }])),
+            Bind::direct(0, Command::Global(tex_0), tex_ty.clone()),
+            Bind::direct(1, Command::Literal(lit_zero.clone()), Type::int()),
+            Bind::direct(2, Command::Literal(lit_zero.clone()), Type::int()),
+            Bind::direct(3, Command::NumericConstructor(dtyl_index.clone(), vec![ConstructorSlot { arity: 1, expr: BindId(1) }, ConstructorSlot { arity: 1, expr: BindId(2) }]), Type::intn(2)),
             Bind {
                 id: BindId(4),
                 bind_type: BindType::Direct(Command::RWTexture2DIndex(dty.clone(), BindId(0), BindId(3))),
                 required_input: InputModifier::Out,
+                ty: ty.clone(),
             },
-            Bind::direct(5, Command::Global(tex_1)),
-            Bind::direct(6, Command::Literal(lit_zero.clone())),
-            Bind::direct(7, Command::Literal(lit_zero.clone())),
-            Bind::direct(8, Command::NumericConstructor(dtyl_index, vec![ConstructorSlot { arity: 1, expr: BindId(6) }, ConstructorSlot { arity: 1, expr: BindId(7) }])),
-            Bind::direct(9, Command::Intrinsic2(hir::Intrinsic2::Texture2DLoad(dty), BindId(5), BindId(8))),
+            Bind::direct(5, Command::Global(tex_1), tex_ty),
+            Bind::direct(6, Command::Literal(lit_zero.clone()), Type::int()),
+            Bind::direct(7, Command::Literal(lit_zero.clone()), Type::int()),
+            Bind::direct(8, Command::NumericConstructor(dtyl_index, vec![ConstructorSlot { arity: 1, expr: BindId(6) }, ConstructorSlot { arity: 1, expr: BindId(7) }]), Type::intn(2)),
+            Bind::direct(9, Command::Intrinsic2(hir::Intrinsic2::Texture2DLoad(dty), BindId(5), BindId(8)), ty.clone()),
+            Bind::direct(10, Command::Intrinsic2(assign, BindId(4), BindId(9)), ty),
         ],
-        last: BindType::Direct(Command::Intrinsic2(assign, BindId(4), BindId(9))),
+        last: BindId(10),
     };
     assert_eq!(rel, Ok(expected_rel));
 }

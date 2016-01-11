@@ -562,8 +562,14 @@ pub struct VariableId(pub u32);
 #[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone, Copy)]
 pub struct ScopeRef(pub u32);
 /// Reference to a variable, combining both id and scope level
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone, Copy)]
 pub struct VariableRef(pub VariableId, pub ScopeRef);
+
+impl VariableRef {
+    pub fn raw(id: u32, scope: u32) -> VariableRef {
+        VariableRef(VariableId(id), ScopeRef(scope))
+    }
+}
 
 /// Map of declarations in the current scope
 #[derive(PartialEq, Debug, Clone)]
@@ -854,12 +860,22 @@ impl fmt::Display for TypeError {
 
 /// An object to hold all context of the type of definitions at a point in
 /// the program
-pub trait TypeContext {
+pub trait TypeContext : AsTypeContext {
     fn get_local(&self, var_ref: &VariableRef) -> Result<ExpressionType, TypeError>;
     fn get_global(&self, id: &GlobalId) -> Result<ExpressionType, TypeError>;
     fn get_constant(&self, id: &ConstantBufferId, name: &str) -> Result<ExpressionType, TypeError>;
     fn get_struct_member(&self, id: &StructId, name: &str) -> Result<ExpressionType, TypeError>;
     fn get_function_return(&self, id: &FunctionId) -> Result<ExpressionType, TypeError>;
+}
+
+pub trait AsTypeContext {
+    fn as_type_context(&self) -> &TypeContext;
+}
+
+impl<T: TypeContext> AsTypeContext for T {
+    fn as_type_context(&self) -> &TypeContext {
+        self
+    }
 }
 
 /// A block of state for parsing complete ir trees

@@ -50,8 +50,8 @@ void test_texture_2d(uint3 dtid)
     read_load_i = g_roTexture2DInt[coord];
     test_pass_texture_read(g_roTexture2DFloat[coord]);
     g_rwTexture2DFloat[coord] = read_load_f;
-    g_rwTexture2DInt[coord] = read_load_i;
-    g_rwTexture2DUInt[coord] = read_load_ui;
+    g_rwTexture2DInt[coord] = g_roTexture2DInt[coord];
+    read_load_ui = g_rwTexture2DUInt[coord] = g_roTexture2DUInt[coord];
 }
 
 ByteAddressBuffer g_roRawBuffer : register(t5);

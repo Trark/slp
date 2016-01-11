@@ -95,8 +95,19 @@ void test_texture_2d(read_only image2d_t g_roTexture2DFloat, read_only image2d_t
 	read_load_i = read_imagei(g_roTexture2DInt, coord);
 	test_pass_texture_read(read_imagef(g_roTexture2DFloat, coord));
 	write_imagef(g_rwTexture2DFloat, coord, read_load_f);
-	write_imagei(g_rwTexture2DInt, coord, read_load_i);
-	write_imageui(g_rwTexture2DUInt, coord, read_load_ui);
+	write_imagei(g_rwTexture2DInt, coord, read_imagei(g_roTexture2DInt, coord));
+	{
+		uint4 var;
+		int2 var_0 = coord;
+		uint4 tex;
+		int2 var_1 = coord;
+		uint4 i2 = read_imageui(g_roTexture2DUInt, var_1);
+		uint4 i2_0 = tex = i2;
+		write_imageui(g_rwTexture2DUInt, var_0, tex);
+		uint4 i2_1 = var = i2_0;
+		read_load_ui = var;
+		i2_1;
+	}
 }
 
 void test_byte_address_buffer(__global uchar* g_roRawBuffer, __global uchar* g_rwRawBuffer, uint3 dtid)

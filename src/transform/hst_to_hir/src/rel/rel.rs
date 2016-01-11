@@ -4,6 +4,7 @@
 //! Minilanguage for reducing expressions into parts
 
 use slp_lang_hir as hir;
+use std::collections::HashSet;
 
 pub use slp_lang_hir::InputModifier;
 
@@ -50,15 +51,17 @@ pub struct Bind {
     pub id: BindId,
     pub bind_type: BindType,
     pub required_input: InputModifier,
+    pub ty: hir::Type,
 }
 
 impl Bind {
     #[cfg(test)]
-    pub fn direct(id: u64, command: Command) -> Bind {
+    pub fn direct(id: u64, command: Command, ty: hir::Type) -> Bind {
         Bind {
             id: BindId(id),
             bind_type: BindType::Direct(command),
             required_input: InputModifier::In,
+            ty: ty,
         }
     }
 }
@@ -66,5 +69,28 @@ impl Bind {
 #[derive(PartialEq, Debug, Clone)]
 pub struct Sequence {
     pub binds: Vec<Bind>,
-    pub last: BindType,
+    pub last: BindId,
+}
+
+impl Sequence {
+    pub fn find_used_locals(&self) -> HashSet<hir::VariableRef> {
+        let mut used = HashSet::new();
+        for bind in &self.binds {
+            match bind.bind_type {
+                BindType::Direct(Command::Variable(ref var)) => {
+                    used.insert(var.clone());
+                }
+                BindType::Select(_, ref lhs, ref rhs) => {
+                    for var in lhs.find_used_locals() {
+                        used.insert(var);
+                    }
+                    for var in rhs.find_used_locals() {
+                        used.insert(var);
+                    }
+                }
+                _ => {}
+            }
+        }
+        used
+    }
 }

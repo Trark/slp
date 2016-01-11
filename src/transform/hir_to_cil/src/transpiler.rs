@@ -607,7 +607,10 @@ impl Context {
                                          scope_block: &src::ScopeBlock,
                                          pointers: &[src::VariableId]) {
         self.variable_scopes.push(HashMap::new());
-        for (var_id, &(ref var_name, _)) in &scope_block.1.variables {
+        let mut keys = scope_block.1.variables.keys().collect::<Vec<&src::VariableId>>();
+        keys.sort();
+        for var_id in keys {
+            let &(ref var_name, _) = scope_block.1.variables.get(var_id).expect("bad key");
             let identifier = self.make_identifier();
             let map = self.variable_scopes.last_mut().expect("no scopes after pushing scope");
             map.insert(var_id.clone(),
