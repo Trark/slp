@@ -151,6 +151,25 @@ fn combine_trivial(seq: &Sequence) -> Option<hir::Expression> {
                 let var = hir::Expression::ConstantVariable(id.clone(), name.clone());
                 Some((q, var))
             }
+            Command::TernaryConditional(ref cond, ref lhs, ref rhs) => {
+                let (q, cond_val) = match q.take(cond) {
+                    Some(res) => res,
+                    None => return None,
+                };
+                let lhs_val = match combine_trivial(lhs) {
+                    Some(lhs_val) => lhs_val,
+                    None => return None,
+                };
+                let rhs_val = match combine_trivial(rhs) {
+                    Some(rhs_val) => rhs_val,
+                    None => return None,
+                };
+                let cond_box = Box::new(cond_val);
+                let lhs_val = Box::new(lhs_val);
+                let rhs_val = Box::new(rhs_val);
+                let expr = hir::Expression::TernaryConditional(cond_box, lhs_val, rhs_val);
+                Some((q, expr))
+            }
             Command::Swizzle(ref val, ref swizzle) => {
                 let (q, e) = match q.take(val) {
                     Some(res) => res,
@@ -262,35 +281,8 @@ fn combine_trivial(seq: &Sequence) -> Option<hir::Expression> {
         }
     }
 
-    fn build_bind_type(bind_type: &BindType,
-                       q: BuiltQueue)
-                       -> Option<(BuiltQueue, hir::Expression)> {
-        match *bind_type {
-            BindType::Direct(ref command) => build_command(command, q),
-            BindType::Select(ref cond, ref lhs, ref rhs) => {
-                let (q, cond_val) = match q.take(cond) {
-                    Some(res) => res,
-                    None => return None,
-                };
-                let lhs_val = match combine_trivial(lhs) {
-                    Some(lhs_val) => lhs_val,
-                    None => return None,
-                };
-                let rhs_val = match combine_trivial(rhs) {
-                    Some(rhs_val) => rhs_val,
-                    None => return None,
-                };
-                let cond_box = Box::new(cond_val);
-                let lhs_val = Box::new(lhs_val);
-                let rhs_val = Box::new(rhs_val);
-                let expr = hir::Expression::TernaryConditional(cond_box, lhs_val, rhs_val);
-                Some((q, expr))
-            }
-        }
-    }
-
     fn build_bind(bind: &Bind, q: BuiltQueue) -> Option<BuiltQueue> {
-        match build_bind_type(&bind.bind_type, q) {
+        match build_command(&bind.value, q) {
             Some((q, e)) => Some(q.with_next(bind.id, e)),
             None => None,
         }
@@ -550,17 +542,12 @@ fn combine_complex(seq: Sequence, context: &mut CombineContext) -> CombineResult
     let mut statements = Vec::with_capacity(seq.binds.len() + 1);
     for bind in seq.binds {
 
-        let r = try!(match bind.bind_type {
-            BindType::Direct(command) => {
-                build_command(command,
-                              bind.required_input,
-                              bind.ty,
-                              &required_locals,
-                              &processed_binds,
-                              context)
-            }
-            BindType::Select(_, _, _) => Err(CombineError::FailedToResolveMultiPartExpression),
-        });
+        let r = try!(build_command(bind.value,
+                                   bind.required_input,
+                                   bind.ty,
+                                   &required_locals,
+                                   &processed_binds,
+                                   context));
 
         let (sts, processed) = r;
         processed_binds.insert(bind.id, processed);
@@ -654,7 +641,7 @@ fn test_combine_texture_assignment() {
             Bind::direct(3, Command::NumericConstructor(dtyl_index.clone(), vec![ConstructorSlot { arity: 1, expr: BindId(1) }, ConstructorSlot { arity: 1, expr: BindId(2) }]), hir::Type::intn(2)),
             Bind {
                 id: BindId(4),
-                bind_type: BindType::Direct(Command::RWTexture2DIndex(dty.clone(), BindId(0), BindId(3))),
+                value: Command::RWTexture2DIndex(dty.clone(), BindId(0), BindId(3)),
                 required_input: InputModifier::Out,
                 ty: ty.clone(),
             },

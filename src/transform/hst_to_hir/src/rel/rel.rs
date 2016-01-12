@@ -24,6 +24,7 @@ pub enum Command {
     Variable(hir::VariableRef),
     Global(hir::GlobalId),
     ConstantVariable(hir::ConstantBufferId, String),
+    TernaryConditional(BindId, Box<Sequence>, Box<Sequence>),
     Swizzle(BindId, Vec<hir::SwizzleSlot>),
     ArraySubscript(BindId, BindId),
     Texture2DIndex(hir::DataType, BindId, BindId),
@@ -39,17 +40,9 @@ pub enum Command {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum BindType {
-    /// Bind takes the BindId of a command
-    Direct(Command),
-    /// Bind conditionally takes either one set of commands or another
-    Select(BindId, Box<Sequence>, Box<Sequence>),
-}
-
-#[derive(PartialEq, Debug, Clone)]
 pub struct Bind {
     pub id: BindId,
-    pub bind_type: BindType,
+    pub value: Command,
     pub required_input: InputModifier,
     pub ty: hir::Type,
 }
@@ -59,7 +52,7 @@ impl Bind {
     pub fn direct(id: u64, command: Command, ty: hir::Type) -> Bind {
         Bind {
             id: BindId(id),
-            bind_type: BindType::Direct(command),
+            value: command,
             required_input: InputModifier::In,
             ty: ty,
         }
@@ -76,11 +69,11 @@ impl Sequence {
     pub fn find_used_locals(&self) -> HashSet<hir::VariableRef> {
         let mut used = HashSet::new();
         for bind in &self.binds {
-            match bind.bind_type {
-                BindType::Direct(Command::Variable(ref var)) => {
+            match bind.value {
+                Command::Variable(ref var) => {
                     used.insert(var.clone());
                 }
-                BindType::Select(_, ref lhs, ref rhs) => {
+                Command::TernaryConditional(_, ref lhs, ref rhs) => {
                     for var in lhs.find_used_locals() {
                         used.insert(var);
                     }
