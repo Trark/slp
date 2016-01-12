@@ -349,6 +349,17 @@ fn combine_complex(seq: Sequence, context: &mut CombineContext) -> CombineResult
         }
     }
 
+    fn allocate_local(name: &str,
+                      ty: hir::Type,
+                      context: &mut CombineContext)
+                      -> CombineResult<hir::VariableId> {
+        // Ensure type is allocatable as a variable
+        if ty.is_array() || ty.is_void() {
+            return Err(CombineError::FailedToResolveMultiPartExpression);
+        }
+        context.allocate_local(name.to_string(), ty)
+    }
+
     fn build_command(command: Command,
                      im: InputModifier,
                      ty: hir::Type,
@@ -377,7 +388,7 @@ fn combine_complex(seq: Sequence, context: &mut CombineContext) -> CombineResult
                     hir::Expression::Variable(var_ref.clone())
                 };
                 // Create temporary local
-                let id = try!(context.allocate_local("var".to_string(), ty.clone()));
+                let id = try!(allocate_local("var", ty.clone(), context));
                 // Push the temporary local into a hir node
                 let tmp_var = {
                     let tmp_var_ref = hir::VariableRef(id.clone(), hir::ScopeRef(0));
@@ -443,7 +454,7 @@ fn combine_complex(seq: Sequence, context: &mut CombineContext) -> CombineResult
                     } else {
                         None
                     };
-                    let id = try!(context.allocate_local("tex".to_string(), ty.clone()));
+                    let id = try!(allocate_local("tex", ty.clone(), context));
                     let vd = hir::VarDef {
                         id: id.clone(),
                         local_type: hir::LocalType(ty, hir::LocalStorage::Local, None),
@@ -467,7 +478,7 @@ fn combine_complex(seq: Sequence, context: &mut CombineContext) -> CombineResult
                 Ok((statements, p))
             }
             Command::NumericConstructor(dtyl, cons) => {
-                let id = try!(context.allocate_local("cons".to_string(), ty.clone()));
+                let id = try!(allocate_local("cons", ty.clone(), context));
                 let mut hir_cons = vec![];
                 for con in cons {
                     let expr = match processed.get(&con.expr) {
@@ -496,7 +507,7 @@ fn combine_complex(seq: Sequence, context: &mut CombineContext) -> CombineResult
                 Ok((vec![statement], p))
             }
             Command::Intrinsic2(i, b1, b2) => {
-                let id = try!(context.allocate_local("i2".to_string(), ty.clone()));
+                let id = try!(allocate_local("i2", ty.clone(), context));
                 let p1 = match processed.get(&b1) {
                     Some(p) => p,
                     None => panic!("reference local bind does not exist (Intrinsic2: b1)"),

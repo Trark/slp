@@ -225,6 +225,14 @@ impl TypeLayout {
             _ => panic!("non-numeric type in TypeLayout::transform_scalar"),
         }
     }
+
+    pub fn is_array(&self) -> bool {
+        if let &TypeLayout::Array(_, _) = self {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 impl From<DataLayout> for TypeLayout {
@@ -458,6 +466,14 @@ impl Type {
     pub fn transform_scalar(self, to_scalar: ScalarType) -> Type {
         let Type(tyl, ty_mod) = self;
         Type(tyl.transform_scalar(to_scalar), ty_mod)
+    }
+
+    pub fn is_array(&self) -> bool {
+        self.0.is_array()
+    }
+
+    pub fn is_void(&self) -> bool {
+        self.0 == TypeLayout::Void
     }
 }
 
