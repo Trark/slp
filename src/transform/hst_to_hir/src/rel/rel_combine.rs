@@ -999,9 +999,14 @@ fn combine_complex(seq: Sequence, context: &mut CombineContext) -> CombineResult
         }
     }
 
-    let last_expr = match processed_binds.get(&seq.last) {
-        Some(p) => p.reference.clone(),
-        None => return Err(CombineError::LastBindDoesNotExist),
+    let last_expr = match seq.last {
+        Some(last) => {
+            match processed_binds.get(&last) {
+                Some(p) => p.reference.clone(),
+                None => return Err(CombineError::LastBindDoesNotExist),
+            }
+        }
+        None => None,
     };
 
     let combined_block = CombinedBlock {
@@ -1018,9 +1023,13 @@ enum TrivialResult {
 }
 
 fn combine_trivial(seq: Sequence) -> TrivialResult {
+    // If the last segment is trivial, then the whole thing must be trivial
     let is_trivial = match seq.binds.last() {
         Some(last) => {
-            assert_eq!(last.id, seq.last);
+            match seq.last {
+                Some(required_last) => assert_eq!(last.id, required_last),
+                None => {}
+            };
             match last.value {
                 Command::Trivial(_, _) => true,
                 _ => false,
@@ -1057,7 +1066,7 @@ fn test_combine_single_variable() {
         binds: vec![
             Bind::direct(0, Command::Variable(var_ref.clone()), hir::Type::float()),
         ],
-        last: BindId(0),
+        last: Some(BindId(0)),
     };
     let var_expr = combine(var_seq, &mut FakeCombineContext).expect("combine failed");
     let var_0 = hir::Expression::Variable(var_ref);
@@ -1078,7 +1087,7 @@ fn test_combine_binary_operation() {
             Bind::direct(1, Command::Variable(var_1_ref.clone()), ty.clone()),
             Bind::direct(2, Command::Intrinsic2(add.clone(), BindId(0), BindId(1)), ty),
         ],
-        last: BindId(2),
+        last: Some(BindId(2)),
     };
     let bin_expr = combine(bin_seq, &mut FakeCombineContext).expect("combine failed");
     let var_0 = hir::Expression::Variable(var_0_ref);
@@ -1124,7 +1133,7 @@ fn test_combine_texture_assignment() {
             Bind::direct(9, Command::Intrinsic2(hir::Intrinsic2::Texture2DLoad(dty), BindId(5), BindId(8)), ty.clone()),
             Bind::direct(10, Command::Intrinsic2(assign, BindId(4), BindId(9)), ty),
         ],
-        last: BindId(10),
+        last: Some(BindId(10)),
     };
     let combined = combine(rel, &mut ScopeCombineContext::new()).expect("combine failed");
     let block = CombinedBlock {

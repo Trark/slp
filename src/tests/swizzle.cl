@@ -72,7 +72,6 @@ void test_call()
 		uint call = test_call_f2(3.0f, &swizzle_0, &output_z, &swizzle_1, 3.0f);
 		f4.xyz = swizzle_0;
 		output_u.yz = swizzle_1;
-		call;
 	}
 }
 

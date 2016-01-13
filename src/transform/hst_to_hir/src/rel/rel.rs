@@ -72,7 +72,7 @@ impl Bind {
 #[derive(PartialEq, Debug, Clone)]
 pub struct Sequence {
     pub binds: Vec<Bind>,
-    pub last: BindId,
+    pub last: Option<BindId>,
 }
 
 impl Sequence {
@@ -96,6 +96,13 @@ impl Sequence {
             }
         }
         used
+    }
+
+    pub fn ignore_value(self) -> Sequence {
+        Sequence {
+            binds: self.binds,
+            last: None,
+        }
     }
 }
 

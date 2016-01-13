@@ -67,7 +67,7 @@ impl SequenceBuilder {
         };
         Ok(Sequence {
             binds: self.binds,
-            last: id,
+            last: Some(id),
         })
     }
 }
@@ -294,7 +294,7 @@ fn test_reduce_single_variable() {
     let rel = reduce(pel, &c);
     let expected_rel = Sequence {
         binds: vec![Bind::direct(0, Command::Variable(var), Type::float())],
-        last: BindId(0),
+        last: Some(BindId(0)),
     };
     assert_eq!(rel, Ok(expected_rel));
 }
@@ -320,7 +320,7 @@ fn test_reduce_binary_operation() {
             Bind::direct(1, Command::Variable(var_1_ref), ty.clone()),
             Bind::direct(2, Command::Intrinsic2(add, BindId(0), BindId(1)), ty),
         ],
-        last: BindId(2),
+        last: Some(BindId(2)),
     };
     assert_eq!(rel, Ok(expected_rel));
 }
@@ -375,7 +375,7 @@ fn test_reduce_texture_assignment() {
             Bind::direct(9, Command::Intrinsic2(hir::Intrinsic2::Texture2DLoad(dty), BindId(5), BindId(8)), ty.clone()),
             Bind::direct(10, Command::Intrinsic2(assign, BindId(4), BindId(9)), ty),
         ],
-        last: BindId(10),
+        last: Some(BindId(10)),
     };
     assert_eq!(rel, Ok(expected_rel));
 }

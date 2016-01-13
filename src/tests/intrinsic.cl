@@ -108,7 +108,6 @@ void test_texture_2d(read_only image2d_t g_roTexture2DFloat, read_only image2d_t
 		uint4 i2 = tex = expr_0;
 		write_imageui(g_rwTexture2DUInt, expr, tex);
 		uint4 i2_0 = read_load_ui = i2;
-		i2_0;
 	}
 }
 

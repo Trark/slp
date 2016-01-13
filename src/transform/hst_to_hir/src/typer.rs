@@ -1276,6 +1276,7 @@ fn parse_expr_statement(expr: &ast::Expression,
         Err(_) => {
             // Else reduce the pel expression to a rel sequence
             let expr_rel = try!(rel::reduce(expr_pel.clone(), context.as_reduce_context()));
+            let expr_rel = expr_rel.ignore_value();
             // Then turn it into a hir expression
             let mut combine_context = rel::ScopeCombineContext::new();
             match try!(rel::combine(expr_rel.clone(), &mut combine_context)) {
