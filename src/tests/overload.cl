@@ -127,5 +127,9 @@ kernel void MyKernel()
 	float out_param_scalar;
 	float out_param_vector1;
 	testOut(&out_param_scalar);
-	testOut(&out_param_vector1);
+	{
+		float cast;
+		testOut(&cast);
+		out_param_vector1 = cast;
+	}
 }

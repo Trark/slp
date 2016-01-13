@@ -38,6 +38,11 @@ RWTexture2D<uint4> g_rwTexture2DUInt : register(u4);
 
 void test_pass_texture_read(float4 t) { }
 
+int2 load_coord()
+{
+    return int2(1, 1);
+}
+
 void test_texture_2d(uint3 dtid)
 {
     int2 coord;
@@ -51,7 +56,7 @@ void test_texture_2d(uint3 dtid)
     test_pass_texture_read(g_roTexture2DFloat[coord]);
     g_rwTexture2DFloat[coord] = read_load_f;
     g_rwTexture2DInt[coord] = g_roTexture2DInt[coord];
-    read_load_ui = g_rwTexture2DUInt[coord] = g_roTexture2DUInt[coord];
+    read_load_ui = g_rwTexture2DUInt[coord + load_coord()] = g_roTexture2DUInt[coord];
 }
 
 ByteAddressBuffer g_roRawBuffer : register(t5);

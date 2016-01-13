@@ -1110,6 +1110,10 @@ fn transpile_intrinsic2(intrinsic: &src::Intrinsic2,
         I::Equality(_) => write_binop(dst::BinOp::Equality, e1, e2),
         I::Inequality(_) => write_binop(dst::BinOp::Inequality, e1, e2),
         I::Assignment(_) => write_binop(dst::BinOp::Assignment, e1, e2),
+        I::AssignSwizzle(_, ref swizzle) => {
+            let lhs = write_swizzle(e1, swizzle);
+            write_binop(dst::BinOp::Assignment, lhs, e2)
+        }
         I::SumAssignment(_) => write_binop(dst::BinOp::SumAssignment, e1, e2),
         I::DifferenceAssignment(_) => write_binop(dst::BinOp::DifferenceAssignment, e1, e2),
         I::ProductAssignment(_) => write_binop(dst::BinOp::ProductAssignment, e1, e2),
@@ -1709,6 +1713,19 @@ fn write_cast(source_cl_type: dst::Type,
     })
 }
 
+fn write_swizzle(val: dst::Expression, swizzle: &Vec<src::SwizzleSlot>) -> dst::Expression {
+    let transpile_swizzle_slot = |swizzle_slot: &src::SwizzleSlot| {
+        match *swizzle_slot {
+            src::SwizzleSlot::X => dst::SwizzleSlot::X,
+            src::SwizzleSlot::Y => dst::SwizzleSlot::Y,
+            src::SwizzleSlot::Z => dst::SwizzleSlot::Z,
+            src::SwizzleSlot::W => dst::SwizzleSlot::W,
+        }
+    };
+    let swizzle_dst = swizzle.iter().map(transpile_swizzle_slot).collect::<Vec<_>>();
+    dst::Expression::Swizzle(Box::new(val), swizzle_dst)
+}
+
 fn transpile_expression(expression: &src::Expression,
                         context: &mut Context)
                         -> Result<dst::Expression, TranspileError> {
@@ -1728,17 +1745,7 @@ fn transpile_expression(expression: &src::Expression,
             Ok(dst::Expression::TernaryConditional(cl_cond, cl_lhs, cl_rhs))
         }
         &src::Expression::Swizzle(ref vec, ref swizzle) => {
-            Ok(dst::Expression::Swizzle(Box::new(try!(transpile_expression(vec, context))),
-                                        swizzle.iter()
-                                               .map(|swizzle_slot| {
-                                                   match *swizzle_slot {
-                                                       src::SwizzleSlot::X => dst::SwizzleSlot::X,
-                                                       src::SwizzleSlot::Y => dst::SwizzleSlot::Y,
-                                                       src::SwizzleSlot::Z => dst::SwizzleSlot::Z,
-                                                       src::SwizzleSlot::W => dst::SwizzleSlot::W,
-                                                   }
-                                               })
-                                               .collect::<Vec<_>>()))
+            Ok(write_swizzle(try!(transpile_expression(vec, context)), swizzle))
         }
         &src::Expression::ArraySubscript(ref expr, ref sub) => {
             let cl_expr = Box::new(try!(transpile_expression(expr, context)));

@@ -18,6 +18,15 @@ pub struct ConstructorSlot {
     pub expr: BindId,
 }
 
+/// When the commands value will change
+#[derive(PartialEq, Debug, Clone)]
+pub enum MutationParam {
+    /// When anything happens (most general form of a list of variables)
+    Mutable,
+    /// Never (constant expressions)
+    Const,
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum Command {
     Literal(hir::Literal),
@@ -37,6 +46,7 @@ pub enum Command {
     Intrinsic1(hir::Intrinsic1, BindId),
     Intrinsic2(hir::Intrinsic2, BindId, BindId),
     Intrinsic3(hir::Intrinsic3, BindId, BindId, BindId),
+    Trivial(hir::Expression, MutationParam),
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -81,9 +91,59 @@ impl Sequence {
                         used.insert(var);
                     }
                 }
+                Command::Trivial(ref hir, _) => hir_find_used_locals(hir, &mut used),
                 _ => {}
             }
         }
         used
+    }
+}
+
+pub fn hir_find_used_locals(expr: &hir::Expression, set: &mut HashSet<hir::VariableRef>) {
+    use slp_lang_hir::Expression;
+    match *expr {
+        Expression::Literal(_) => {}
+        Expression::Variable(ref var_ref) => {
+            set.insert(var_ref.clone());
+        }
+        Expression::Global(_) => {}
+        Expression::ConstantVariable(_, _) => {}
+        Expression::TernaryConditional(ref cond, ref left, ref right) => {
+            hir_find_used_locals(cond, set);
+            hir_find_used_locals(left, set);
+            hir_find_used_locals(right, set);
+        }
+        Expression::Swizzle(ref vec, _) => {
+            hir_find_used_locals(vec, set);
+        }
+        Expression::ArraySubscript(ref arr, ref index) => {
+            hir_find_used_locals(arr, set);
+            hir_find_used_locals(index, set);
+        }
+        Expression::Member(ref expr, _) => hir_find_used_locals(expr, set),
+        Expression::Call(_, ref exprs) => {
+            for expr in exprs {
+                hir_find_used_locals(expr, set);
+            }
+        }
+        Expression::NumericConstructor(_, ref elements) => {
+            for element in elements {
+                hir_find_used_locals(&element.expr, set);
+            }
+        }
+        Expression::Cast(_, ref expr) => hir_find_used_locals(expr, set),
+        Expression::Intrinsic0(_) => {}
+        Expression::Intrinsic1(_, ref e1) => {
+            hir_find_used_locals(e1, set);
+        }
+        Expression::Intrinsic2(_, ref e1, ref e2) => {
+            hir_find_used_locals(e1, set);
+            hir_find_used_locals(e2, set);
+        }
+        Expression::Intrinsic3(_, ref e1, ref e2, ref e3) => {
+            hir_find_used_locals(e1, set);
+            hir_find_used_locals(e2, set);
+            hir_find_used_locals(e3, set);
+        }
     }
 }

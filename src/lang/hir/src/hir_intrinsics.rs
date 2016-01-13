@@ -153,6 +153,7 @@ pub enum Intrinsic2 {
     Equality(DataType),
     Inequality(DataType),
     Assignment(Type),
+    AssignSwizzle(Type, Vec<SwizzleSlot>),
     SumAssignment(DataType),
     DifferenceAssignment(DataType),
     ProductAssignment(DataType),
@@ -416,7 +417,7 @@ impl Intrinsic for Intrinsic2 {
                 // value is a bool with the same dimensions as dty
                 Type::from_data(dty.clone()).transform_scalar(ScalarType::Bool).to_rvalue()
             }
-            Intrinsic2::Assignment(ref ty) => {
+            Intrinsic2::Assignment(ref ty) | Intrinsic2::AssignSwizzle(ref ty, _) => {
                 // ty is the type of the assigned value, so it the return value
                 ty.clone().to_lvalue()
             }
@@ -700,7 +701,8 @@ impl Intrinsic2 {
             Intrinsic2::RWByteAddressBufferLoad3 |
             Intrinsic2::RWByteAddressBufferLoad4 => InputModifier::In,
 
-            Intrinsic2::Assignment(_) => InputModifier::Out,
+            Intrinsic2::Assignment(_) |
+            Intrinsic2::AssignSwizzle(_, _) => InputModifier::Out,
 
             Intrinsic2::SumAssignment(_) |
             Intrinsic2::DifferenceAssignment(_) |
@@ -731,6 +733,7 @@ impl Intrinsic2 {
             Intrinsic2::Equality(_) |
             Intrinsic2::Inequality(_) |
             Intrinsic2::Assignment(_) |
+            Intrinsic2::AssignSwizzle(_, _) |
             Intrinsic2::SumAssignment(_) |
             Intrinsic2::DifferenceAssignment(_) |
             Intrinsic2::ProductAssignment(_) |

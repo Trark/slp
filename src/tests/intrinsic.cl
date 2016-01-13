@@ -83,6 +83,11 @@ void test_pass_texture_read(float4 t)
 {
 }
 
+int2 load_coord()
+{
+	return (int2)((int)1, (int)1);
+}
+
 void test_texture_2d(read_only image2d_t g_roTexture2DFloat, read_only image2d_t g_roTexture2DInt, read_only image2d_t g_roTexture2DUInt, read_write image2d_t g_rwTexture2DFloat, write_only image2d_t g_rwTexture2DInt, write_only image2d_t g_rwTexture2DUInt, uint3 dtid)
 {
 	int2 coord;
@@ -97,16 +102,13 @@ void test_texture_2d(read_only image2d_t g_roTexture2DFloat, read_only image2d_t
 	write_imagef(g_rwTexture2DFloat, coord, read_load_f);
 	write_imagei(g_rwTexture2DInt, coord, read_imagei(g_roTexture2DInt, coord));
 	{
-		uint4 var;
-		int2 var_0 = coord;
+		int2 expr = coord + load_coord();
 		uint4 tex;
-		int2 var_1 = coord;
-		uint4 i2 = read_imageui(g_roTexture2DUInt, var_1);
-		uint4 i2_0 = tex = i2;
-		write_imageui(g_rwTexture2DUInt, var_0, tex);
-		uint4 i2_1 = var = i2_0;
-		read_load_ui = var;
-		i2_1;
+		uint4 expr_0 = read_imageui(g_roTexture2DUInt, coord);
+		uint4 i2 = tex = expr_0;
+		write_imageui(g_rwTexture2DUInt, expr, tex);
+		uint4 i2_0 = read_load_ui = i2;
+		i2_0;
 	}
 }
 
@@ -334,7 +336,14 @@ kernel void MyKernel
 	float3 abs_f3 = fabs(fx3);
 	float4 abs_f4 = fabs(fx4);
 	(void)(fy = sincos(fx, &fz));
-	(void)(fy1 = sincos(fx1, &fz1));
+	{
+		float expr = fx1;
+		float cast;
+		float cast_0;
+		(void)(cast = sincos(expr, &cast_0));
+		fy1 = cast;
+		fz1 = cast_0;
+	}
 	(void)(fy2 = sincos(fx2, &fz2));
 	(void)(fy3 = sincos(fx3, &fz3));
 	(void)(fy4 = sincos(fx4, &fz4));

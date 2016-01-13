@@ -72,6 +72,30 @@ impl SequenceBuilder {
     }
 }
 
+fn simplify_node(expr: pel::Expression) -> pel::Expression {
+    // Rewrite swizzled assignments into a dedicated node.
+    // This is because we treat assignment like any other function call
+    // with the assign value being bound as an out param. We can't swizzle
+    // out params into cl functions, so these get rewritten unoptimally, but
+    // we can swizzle assign in cl, so this node represents this combined
+    // operation and will generate more optimal cl code (it will be trivial
+    // in the rel language instead of requiring complex combination)
+    use slp_lang_hir::Intrinsic2::Assignment as Assign;
+    use slp_lang_hir::Intrinsic2::AssignSwizzle;
+    use pel::Expression::Intrinsic2 as I2;
+    use pel::Expression::Swizzle;
+    if let I2(Assign(ty), e1, e2) = expr {
+        let unboxed_e1 = *e1;
+        if let Swizzle(val, swizzle) = unboxed_e1 {
+            I2(AssignSwizzle(ty, swizzle), val, e2)
+        } else {
+            I2(Assign(ty), Box::new(unboxed_e1), e2)
+        }
+    } else {
+        expr
+    }
+}
+
 fn reduce_node(expr: pel::Expression,
                input_modifier: InputModifier,
                sb: SequenceBuilder,
@@ -81,6 +105,7 @@ fn reduce_node(expr: pel::Expression,
         Ok(ety) => ety.0,
         Err(_) => return Err(ReduceError::FailedTypeParse),
     };
+    let expr = simplify_node(expr);
     let (sb, bt) = match expr {
         pel::Expression::Literal(lit) => (sb, Command::Literal(lit)),
         pel::Expression::Variable(var) => (sb, Command::Variable(var)),

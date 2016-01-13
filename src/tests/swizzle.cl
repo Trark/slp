@@ -55,31 +55,25 @@ uint test_call_f2(float x, __private float3* y, __private float* z, __private fl
 	return 0u;
 }
 
-void test_call_f1_shim(__private float4* p)
-{
-	float3 v = (*p).xyz;
-	test_call_f1(&v);
-	(*p).xyz = v;
-}
-
-uint test_call_f2_shim(float p, __private float4* p_0, __private float* p_1, __private float3* p_2, float p_3)
-{
-	float3 v = (*p_0).xyz;
-	float2 v_0 = (*p_2).yz;
-	uint ret = test_call_f2(p, &v, p_1, &v_0, p_3);
-	(*p_0).xyz = v;
-	(*p_2).yz = v_0;
-	return ret;
-}
-
 void test_call()
 {
 	float4 f4;
 	test_call_f0(f4.xyz);
-	test_call_f1_shim(&f4);
+	{
+		float3 swizzle;
+		test_call_f1(&swizzle);
+		f4.xyz = swizzle;
+	}
 	float output_z;
 	float3 output_u;
-	test_call_f2_shim(3.0f, &f4, &output_z, &output_u, 3.0f);
+	{
+		float3 swizzle_0;
+		float2 swizzle_1;
+		uint call = test_call_f2(3.0f, &swizzle_0, &output_z, &swizzle_1, 3.0f);
+		f4.xyz = swizzle_0;
+		output_u.yz = swizzle_1;
+		call;
+	}
 }
 
 __attribute__((reqd_work_group_size(8, 8, 1)))
