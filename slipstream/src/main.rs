@@ -109,11 +109,14 @@ fn main() {
 
     let join_handle_res = thread::Builder::new().stack_size(8 * 1024 * 1024).spawn(move || {
         let include_handler = Box::new(FileLoader { include_paths: paths });
+        let entry_point = flag_entry_point.clone();
+        let kernel_name = flag_entry_point;
 
         let input = Input {
-            entry_point: flag_entry_point,
+            entry_point: entry_point,
             main_file: source_contents,
             file_loader: include_handler,
+            kernel_name: kernel_name,
         };
 
         hlsl_to_cl(input)

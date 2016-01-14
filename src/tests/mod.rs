@@ -27,6 +27,7 @@ fn run_full(hlsl: &'static str, cl: &'static str, binds: BindMap) {
                   entry_point: "CSMAIN".to_string(),
                   main_file: hlsl.to_string(),
                   file_loader: Box::new(NullIncludeHandler),
+                  kernel_name: "MyKernel".to_string(),
               },
               cl,
               binds)
@@ -139,6 +140,7 @@ fn include() {
                   entry_point: "CSMAIN".to_string(),
                   main_file: HLSL_MAIN.to_string(),
                   file_loader: Box::new(TestFileLoader),
+                  kernel_name: "Main".to_string(),
               },
               CL,
               BindMap::new())

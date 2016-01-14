@@ -265,6 +265,7 @@ pub struct KernelParam {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Kernel {
+    pub name: Identifier,
     pub params: Vec<KernelParam>,
     pub body: Vec<Statement>,
     pub group_dimensions: Dimension,
@@ -285,4 +286,6 @@ pub struct Module {
     pub root_definitions: Vec<RootDefinition>,
     pub binds: BindMap,
     pub required_extensions: HashSet<Extension>,
+    pub kernel_name: String,
+    pub kernel_dimensions: Dimension,
 }

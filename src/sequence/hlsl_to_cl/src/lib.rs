@@ -42,12 +42,15 @@ pub struct Input {
     pub entry_point: String,
     pub main_file: String,
     pub file_loader: Box<IncludeHandler>,
+    pub kernel_name: String,
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Output {
     pub code: Binary,
     pub binds: BindMap,
+    pub kernel_name: String,
+    pub dimensions: (u64, u64, u64),
 }
 
 pub fn hlsl_to_cl(input: Input) -> Result<Output, CompileError> {
@@ -63,13 +66,18 @@ pub fn hlsl_to_cl(input: Input) -> Result<Output, CompileError> {
 
     let cil = try!(slp_transform_hir_to_cil::transpile(&ir));
 
-    let cst = try!(slp_transform_cil_to_cst::untype_module(&cil));
+    let cst = try!(slp_transform_cil_to_cst::untype_module(&cil, &input.kernel_name));
 
     let cl_binary = slp_transform_cst_printer::Binary::from_cir(&cst);
 
+    let dimensions = (cst.kernel_dimensions.0,
+                      cst.kernel_dimensions.1,
+                      cst.kernel_dimensions.2);
     Ok(Output {
         code: cl_binary,
         binds: cst.binds,
+        kernel_name: cst.kernel_name,
+        dimensions: dimensions,
     })
 }
 

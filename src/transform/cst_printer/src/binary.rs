@@ -733,7 +733,7 @@ fn print_rootdefinition_kernel(kernel: &Kernel, printer: &mut Printer) {
     printer.space();
     printer.print("void");
     printer.space();
-    printer.print("MyKernel");
+    printer.print(&kernel.name);
     if kernel.params.len() == 0 {
         printer.print("(");
         printer.print(")");

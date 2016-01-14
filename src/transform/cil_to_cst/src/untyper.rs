@@ -21,13 +21,21 @@ enum GlobalType {
 struct Context {
     global_name_map: HashMap<GlobalType, dst::Identifier>,
     local_scope: Option<HashMap<src::LocalId, dst::Identifier>>,
+    input_kernel_name: String,
+    output_kernel_name: Option<String>,
+    output_kernel_dimension: Option<dst::Dimension>,
 }
 
 impl Context {
-    fn from_globals(globals: &src::GlobalDeclarations) -> Result<Context, UntyperError> {
+    fn from_globals(globals: &src::GlobalDeclarations,
+                    kernel_name: &str)
+                    -> Result<Context, UntyperError> {
         let mut context = Context {
             global_name_map: HashMap::new(),
             local_scope: None,
+            input_kernel_name: kernel_name.to_string(),
+            output_kernel_name: None,
+            output_kernel_dimension: None,
         };
 
         // Insert global variables
@@ -473,20 +481,27 @@ fn untype_root_definition(root: &src::RootDefinition,
         }
         src::RootDefinition::Kernel(ref kernel) => {
             context.push_scope(&kernel.local_declarations);
+            let name = context.input_kernel_name.clone();
+            let dim = kernel.group_dimensions.clone();
             let k = dst::RootDefinition::Kernel(dst::Kernel {
+                name: name.clone(),
                 params: try!(result_map(untype_kernel_param, &kernel.params, context)),
                 body: try!(result_map(untype_statement, &kernel.body, context)),
-                group_dimensions: kernel.group_dimensions.clone(),
+                group_dimensions: dim.clone(),
             });
             context.pop_scope();
+            assert_eq!(context.output_kernel_name, None);
+            assert_eq!(context.output_kernel_dimension, None);
+            context.output_kernel_name = Some(name);
+            context.output_kernel_dimension = Some(dim);
             k
         }
     })
 }
 
-pub fn untype_module(module: &src::Module) -> Result<dst::Module, UntyperError> {
+pub fn untype_module(module: &src::Module, kernel_name: &str) -> Result<dst::Module, UntyperError> {
 
-    let mut context = try!(Context::from_globals(&module.global_declarations));
+    let mut context = try!(Context::from_globals(&module.global_declarations, kernel_name));
 
     let mut final_defs = vec![];
     let mut fragment_list = module.fragments.keys().collect::<Vec<_>>();
@@ -503,9 +518,14 @@ pub fn untype_module(module: &src::Module) -> Result<dst::Module, UntyperError> 
                                    &mut context));
     final_defs.append(&mut defs);
 
+    let kernel_name = context.output_kernel_name.expect("No kernel");
+    let dimension = context.output_kernel_dimension.expect("No kernel");
+
     Ok(dst::Module {
         root_definitions: final_defs,
         binds: module.binds.clone(),
         required_extensions: module.required_extensions.clone(),
+        kernel_name: kernel_name,
+        kernel_dimensions: dimension,
     })
 }
