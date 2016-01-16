@@ -339,6 +339,10 @@ pub enum InterpolationModifier {
 }
 
 /// Storage type for global variables
+///
+/// extern not supported because constant buffers exist
+///
+/// uniform not supported because constant buffers exist
 #[derive(PartialEq, Debug, Clone)]
 pub enum GlobalStorage {
     // Input from outside the kernel (default)
@@ -348,8 +352,7 @@ pub enum GlobalStorage {
     Static,
 
     /// Shared between every thread in the work group
-    GroupShared, /* extern not supported because constant buffers exist
-                  * uniform not supported because constant buffers exist */
+    GroupShared,
 }
 
 impl Default for GlobalStorage {
@@ -359,6 +362,8 @@ impl Default for GlobalStorage {
 }
 
 /// Binding type for parameters
+///
+/// uniform not supported because constant buffers exist
 #[derive(PartialEq, Debug, Clone)]
 pub enum InputModifier {
     /// Function input
@@ -366,7 +371,7 @@ pub enum InputModifier {
     /// Function output (must be written)
     Out,
     /// Function input and output
-    InOut, // uniform not supported because constant buffers exist
+    InOut,
 }
 
 impl Default for InputModifier {
