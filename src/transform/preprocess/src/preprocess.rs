@@ -608,7 +608,7 @@ fn get_macro_end(remaining: &str) -> &str {
 }
 
 fn preprocess_command<'a>(buffer: &mut IntermediateText,
-                          include_handler: &IncludeHandler,
+                          include_handler: &mut IncludeHandler,
                           command: &'a str,
                           location: FileLocation,
                           macros: &mut Vec<Macro>,
@@ -859,7 +859,7 @@ fn preprocess_command<'a>(buffer: &mut IntermediateText,
 }
 
 fn preprocess_file(buffer: &mut IntermediateText,
-                   include_handler: &IncludeHandler,
+                   include_handler: &mut IncludeHandler,
                    file: &str,
                    macros: &mut Vec<Macro>,
                    condition_chain: &mut ConditionChain)
@@ -921,7 +921,7 @@ fn preprocess_file(buffer: &mut IntermediateText,
 }
 
 pub fn preprocess(input: &str,
-                  include_handler: &IncludeHandler)
+                  include_handler: &mut IncludeHandler)
                   -> Result<PreprocessedText, PreprocessError> {
 
     let mut intermediate_text = IntermediateText::new();
@@ -941,7 +941,7 @@ pub fn preprocess(input: &str,
 }
 
 pub fn preprocess_single(input: &str) -> Result<PreprocessedText, PreprocessError> {
-    preprocess(input, &NullIncludeHandler)
+    preprocess(input, &mut NullIncludeHandler)
 }
 
 #[test]

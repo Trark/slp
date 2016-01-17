@@ -53,10 +53,10 @@ pub struct Output {
     pub dimensions: (u64, u64, u64),
 }
 
-pub fn hlsl_to_cl(input: Input) -> Result<Output, CompileError> {
+pub fn hlsl_to_cl(mut input: Input) -> Result<Output, CompileError> {
 
     let preprocessed = try!(slp_transform_preprocess::preprocess(&input.main_file,
-                                                                 &*input.file_loader));
+                                                                 &mut *input.file_loader));
 
     let tokens = try!(slp_transform_lexer::lex(&preprocessed));
 

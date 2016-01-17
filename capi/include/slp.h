@@ -6,6 +6,8 @@ extern "C" {
 struct slp_hlsl_to_cl_input {
     char const* entry_point;
     char const* main_file;
+    char const* (*include_handler)(void*, char const*);
+    void* user_data;
     char const* kernel_name;
 };
 

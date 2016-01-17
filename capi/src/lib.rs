@@ -8,15 +8,19 @@ use std::ffi::CString;
 use std::mem;
 use std::ptr;
 use std::thread;
-use slp::shared::NullIncludeHandler;
+use slp::shared::IncludeHandler;
 use slp::shared::KernelParamSlot;
 use slp::sequence::hlsl_to_cl::Input;
 use slp::sequence::hlsl_to_cl::hlsl_to_cl;
+use libc::c_char;
+use libc::c_void;
 
 #[repr(C)]
 pub struct slp_hlsl_to_cl_input {
     pub entry_point: *const libc::c_char,
     pub main_file: *const libc::c_char,
+    pub include_handler: extern "C" fn(*mut c_void, *const c_char) -> *const c_char,
+    pub user_data: *mut c_void,
     pub kernel_name: *const libc::c_char,
 }
 
@@ -86,6 +90,27 @@ pub struct slp_hlsl_to_cl_output {
     pub dim_z: u64,
 }
 
+pub struct CIncludeHandler {
+    pub include_handler: extern "C" fn(*mut c_void, *const c_char) -> *const c_char,
+    pub user_data: *mut c_void,
+}
+
+impl IncludeHandler for CIncludeHandler {
+    fn load(&mut self, file_name: &str) -> Result<String, ()> {
+        let c_name = CString::new(file_name).expect("expect file_name in CIncludeHandler");
+        let c_user_data = self.user_data as *mut c_void;
+        let data = (self.include_handler)(c_user_data, c_name.as_ptr());
+        if data == ptr::null() {
+            Err(())
+        } else {
+            let ret = unsafe { CStr::from_ptr(data).to_string_lossy().into_owned() };
+            Ok(ret)
+        }
+    }
+}
+
+unsafe impl Send for CIncludeHandler {}
+
 #[no_mangle]
 pub unsafe extern "C" fn slp_hlsl_to_cl(input: slp_hlsl_to_cl_input) -> slp_hlsl_to_cl_output {
 
@@ -96,11 +121,16 @@ pub unsafe extern "C" fn slp_hlsl_to_cl(input: slp_hlsl_to_cl_input) -> slp_hlsl
         let main_file = CStr::from_ptr(input.main_file).to_string_lossy().into_owned();
         let kernel_name = CStr::from_ptr(input.kernel_name).to_string_lossy().into_owned();
 
+        let include_handler = CIncludeHandler {
+            include_handler: input.include_handler,
+            user_data: input.user_data,
+        };
+
         let join_handle_res = thread::Builder::new().stack_size(8 * 1024 * 1024).spawn(move || {
 
             let input = Input {
                 entry_point: entry_point,
-                file_loader: Box::new(NullIncludeHandler),
+                file_loader: Box::new(include_handler),
                 main_file: main_file,
                 kernel_name: kernel_name,
             };

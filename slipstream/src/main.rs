@@ -41,7 +41,7 @@ struct FileLoader {
 }
 
 impl IncludeHandler for FileLoader {
-    fn load(&self, file_name: &str) -> Result<String, ()> {
+    fn load(&mut self, file_name: &str) -> Result<String, ()> {
         let file_path = Path::new(file_name);
         let mut file_res = File::open(file_path);
         if file_path.is_relative() {
