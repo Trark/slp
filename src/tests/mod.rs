@@ -128,7 +128,7 @@ fn include() {
 
     struct TestFileLoader;
     impl IncludeHandler for TestFileLoader {
-        fn load(&self, file_name: &str) -> Result<String, ()> {
+        fn load(&mut self, file_name: &str) -> Result<String, ()> {
             match file_name.as_ref() {
                 "aux.csh" => Ok(include_str!("include_aux.hlsl").to_string()),
                 _ => Err(()),

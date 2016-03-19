@@ -92,7 +92,7 @@ impl From<hir::InputModifier> for RequiredVt {
 }
 
 impl Expression {
-    pub fn direct_to_hir_recur(&self, vt: RequiredVt) -> Result<hir::Expression, DirectToHirError> {
+    fn direct_to_hir_recur(&self, vt: RequiredVt) -> Result<hir::Expression, DirectToHirError> {
         match *self {
             Expression::Literal(ref lit) => Ok(hir::Expression::Literal(lit.clone())),
             Expression::Variable(ref var) => Ok(hir::Expression::Variable(var.clone())),

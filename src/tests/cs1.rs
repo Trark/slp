@@ -21,7 +21,7 @@ fn cs1_lex() {
     // changing them
     let cs1_str = CS1.to_string().replace("\r\n", "\n");
 
-    let cs1_preprocessed = preprocess(&cs1_str, &NullIncludeHandler).expect("cs1 failed preprocess");
+    let cs1_preprocessed = preprocess(&cs1_str, &mut NullIncludeHandler).expect("cs1 failed preprocess");
 
     let tokens_res = lex(&cs1_preprocessed);
 
