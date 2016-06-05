@@ -48,11 +48,11 @@ impl GlobalUsage {
         let mut image_writes = kernel_local_usage.image_writes.clone();
         for (_, current_usage) in &lfgus {
             image_reads = image_reads.union(&current_usage.image_reads)
-                                     .cloned()
-                                     .collect::<HashSet<_>>();
+                .cloned()
+                .collect::<HashSet<_>>();
             image_writes = image_writes.union(&current_usage.image_writes)
-                                       .cloned()
-                                       .collect::<HashSet<_>>();
+                .cloned()
+                .collect::<HashSet<_>>();
         }
         let mut prev = lfgus;
         loop {
@@ -61,17 +61,17 @@ impl GlobalUsage {
                 for (other_id, other_usage) in &prev {
                     if current_usage.functions.contains(&other_id) {
                         current_usage.globals = current_usage.globals
-                                                             .union(&other_usage.globals)
-                                                             .cloned()
-                                                             .collect::<HashSet<_>>();
+                            .union(&other_usage.globals)
+                            .cloned()
+                            .collect::<HashSet<_>>();
                         current_usage.cbuffers = current_usage.cbuffers
-                                                              .union(&other_usage.cbuffers)
-                                                              .cloned()
-                                                              .collect::<HashSet<_>>();
+                            .union(&other_usage.cbuffers)
+                            .cloned()
+                            .collect::<HashSet<_>>();
                         current_usage.functions = current_usage.functions
-                                                               .union(&other_usage.functions)
-                                                               .cloned()
-                                                               .collect::<HashSet<_>>();
+                            .union(&other_usage.functions)
+                            .cloned()
+                            .collect::<HashSet<_>>();
                     }
                 }
             }
@@ -82,17 +82,30 @@ impl GlobalUsage {
             }
         }
         let global_usages = prev;
-        let kernel_global_usage = kernel_local_usage.functions.iter().fold(
-            FunctionGlobalUsage { globals: kernel_local_usage.globals, cbuffers: kernel_local_usage.cbuffers, functions: HashSet::new() },
-            |mut global_usage, function_id| {
-                let other_usage = global_usages.get(function_id).expect("Kernel references unknown function");
-                global_usage.globals = global_usage.globals.union(&other_usage.globals).cloned().collect::<HashSet<_>>();
-                global_usage.cbuffers = global_usage.cbuffers.union(&other_usage.cbuffers).cloned().collect::<HashSet<_>>();
+        let kernel_global_usage =
+            kernel_local_usage.functions.iter().fold(FunctionGlobalUsage {
+                                                         globals: kernel_local_usage.globals,
+                                                         cbuffers: kernel_local_usage.cbuffers,
+                                                         functions: HashSet::new(),
+                                                     },
+                                                     |mut global_usage, function_id| {
+                let other_usage = global_usages.get(function_id)
+                    .expect("Kernel references unknown function");
+                global_usage.globals = global_usage.globals
+                    .union(&other_usage.globals)
+                    .cloned()
+                    .collect::<HashSet<_>>();
+                global_usage.cbuffers = global_usage.cbuffers
+                    .union(&other_usage.cbuffers)
+                    .cloned()
+                    .collect::<HashSet<_>>();
                 global_usage.functions.insert(*function_id);
-                global_usage.functions = global_usage.functions.union(&other_usage.functions).cloned().collect::<HashSet<_>>();
+                global_usage.functions = global_usage.functions
+                    .union(&other_usage.functions)
+                    .cloned()
+                    .collect::<HashSet<_>>();
                 global_usage
-            }
-        );
+            });
         let mut usage = GlobalUsage {
             kernel: kernel_global_usage,
             functions: HashMap::new(),
@@ -148,7 +161,8 @@ fn search_statement(statement: &Statement, usage: &mut LocalFunctionGlobalUsage)
         Statement::Expression(ref expr) => search_expression(expr, usage),
         Statement::Var(ref vd) => search_vardef(vd, usage),
         Statement::Block(ref sb) => search_scope_block(sb, usage),
-        Statement::If(ref cond, ref sb) | Statement::While(ref cond, ref sb) => {
+        Statement::If(ref cond, ref sb) |
+        Statement::While(ref cond, ref sb) => {
             search_expression(cond, usage);
             search_scope_block(sb, usage);
         }
@@ -203,7 +217,8 @@ fn search_initexpression(init: &ForInit, usage: &mut LocalFunctionGlobalUsage) {
 
 fn search_expression(expression: &Expression, usage: &mut LocalFunctionGlobalUsage) {
     match *expression {
-        Expression::Literal(_) | Expression::Variable(_) => {}
+        Expression::Literal(_) |
+        Expression::Variable(_) => {}
         Expression::Global(ref id) => {
             usage.globals.insert(id.clone());
         }

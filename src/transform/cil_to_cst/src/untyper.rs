@@ -140,23 +140,23 @@ impl Context {
 
     fn get_global_name(&self, id: &src::GlobalId) -> Result<dst::Identifier, UntyperError> {
         Ok(self.global_name_map
-               .get(&GlobalType::Variable(id.clone()))
-               .expect("untyper: no global")
-               .clone())
+            .get(&GlobalType::Variable(id.clone()))
+            .expect("untyper: no global")
+            .clone())
     }
 
     fn get_function_name(&self, id: &src::FunctionId) -> Result<dst::Identifier, UntyperError> {
         Ok(self.global_name_map
-               .get(&GlobalType::Function(id.clone()))
-               .expect("untyper: no function")
-               .clone())
+            .get(&GlobalType::Function(id.clone()))
+            .expect("untyper: no function")
+            .clone())
     }
 
     fn get_struct_name(&self, id: &src::StructId) -> Result<dst::Identifier, UntyperError> {
         Ok(self.global_name_map
-               .get(&GlobalType::Struct(id.clone()))
-               .expect("untyper: no struct")
-               .clone())
+            .get(&GlobalType::Struct(id.clone()))
+            .expect("untyper: no struct")
+            .clone())
     }
 
     fn get_local_name(&self, id: &src::LocalId) -> Result<dst::Identifier, UntyperError> {
@@ -287,15 +287,15 @@ fn untype_expression(expression: &src::Expression,
         src::Expression::Swizzle(ref expr, ref swizzle) => {
             dst::Expression::Swizzle(Box::new(try!(untype_expression(expr, context))),
                                      swizzle.iter()
-                                            .map(|swizzle_slot| {
-                                                match *swizzle_slot {
-                                                    src::SwizzleSlot::X => dst::SwizzleSlot::X,
-                                                    src::SwizzleSlot::Y => dst::SwizzleSlot::Y,
-                                                    src::SwizzleSlot::Z => dst::SwizzleSlot::Z,
-                                                    src::SwizzleSlot::W => dst::SwizzleSlot::W,
-                                                }
-                                            })
-                                            .collect::<Vec<_>>())
+                                         .map(|swizzle_slot| {
+                    match *swizzle_slot {
+                        src::SwizzleSlot::X => dst::SwizzleSlot::X,
+                        src::SwizzleSlot::Y => dst::SwizzleSlot::Y,
+                        src::SwizzleSlot::Z => dst::SwizzleSlot::Z,
+                        src::SwizzleSlot::W => dst::SwizzleSlot::W,
+                    }
+                })
+                                         .collect::<Vec<_>>())
         }
         src::Expression::ArraySubscript(ref arr, ref ind) => {
             dst::Expression::ArraySubscript(Box::new(try!(untype_expression(arr, context))),

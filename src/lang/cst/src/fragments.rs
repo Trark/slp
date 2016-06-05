@@ -28,9 +28,13 @@ impl Fragment {
                                     })];
                 for i in 0..dim_to_u32 {
                     let index = i as u64;
+                    let v1 = Expression::Variable(to_local.clone());
+                    let l1 = Expression::Literal(Literal::Int(index));
+                    let v2 = Expression::Variable(from_param.clone());
+                    let l2 = Expression::Literal(Literal::Int(index));
                     body.push(Statement::Expression(Expression::BinaryOperation(BinOp::Assignment,
-                        Box::new(Expression::ArraySubscript(Box::new(Expression::Variable(to_local.clone())), Box::new(Expression::Literal(Literal::Int(index))))),
-                        Box::new(Expression::ArraySubscript(Box::new(Expression::Variable(from_param.clone())), Box::new(Expression::Literal(Literal::Int(index))))),
+                        Box::new(Expression::ArraySubscript(Box::new(v1), Box::new(l1))),
+                        Box::new(Expression::ArraySubscript(Box::new(v2), Box::new(l2))),
                     )));
                 }
                 body.push(Statement::Return(Expression::Variable(to_local.clone())));
@@ -55,7 +59,10 @@ impl Fragment {
                 for i in 0..(dim_to.as_u32()) {
                     let index = i as u64;
                     body.push(Statement::Expression(Expression::BinaryOperation(BinOp::Assignment,
-                        Box::new(Expression::ArraySubscript(Box::new(Expression::Variable(to_local.clone())), Box::new(Expression::Literal(Literal::Int(index))))),
+                        Box::new(Expression::ArraySubscript(
+                            Box::new(Expression::Variable(to_local.clone())),
+                            Box::new(Expression::Literal(Literal::Int(index)))
+                        )),
                         Box::new(Expression::Variable(from_param.clone())),
                     )));
                 }

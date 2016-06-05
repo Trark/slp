@@ -71,12 +71,10 @@ impl IncludeHandler for FileLoader {
 
 fn main() {
     let args: Args = Docopt::new(USAGE).and_then(|d| d.decode()).unwrap_or_else(|e| e.exit());
-    let Args {
-        flag_entry_point,
-        flag_o: flag_output_file,
-        flag_I: flag_include_paths,
-        arg_source_file,
-    } = args;
+    let Args { flag_entry_point,
+               flag_o: flag_output_file,
+               flag_I: flag_include_paths,
+               arg_source_file } = args;
 
     let mut source_file = match File::open(&arg_source_file) {
         Ok(file) => file,

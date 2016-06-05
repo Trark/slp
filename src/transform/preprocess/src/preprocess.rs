@@ -371,7 +371,7 @@ impl SubstitutedSegment {
                         }
                         if after.len() > 0 {
                             try!(SubstitutedSegment::Text(after.to_string(), after_location)
-                                     .apply(macro_def, macro_defs, output));
+                                .apply(macro_def, macro_defs, output));
                         }
                         return Ok(());
                     }
@@ -426,10 +426,11 @@ impl SubstitutedText {
                             None => (remaining.len(), true),
                         };
                         let before = &remaining[..sz];
-                        intermediate_text.push_str(before, match line_map.get_file_location(&StreamLocation(loc)) {
-                            Ok(loc) => loc,
-                            Err(()) => panic!("bad file location"),
-                        });
+                        intermediate_text.push_str(before,
+                                      match line_map.get_file_location(&StreamLocation(loc)) {
+                                          Ok(loc) => loc,
+                                          Err(()) => panic!("bad file location"),
+                                      });
                         remaining = &remaining[sz..];
                         loc = loc + sz as u64;
                         if last {
@@ -650,8 +651,8 @@ fn preprocess_command<'a>(buffer: &mut IntermediateText,
                                 let next = &args[(sz + 1)..];
                                 let end = match next.find('\n') {
                                     Some(sz) => {
-                                        // Push a new line so the last line of the include file is on a
-                                        // separate line to the first line after the #include
+                                        // Push a new line so the last line of the include file is
+                                        // on a separate line to the first line after the #include
                                         buffer.push_str("\n", location);
                                         sz + 1
                                     }
@@ -723,9 +724,8 @@ fn preprocess_command<'a>(buffer: &mut IntermediateText,
                 let body = &args[..end].trim();
                 let remaining = &args[end..];
 
-                let resolved = try!(SubstitutedText::new(body, StreamLocation(0))
-                                        .apply_all(macros))
-                                   .resolve();
+                let resolved =
+                    try!(SubstitutedText::new(body, StreamLocation(0)).apply_all(macros)).resolve();
 
                 let resolved_str: &str = &resolved;
                 // Sneaky hack to make `#if COND // comment` work
@@ -838,8 +838,8 @@ fn preprocess_command<'a>(buffer: &mut IntermediateText,
 
                 let body = body.trim().replace("\\\n", "\n").replace("\\\r\n", "\r\n");
                 let subbed_body = try!(SubstitutedText::new(&body, StreamLocation(0))
-                                           .apply_all(&macros))
-                                      .resolve();
+                        .apply_all(&macros))
+                    .resolve();
                 let macro_def = try!(Macro::from_definition(&header, &subbed_body, location));
 
                 for current_macro in macros.iter() {
@@ -1012,18 +1012,18 @@ fn test_condition() {
 fn test_include() {
     struct TestFileLoader;
     impl IncludeHandler for TestFileLoader {
-        fn load(&self, file_name: &str) -> Result<String, ()> {
+        fn load(&mut self, file_name: &str) -> Result<String, ()> {
             Ok(match file_name.as_ref() {
-                   "1.csh" => "X",
-                   "2.csh" => "Y",
-                   _ => return Err(()),
-               }
-               .to_string())
+                    "1.csh" => "X",
+                    "2.csh" => "Y",
+                    _ => return Err(()),
+                }
+                .to_string())
         }
     }
 
     fn pf(contents: &str) -> Result<PreprocessedText, PreprocessError> {
-        preprocess(contents, &TestFileLoader)
+        preprocess(contents, &mut TestFileLoader)
     }
 
     // Unknown files should always fail

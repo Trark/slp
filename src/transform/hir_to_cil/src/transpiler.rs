@@ -252,6 +252,10 @@ struct Context {
     root_definitions: Vec<dst::RootDefinition>,
 }
 
+type VecRD = Vec<dst::RootDefinition>;
+type FragmentMap = HashMap<Fragment, dst::FunctionId>;
+type DestructResult = (VecRD, dst::GlobalDeclarations, FragmentMap);
+
 impl Context {
     fn from_globals(table: &src::GlobalTable,
                     globals: &src::GlobalDeclarations,
@@ -299,24 +303,22 @@ impl Context {
                     if is_global_lifted(gv) {
                         lifted_globals.insert(gv.id);
                         global_type_map.insert(gv.id, gv.global_type.clone());
-                        let cl_ty = try!(get_cl_global_type(&gv.id,
-                                                            &gv.global_type,
-                                                            &usage,
-                                                            &context));
+                        let cl_ty =
+                            try!(get_cl_global_type(&gv.id, &gv.global_type, &usage, &context));
                         context.global_type_map.insert(gv.id.clone(), cl_ty);
                         context.lifted_global_names.insert(gv.id.clone(),
                                                            globals.globals
-                                                                  .get(&gv.id)
-                                                                  .expect("global does not exist")
-                                                                  .clone());
+                                                               .get(&gv.id)
+                                                               .expect("global does not exist")
+                                                               .clone());
                     }
                 }
                 src::RootDefinition::ConstantBuffer(ref cb) => {
                     context.lifted_cbuffer_names.insert(cb.id.clone(),
                                                         globals.constants
-                                                               .get(&cb.id)
-                                                               .expect("cbuffer does not exist")
-                                                               .clone());
+                                                            .get(&cb.id)
+                                                            .expect("cbuffer does not exist")
+                                                            .clone());
                 }
                 _ => {}
             }
@@ -346,8 +348,8 @@ impl Context {
             rw_keys.sort();
             for global_entry_key in rw_keys {
                 let global_entry = table.rw_resources
-                                        .get(global_entry_key)
-                                        .expect("bad rw key key");
+                    .get(global_entry_key)
+                    .expect("bad rw key key");
                 context.kernel_arguments.push(GlobalArgument::Global(global_entry.id.clone()));
                 binds.write_map.insert(*global_entry_key, current);
                 current = current + 1;
@@ -359,30 +361,29 @@ impl Context {
                 &src::RootDefinition::Function(ref func) => {
                     let param_types = func.params.iter().fold(vec![], |mut param_types, param| {
                         match param.param_type.1 {
-                            src::InputModifier::InOut | src::InputModifier::Out => {
-                                param_types.push(ParamType::Pointer)
-                            }
+                            src::InputModifier::InOut |
+                            src::InputModifier::Out => param_types.push(ParamType::Pointer),
                             src::InputModifier::In => param_types.push(ParamType::Normal),
                         };
                         param_types
                     });
-                    let function_global_usage = usage.functions.get(&func.id).unwrap_or_else(|| {
-                        panic!("analysis missing function")
-                    });
+                    let function_global_usage = usage.functions
+                        .get(&func.id)
+                        .unwrap_or_else(|| panic!("analysis missing function"));
 
                     let mut global_args: Vec<GlobalArgument> = vec![];
 
                     let mut c_keys = function_global_usage.cbuffers
-                                                          .iter()
-                                                          .collect::<Vec<&src::ConstantBufferId>>();
+                        .iter()
+                        .collect::<Vec<&src::ConstantBufferId>>();
                     c_keys.sort();
                     for id in c_keys {
                         global_args.push(GlobalArgument::ConstantBuffer(id.clone()));
                     }
 
                     let mut g_keys = function_global_usage.globals
-                                                          .iter()
-                                                          .collect::<Vec<&src::GlobalId>>();
+                        .iter()
+                        .collect::<Vec<&src::GlobalId>>();
                     g_keys.sort();
                     for id in g_keys {
                         if lifted_globals.contains(id) {
@@ -553,10 +554,10 @@ impl Context {
                                pointers: &[src::VariableId],
                                id: &src::FunctionId) {
         let additional_arguments = self.function_decl_map
-                                       .get(id)
-                                       .expect("function does not exist")
-                                       .additional_arguments
-                                       .clone();
+            .get(id)
+            .expect("function does not exist")
+            .additional_arguments
+            .clone();
         self.push_scope_with_additional_args(scope_block, pointers, &additional_arguments)
     }
 
@@ -648,10 +649,7 @@ impl Context {
         decls
     }
 
-    fn destruct(self)
-                -> (Vec<dst::RootDefinition>,
-                    dst::GlobalDeclarations,
-                    HashMap<Fragment, dst::FunctionId>) {
+    fn destruct(self) -> DestructResult {
         let mut decls = dst::GlobalDeclarations {
             globals: HashMap::new(),
             structs: HashMap::new(),
@@ -834,8 +832,8 @@ fn write_func(name: &'static str,
               args: &[dst::Expression])
               -> Result<dst::Expression, TranspileError> {
     let args_vec = args.into_iter()
-                       .map(|e| e.clone())
-                       .collect::<Vec<dst::Expression>>();
+        .map(|e| e.clone())
+        .collect::<Vec<dst::Expression>>();
     Ok(dst::Expression::UntypedIntrinsic(name.to_string(), args_vec))
 }
 
@@ -915,18 +913,9 @@ fn transpile_intrinsic1(intrinsic: &src::Intrinsic1,
                        false,
                        context)
         }
-        I::AbsF |
-        I::AbsF2 |
-        I::AbsF3 |
-        I::AbsF4 => write_func("fabs", &[e1]),
-        I::Acos |
-        I::Acos2 |
-        I::Acos3 |
-        I::Acos4 => write_func("acos", &[e1]),
-        I::Asin |
-        I::Asin2 |
-        I::Asin3 |
-        I::Asin4 => write_func("asin", &[e1]),
+        I::AbsF | I::AbsF2 | I::AbsF3 | I::AbsF4 => write_func("fabs", &[e1]),
+        I::Acos | I::Acos2 | I::Acos3 | I::Acos4 => write_func("acos", &[e1]),
+        I::Asin | I::Asin2 | I::Asin3 | I::Asin4 => write_func("asin", &[e1]),
         I::AsIntU => write_func("as_int", &[e1]),
         I::AsIntU2 => write_func("as_int2", &[e1]),
         I::AsIntU3 => write_func("as_int3", &[e1]),
@@ -955,14 +944,8 @@ fn transpile_intrinsic1(intrinsic: &src::Intrinsic1,
         I::AsFloatF2 => write_func("as_float2", &[e1]),
         I::AsFloatF3 => write_func("as_float3", &[e1]),
         I::AsFloatF4 => write_func("as_float4", &[e1]),
-        I::Cos |
-        I::Cos2 |
-        I::Cos3 |
-        I::Cos4 => write_func("cos", &[e1]),
-        I::Exp |
-        I::Exp2 |
-        I::Exp3 |
-        I::Exp4 => write_func("exp", &[e1]),
+        I::Cos | I::Cos2 | I::Cos3 | I::Cos4 => write_func("cos", &[e1]),
+        I::Exp | I::Exp2 | I::Exp3 | I::Exp4 => write_func("exp", &[e1]),
         I::F16ToF32 => {
             context.required_extensions.insert(dst::Extension::KhrFp16);
             let input_16u = try!(write_cast(dst::Type::Scalar(dst::Scalar::UInt),
@@ -991,10 +974,7 @@ fn transpile_intrinsic1(intrinsic: &src::Intrinsic1,
                        false,
                        context)
         }
-        I::Floor |
-        I::Floor2 |
-        I::Floor3 |
-        I::Floor4 => write_func("floor", &[e1]),
+        I::Floor | I::Floor2 | I::Floor3 | I::Floor4 => write_func("floor", &[e1]),
         I::IsNaN => {
             // OpenCL isnan returns 1 for true or 0 for false
             // Cast to bool to get boolean result
@@ -1007,18 +987,11 @@ fn transpile_intrinsic1(intrinsic: &src::Intrinsic1,
         I::IsNaN2 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
         I::IsNaN3 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
         I::IsNaN4 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
-        I::Length1 |
-        I::Length2 |
-        I::Length3 |
-        I::Length4 => write_func("length", &[e1]),
-        I::Normalize1 |
-        I::Normalize2 |
-        I::Normalize3 |
-        I::Normalize4 => write_func("normalize", &[e1]),
-        I::Saturate |
-        I::Saturate2 |
-        I::Saturate3 |
-        I::Saturate4 => {
+        I::Length1 | I::Length2 | I::Length3 | I::Length4 => write_func("length", &[e1]),
+        I::Normalize1 | I::Normalize2 | I::Normalize3 | I::Normalize4 => {
+            write_func("normalize", &[e1])
+        }
+        I::Saturate | I::Saturate2 | I::Saturate3 | I::Saturate4 => {
             let zero = dst::Expression::Literal(dst::Literal::Float(0f32));
             let one = dst::Expression::Literal(dst::Literal::Float(1f32));
             write_func("clamp", &[e1, zero, one])
@@ -1058,14 +1031,8 @@ fn transpile_intrinsic1(intrinsic: &src::Intrinsic1,
                        false,
                        context)
         }
-        I::Sin |
-        I::Sin2 |
-        I::Sin3 |
-        I::Sin4 => write_func("sin", &[e1]),
-        I::Sqrt |
-        I::Sqrt2 |
-        I::Sqrt3 |
-        I::Sqrt4 => write_func("sqrt", &[e1]),
+        I::Sin | I::Sin2 | I::Sin3 | I::Sin4 => write_func("sin", &[e1]),
+        I::Sqrt | I::Sqrt2 | I::Sqrt3 | I::Sqrt4 => write_func("sqrt", &[e1]),
     }
 }
 
@@ -1143,34 +1110,13 @@ fn transpile_intrinsic2(intrinsic: &src::Intrinsic2,
         I::DotI2 => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
         I::DotI3 => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
         I::DotI4 => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
-        I::DotF1 |
-        I::DotF2 |
-        I::DotF3 |
-        I::DotF4 => write_func("dot", &[e1, e2]),
-        I::MinI |
-        I::MinI2 |
-        I::MinI3 |
-        I::MinI4 => write_func("min", &[e1, e2]),
-        I::MinF |
-        I::MinF2 |
-        I::MinF3 |
-        I::MinF4 => write_func("fmin", &[e1, e2]),
-        I::MaxI |
-        I::MaxI2 |
-        I::MaxI3 |
-        I::MaxI4 => write_func("max", &[e1, e2]),
-        I::MaxF |
-        I::MaxF2 |
-        I::MaxF3 |
-        I::MaxF4 => write_func("fmax", &[e1, e2]),
-        I::Pow |
-        I::Pow2 |
-        I::Pow3 |
-        I::Pow4 => write_func("pow", &[e1, e2]),
-        I::Step |
-        I::Step2 |
-        I::Step3 |
-        I::Step4 => write_func("step", &[e1, e2]),
+        I::DotF1 | I::DotF2 | I::DotF3 | I::DotF4 => write_func("dot", &[e1, e2]),
+        I::MinI | I::MinI2 | I::MinI3 | I::MinI4 => write_func("min", &[e1, e2]),
+        I::MinF | I::MinF2 | I::MinF3 | I::MinF4 => write_func("fmin", &[e1, e2]),
+        I::MaxI | I::MaxI2 | I::MaxI3 | I::MaxI4 => write_func("max", &[e1, e2]),
+        I::MaxF | I::MaxF2 | I::MaxF3 | I::MaxF4 => write_func("fmax", &[e1, e2]),
+        I::Pow | I::Pow2 | I::Pow3 | I::Pow4 => write_func("pow", &[e1, e2]),
+        I::Step | I::Step2 | I::Step3 | I::Step4 => write_func("step", &[e1, e2]),
         I::BufferLoad(_) |
         I::RWBufferLoad(_) |
         I::StructuredBufferLoad(_) |
@@ -1180,7 +1126,8 @@ fn transpile_intrinsic2(intrinsic: &src::Intrinsic2,
         I::Texture2DLoad(ref data_type) |
         I::RWTexture2DLoad(ref data_type) => {
             let (func_name, read_type) = match data_type.0 {
-                src::DataLayout::Scalar(ref scalar) | src::DataLayout::Vector(ref scalar, _) => {
+                src::DataLayout::Scalar(ref scalar) |
+                src::DataLayout::Vector(ref scalar, _) => {
                     let dim = dst::VectorDimension::Four;
                     match *scalar {
                         src::ScalarType::Int => {
@@ -1228,7 +1175,11 @@ fn transpile_intrinsic2(intrinsic: &src::Intrinsic2,
             });
             Ok(dst::Expression::Deref(Box::new(dst::Expression::Cast(
                 dst::Type::Pointer(dst::AddressSpace::Global, ty),
-                Box::new(dst::Expression::BinaryOperation(dst::BinOp::Add, Box::new(e1), Box::new(e2)))
+                Box::new(dst::Expression::BinaryOperation(
+                    dst::BinOp::Add,
+                    Box::new(e1),
+                    Box::new(e2)
+                ))
             ))))
         }
     }
@@ -1253,23 +1204,16 @@ fn transpile_intrinsic3(intrinsic: &src::Intrinsic3,
         I::ClampF2 => write_func("clamp", &[e1, e2, e3]),
         I::ClampF3 => write_func("clamp", &[e1, e2, e3]),
         I::ClampF4 => write_func("clamp", &[e1, e2, e3]),
-        I::Lerp |
-        I::Lerp2 |
-        I::Lerp3 |
-        I::Lerp4 => write_func("mix", &[e1, e2, e3]),
-        I::Sincos |
-        I::Sincos2 |
-        I::Sincos3 |
-        I::Sincos4 => {
+        I::Lerp | I::Lerp2 | I::Lerp3 | I::Lerp4 => write_func("mix", &[e1, e2, e3]),
+        I::Sincos | I::Sincos2 | I::Sincos3 | I::Sincos4 => {
             let cos_val = try!(address_of(e3));
             let f = Box::new(try!(write_func("sincos", &[e1, cos_val])));
             let binop = dst::Expression::BinaryOperation(dst::BinOp::Assignment, Box::new(e2), f);
             Ok(dst::Expression::Cast(dst::Type::Void, Box::new(binop)))
         }
-        I::SmoothStep |
-        I::SmoothStep2 |
-        I::SmoothStep3 |
-        I::SmoothStep4 => write_func("smoothstep", &[e1, e2, e3]),
+        I::SmoothStep | I::SmoothStep2 | I::SmoothStep3 | I::SmoothStep4 => {
+            write_func("smoothstep", &[e1, e2, e3])
+        }
         I::RWTexture2DStore(ref data_type) => {
             // If we detect a write to an image location, emit
             // a write_image function. We can't currently handle ending
@@ -1315,9 +1259,8 @@ fn transpile_intrinsic3(intrinsic: &src::Intrinsic3,
                 I::RWByteAddressBufferStore4 => dst::Type::Vector(st, dst::VectorDimension::Four),
                 _ => unreachable!(),
             });
-            let binop = dst::Expression::BinaryOperation(dst::BinOp::Add,
-                                                         Box::new(e1),
-                                                         Box::new(e2));
+            let binop =
+                dst::Expression::BinaryOperation(dst::BinOp::Add, Box::new(e1), Box::new(e2));
             Ok(dst::Expression::BinaryOperation(
                 dst::BinOp::Assignment,
                 Box::new(dst::Expression::Deref(Box::new(dst::Expression::Cast(
@@ -1624,16 +1567,19 @@ fn write_cast(source_cl_type: dst::Type,
             match source_cl_type {
                 // Vector to bool cast
                 dst::Type::Vector(_, _) => {
-                    dst::Expression::Cast(dest_cl_type.clone(), Box::new(dst::Expression::Swizzle(Box::new(cl_expr), vec![dst::SwizzleSlot::X])))
+                    dst::Expression::Cast(dest_cl_type.clone(), Box::new(
+                        dst::Expression::Swizzle(
+                            Box::new(cl_expr),
+                            vec![dst::SwizzleSlot::X]
+                        )
+                    ))
                 }
                 // Scalar to bool cast
-                dst::Type::Bool | dst::Type::Scalar(_) => {
-                    dst::Expression::Cast(dest_cl_type, Box::new(cl_expr))
-                }
+                dst::Type::Bool |
+                dst::Type::Scalar(_) => dst::Expression::Cast(dest_cl_type, Box::new(cl_expr)),
                 _ => {
-                    return Err(TranspileError::Internal("source of bool cast is not a numeric \
-                                                         type"
-                                                            .to_string()))
+                    let err = "source of bool cast is not a numeric type";
+                    return Err(TranspileError::Internal(err.to_string()));
                 }
             }
         }
@@ -1646,16 +1592,20 @@ fn write_cast(source_cl_type: dst::Type,
                 }
                 // Vector to scalar cast, swizzle + cast
                 dst::Type::Vector(_, _) => {
-                    dst::Expression::Cast(dest_cl_type.clone(), Box::new(dst::Expression::Swizzle(Box::new(cl_expr), vec![dst::SwizzleSlot::X])))
+                    dst::Expression::Cast(dest_cl_type.clone(), Box::new(dst::Expression::Swizzle(
+                        Box::new(cl_expr),
+                        vec![dst::SwizzleSlot::X])
+                    ))
                 }
                 // Scalar to scalar cast
-                dst::Type::Bool | dst::Type::Scalar(_) => {
+                dst::Type::Bool |
+                dst::Type::Scalar(_) => {
                     dst::Expression::Cast(dest_cl_type.clone(), Box::new(cl_expr))
                 }
                 _ => {
                     return Err(TranspileError::Internal("source of scalar cast is not a numeric \
                                                          type"
-                                                            .to_string()))
+                        .to_string()))
                 }
             }
         }
@@ -1682,11 +1632,10 @@ fn write_cast(source_cl_type: dst::Type,
                 }
                 // Vector to different type vector cast, make a function to do the work
                 dst::Type::Vector(from_scalar_type, from_dim) => {
-                    let cast_func_id =
-                        context.fetch_fragment(Fragment::VectorCast(from_scalar_type,
-                                                                    scalar.clone(),
-                                                                    from_dim,
-                                                                    to_dim.clone()));
+                    let cast_func_id = context.fetch_fragment(Fragment::VectorCast(from_scalar_type,
+                                                             scalar.clone(),
+                                                             from_dim,
+                                                             to_dim.clone()));
                     dst::Expression::Call(cast_func_id, vec![cl_expr])
                 }
                 // Scalar to vector cast, make a function to do the work
@@ -1701,7 +1650,7 @@ fn write_cast(source_cl_type: dst::Type,
                 _ => {
                     return Err(TranspileError::Internal("source of vector cast is not a numeric \
                                                          type"
-                                                            .to_string()))
+                        .to_string()))
                 }
             }
         }
@@ -1816,9 +1765,8 @@ fn transpile_expression(expression: &src::Expression,
         &src::Expression::Cast(ref cast_type, ref expr) => {
             let dest_cl_type = try!(transpile_type(cast_type, context));
             let cl_expr = try!(transpile_expression(expr, context));
-            let source_ir_type = try!(src::TypeParser::get_expression_type(expr,
-                                                                           &context.type_context))
-                                     .0;
+            let source_ir_type =
+                try!(src::TypeParser::get_expression_type(expr, &context.type_context)).0;
             let (source_cl_type, untyped) = match transpile_type(&source_ir_type, context) {
                 Ok(ty) => (ty, false),
                 Err(TranspileError::IntsMustBeTyped) => {
@@ -1949,8 +1897,8 @@ fn transpile_statement(statement: &src::Statement,
                                              cl_update,
                                              Box::new(dst::Statement::Block(cl_statements)));
             let mut block_contents = defs.into_iter()
-                                         .map(|d| dst::Statement::Var(d))
-                                         .collect::<Vec<_>>();
+                .map(|d| dst::Statement::Var(d))
+                .collect::<Vec<_>>();
             block_contents.push(cl_for);
             Ok(block_contents)
         }
@@ -1984,7 +1932,8 @@ fn transpile_param(param: &src::FunctionParam,
     let &src::ParamType(ref ty_ast, ref it, ref interp) = &param.param_type;
     let ty = match *it {
         src::InputModifier::In => try!(transpile_type(ty_ast, context)),
-        src::InputModifier::Out | src::InputModifier::InOut => {
+        src::InputModifier::Out |
+        src::InputModifier::InOut => {
             // Only allow out params to work on Private address space
             // as we don't support generating multiple function for each
             // address space (and can't use __generic as it's 2.0)
@@ -2084,19 +2033,17 @@ fn transpile_structdefinition(structdefinition: &src::StructDefinition,
     Ok(dst::RootDefinition::Struct(dst::StructDefinition {
         id: try!(context.get_struct_name(&structdefinition.id)),
         members: try!(structdefinition.members
-                                      .iter()
-                                      .fold(Ok(vec![]), |result: Result<Vec<dst::StructMember>,
-                                                            TranspileError>,
-                                             member| {
-                                          let mut vec = try!(result);
-                                          let dst_member = dst::StructMember {
-                                              name: member.name.clone(),
-                                              typename: try!(transpile_type(&member.typename,
-                                                                            context)),
-                                          };
-                                          vec.push(dst_member);
-                                          Ok(vec)
-                                      })),
+            .iter()
+            .fold(Ok(vec![]),
+                  |result: Result<Vec<dst::StructMember>, TranspileError>, member| {
+                let mut vec = try!(result);
+                let dst_member = dst::StructMember {
+                    name: member.name.clone(),
+                    typename: try!(transpile_type(&member.typename, context)),
+                };
+                vec.push(dst_member);
+                Ok(vec)
+            })),
     }))
 }
 
@@ -2150,7 +2097,8 @@ fn transpile_functiondefinition(func: &src::FunctionDefinition,
     // so the context can deref them
     let out_params = func.params.iter().fold(vec![], |mut out_params, param| {
         match param.param_type.1 {
-            src::InputModifier::InOut | src::InputModifier::Out => {
+            src::InputModifier::InOut |
+            src::InputModifier::Out => {
                 out_params.push(param.id);
             }
             src::InputModifier::In => {}
@@ -2305,7 +2253,10 @@ fn test_transpile() {
         root_definitions: vec![
             hst::RootDefinition::GlobalVariable(hst::GlobalVariable {
                 global_type: hst::Type::from_object(hst::ObjectType::Buffer(
-                    hst::DataType(hst::DataLayout::Scalar(hst::ScalarType::Int), hst::TypeModifier::default())
+                    hst::DataType(
+                        hst::DataLayout::Scalar(hst::ScalarType::Int),
+                        hst::TypeModifier::default()
+                    )
                 )).into(),
                 defs: vec![hst::GlobalVariableName {
                     name: "g_myInBuffer".to_string(),
@@ -2317,14 +2268,22 @@ fn test_transpile() {
             hst::RootDefinition::Function(hst::FunctionDefinition {
                 name: "myFunc".to_string(),
                 returntype: hst::Type::void(),
-                params: vec![hst::FunctionParam { name: "x".to_string(), param_type: hst::Type::uint().into(), semantic: None }],
+                params: vec![hst::FunctionParam {
+                    name: "x".to_string(),
+                    param_type: hst::Type::uint().into(),
+                    semantic: None
+                }],
                 body: vec![],
                 attributes: vec![],
             }),
             hst::RootDefinition::Function(hst::FunctionDefinition {
                 name: "myFunc".to_string(),
                 returntype: hst::Type::void(),
-                params: vec![hst::FunctionParam { name: "x".to_string(), param_type: hst::Type::float().into(), semantic: None }],
+                params: vec![hst::FunctionParam {
+                    name: "x".to_string(),
+                    param_type: hst::Type::float().into(),
+                    semantic: None
+                }],
                 body: vec![],
                 attributes: vec![],
             }),
@@ -2349,15 +2308,21 @@ fn test_transpile() {
                     hst::Statement::Expression(Located::none(
                         hst::Expression::BinaryOperation(hst::BinOp::Assignment,
                             Box::new(Located::none(hst::Expression::ArraySubscript(
-                                Box::new(Located::none(hst::Expression::Variable("g_myInBuffer".to_string()))),
-                                Box::new(Located::none(hst::Expression::Literal(hst::Literal::Int(0))))
+                                Box::new(Located::none(
+                                    hst::Expression::Variable("g_myInBuffer".to_string())
+                                )),
+                                Box::new(Located::none(
+                                    hst::Expression::Literal(hst::Literal::Int(0))
+                                ))
                             ))),
                             Box::new(Located::none(hst::Expression::Literal(hst::Literal::Int(4))))
                         )
                     )),
                     hst::Statement::Expression(Located::none(
                         hst::Expression::Call(
-                            Box::new(Located::none(hst::Expression::Variable("myFunc".to_string()))),
+                            Box::new(Located::none(
+                                hst::Expression::Variable("myFunc".to_string())
+                            )),
                             vec![
                                 Located::none(hst::Expression::Variable("b".to_string()))
                             ]

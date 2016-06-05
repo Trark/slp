@@ -42,8 +42,11 @@ macro_rules! token (
             } else {
                 match $i[0] {
                     LexToken($inp, _) => IResult::Done(&$i[1..], $i[0].clone()),
-                    _ => IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::WrongToken), $i))
-                } 
+                    _ => IResult::Error(Err::Position(
+                        ErrorKind::Custom(ParseErrorReason::WrongToken),
+                        $i
+                    ))
+                }
             };
             res
         }
@@ -56,7 +59,10 @@ macro_rules! token (
             } else {
                 match $i[0] {
                     $inp => IResult::Done(&$i[1..], $res),
-                    _ => IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::WrongToken), $i))
+                    _ => IResult::Error(Err::Position(
+                        ErrorKind::Custom(ParseErrorReason::WrongToken),
+                        $i
+                    ))
                 }
             }
         }
@@ -77,7 +83,7 @@ impl SymbolTable {
 
 type ParseResult<'t, T> = IResult<&'t [LexToken], T, ParseErrorReason>;
 
-trait Parse : Sized {
+trait Parse: Sized {
     type Output;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self::Output>;
 }
@@ -165,7 +171,8 @@ fn parse_datalayout_str(typename: &str) -> Option<DataLayout> {
             assert_eq!(rest.len(), 0);
             Some(ty)
         }
-        IResult::Incomplete(_) | IResult::Error(_) => None,
+        IResult::Incomplete(_) |
+        IResult::Error(_) => None,
     }
 }
 
@@ -173,13 +180,16 @@ impl Parse for DataLayout {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], _: &SymbolTable) -> ParseResult<'t, Self> {
 
+        type ParseIResult<'a, T> = IResult<&'a [LexToken], T, ParseErrorReason>;
+
         // Parse a vector dimension as a token
-        fn parse_digit(input: &[LexToken]) -> IResult<&[LexToken], u32, ParseErrorReason> {
+        fn parse_digit(input: &[LexToken]) -> ParseIResult<u32> {
             token!(input, LexToken(Token::LiteralInt(i), _) => i as u32)
         }
 
+
         // Parse scalar type as a full token
-        fn parse_scalartype(input: &[LexToken]) -> IResult<&[LexToken], ScalarType, ParseErrorReason> {
+        fn parse_scalartype(input: &[LexToken]) -> ParseIResult<ScalarType> {
             if input.len() == 0 {
                 IResult::Incomplete(Needed::Size(1))
             } else {
@@ -190,16 +200,24 @@ impl Parse for DataLayout {
                                 if rest.len() == 0 {
                                     IResult::Done(&input[1..], ty)
                                 } else {
-                                    IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType), input))
+                                    IResult::Error(Err::Position(
+                                        ErrorKind::Custom(ParseErrorReason::UnknownType),
+                                        input
+                                    ))
                                 }
                             }
                             IResult::Incomplete(rem) => IResult::Incomplete(rem),
-                            IResult::Error(_) => IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType), input)),
+                            IResult::Error(_) => IResult::Error(Err::Position(
+                                ErrorKind::Custom(ParseErrorReason::UnknownType),
+                                input
+                            )),
                         }
                     }
                     _ => {
-                        IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::WrongToken),
-                                                     input))
+                        IResult::Error(Err::Position(
+                            ErrorKind::Custom(ParseErrorReason::WrongToken),
+                            input
+                        ))
                     }
                 }
             }
@@ -226,7 +244,7 @@ impl Parse for DataLayout {
                                 token!(Token::LeftAngleBracket(_)) ~
                                 scalar: parse_scalartype ~
                                 token!(Token::Comma) ~
-                                x: parse_digit ~ 
+                                x: parse_digit ~
                                 token!(Token::Comma) ~
                                 y: parse_digit ~
                                 token!(Token::RightAngleBracket(_)),
@@ -236,7 +254,10 @@ impl Parse for DataLayout {
                         _ => {
                             match parse_datalayout_str(&name[..]) {
                                 Some(ty) => IResult::Done(&input[1..], ty),
-                                None => IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType), input)),
+                                None => IResult::Error(Err::Position(
+                                    ErrorKind::Custom(ParseErrorReason::UnknownType),
+                                    input
+                                )),
                             }
                         }
                     }
@@ -383,12 +404,17 @@ impl Parse for ObjectType {
                     "InputPatch" => ParseType::InputPatch,
                     "OutputPatch" => ParseType::OutputPatch,
 
-                    _ => return IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType), input)),
+                    _ => return IResult::Error(Err::Position(
+                        ErrorKind::Custom(ParseErrorReason::UnknownType),
+                        input
+                    )),
                 }
             }
             _ => {
-                return IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType),
-                                                    input))
+                return IResult::Error(Err::Position(
+                    ErrorKind::Custom(ParseErrorReason::UnknownType),
+                    input
+                ))
             }
         };
 
@@ -614,16 +640,41 @@ fn parse_arraydim<'t>(input: &'t [LexToken],
 
 fn expr_paren<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
     alt!(input,
-        chain!(start: token!(Token::LeftParen) ~ expr: parse!(Expression, st) ~ token!(Token::RightParen), || { Located::new(expr.to_node(), start.to_loc()) }) |
-        parse!(VariableName, st) => { |name: Located<String>| { Located::new(Expression::Variable(name.node), name.location) } } |
-        token!(LexToken(Token::LiteralInt(i), ref loc) => Located::new(Expression::Literal(Literal::UntypedInt(i)), loc.clone())) |
-        token!(LexToken(Token::LiteralUInt(i), ref loc) => Located::new(Expression::Literal(Literal::UInt(i)), loc.clone())) |
-        token!(LexToken(Token::LiteralLong(i), ref loc) => Located::new(Expression::Literal(Literal::Long(i)), loc.clone())) |
-        token!(LexToken(Token::LiteralHalf(i), ref loc) => Located::new(Expression::Literal(Literal::Half(i)), loc.clone())) |
-        token!(LexToken(Token::LiteralFloat(i), ref loc) => Located::new(Expression::Literal(Literal::Float(i)), loc.clone())) |
-        token!(LexToken(Token::LiteralDouble(i), ref loc) => Located::new(Expression::Literal(Literal::Double(i)), loc.clone())) |
-        token!(LexToken(Token::True, ref loc) => Located::new(Expression::Literal(Literal::Bool(true)), loc.clone())) |
-        token!(LexToken(Token::False, ref loc) => Located::new(Expression::Literal(Literal::Bool(false)), loc.clone()))
+        chain!(
+            start: token!(Token::LeftParen) ~
+            expr: parse!(Expression, st) ~
+            token!(Token::RightParen),
+            || {
+                Located::new(expr.to_node(), start.to_loc())
+            }
+        ) |
+        parse!(VariableName, st) => {
+            |name: Located<String>| { Located::new(Expression::Variable(name.node), name.location) }
+        } |
+        token!(LexToken(Token::LiteralInt(i), ref loc) =>
+            Located::new(Expression::Literal(Literal::UntypedInt(i)), loc.clone())
+        ) |
+        token!(LexToken(Token::LiteralUInt(i), ref loc) =>
+            Located::new(Expression::Literal(Literal::UInt(i)), loc.clone())
+        ) |
+        token!(LexToken(Token::LiteralLong(i), ref loc) =>
+            Located::new(Expression::Literal(Literal::Long(i)), loc.clone())
+        ) |
+        token!(LexToken(Token::LiteralHalf(i), ref loc) =>
+            Located::new(Expression::Literal(Literal::Half(i)), loc.clone())
+        ) |
+        token!(LexToken(Token::LiteralFloat(i), ref loc) =>
+            Located::new(Expression::Literal(Literal::Float(i)), loc.clone())
+        ) |
+        token!(LexToken(Token::LiteralDouble(i), ref loc) =>
+            Located::new(Expression::Literal(Literal::Double(i)), loc.clone())
+        ) |
+        token!(LexToken(Token::True, ref loc) =>
+            Located::new(Expression::Literal(Literal::Bool(true)), loc.clone())
+        ) |
+        token!(LexToken(Token::False, ref loc) =>
+            Located::new(Expression::Literal(Literal::Bool(false)), loc.clone())
+        )
     )
 }
 
@@ -643,13 +694,29 @@ fn expr_p1<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
                          -> ParseResult<'t, Located<Precedence1Postfix>> {
         chain!(input,
             right: alt!(
-                chain!(start: token!(Token::Plus) ~ token!(Token::Plus), || { Located::new(Precedence1Postfix::Increment, start.to_loc()) }) |
-                chain!(start: token!(Token::Minus) ~ token!(Token::Minus), || { Located::new(Precedence1Postfix::Decrement, start.to_loc()) }) |
+                chain!(
+                    start: token!(Token::Plus) ~
+                    token!(Token::Plus),
+                    || {
+                        Located::new(Precedence1Postfix::Increment, start.to_loc())
+                    }
+                ) |
+                chain!(
+                    start: token!(Token::Minus) ~
+                    token!(Token::Minus),
+                    || {
+                        Located::new(Precedence1Postfix::Decrement, start.to_loc())
+                    }
+                ) |
                 chain!(
                     start: token!(Token::LeftParen) ~
                     params: opt!(chain!(
                         first: parse!(ExpressionNoSeq, st) ~
-                        rest: many0!(chain!(token!(Token::Comma) ~ next: parse!(ExpressionNoSeq, st), || { next })),
+                        rest: many0!(chain!(
+                            token!(Token::Comma) ~
+                            next: parse!(ExpressionNoSeq, st),
+                            || { next }
+                        )),
                         || {
                             let mut v = Vec::new();
                             v.push(first);
@@ -660,12 +727,19 @@ fn expr_p1<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
                         }
                     )) ~
                     token!(Token::RightParen),
-                    || { Located::new(Precedence1Postfix::Call(match params.clone() { Some(v) => v, None => Vec::new() }), start.to_loc()) }
+                    || { Located::new(Precedence1Postfix::Call(
+                        match params.clone() { Some(v) => v, None => Vec::new() }
+                    ), start.to_loc()) }
                 ) |
                 chain!(
                     token!(Token::Period) ~
                     member: parse!(VariableName, st),
-                    || { Located::new(Precedence1Postfix::Member(member.node.clone()), member.location.clone()) }
+                    || {
+                        Located::new(
+                            Precedence1Postfix::Member(member.node.clone()),
+                            member.location.clone()
+                        )
+                    }
                 ) |
                 chain!(
                     start: token!(Token::LeftSquareBracket) ~
@@ -707,11 +781,27 @@ fn expr_p1<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
             let mut final_expression = left;
             for val in rights.iter() {
                 final_expression = Located::new(match val.node.clone() {
-                    Precedence1Postfix::Increment => Expression::UnaryOperation(UnaryOp::PostfixIncrement, Box::new(final_expression)),
-                    Precedence1Postfix::Decrement => Expression::UnaryOperation(UnaryOp::PostfixDecrement, Box::new(final_expression)),
-                    Precedence1Postfix::Call(params) => Expression::Call(Box::new(final_expression), params),
-                    Precedence1Postfix::ArraySubscript(expr) => Expression::ArraySubscript(Box::new(final_expression), Box::new(expr)),
-                    Precedence1Postfix::Member(name) => Expression::Member(Box::new(final_expression), name),
+                    Precedence1Postfix::Increment => {
+                        Expression::UnaryOperation(
+                            UnaryOp::PostfixIncrement,
+                            Box::new(final_expression)
+                        )
+                    },
+                    Precedence1Postfix::Decrement => {
+                        Expression::UnaryOperation(
+                            UnaryOp::PostfixDecrement,
+                            Box::new(final_expression)
+                        )
+                    },
+                    Precedence1Postfix::Call(params) => {
+                        Expression::Call(Box::new(final_expression), params)
+                    },
+                    Precedence1Postfix::ArraySubscript(expr) => {
+                        Expression::ArraySubscript(Box::new(final_expression), Box::new(expr))
+                    },
+                    Precedence1Postfix::Member(name) => {
+                        Expression::Member(Box::new(final_expression), name)
+                    },
                 }, loc.clone())
             }
             final_expression
@@ -721,11 +811,25 @@ fn expr_p1<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
 
 fn unaryop_prefix<'t>(input: &'t [LexToken]) -> ParseResult<'t, Located<UnaryOp>> {
     alt!(input,
-        chain!(start: token!(Token::Plus) ~ token!(Token::Plus), || { Located::new(UnaryOp::PrefixIncrement, start.to_loc()) }) |
-        chain!(start: token!(Token::Minus) ~ token!(Token::Minus), || { Located::new(UnaryOp::PrefixDecrement, start.to_loc()) }) |
+        chain!(
+            start: token!(Token::Plus) ~
+            token!(Token::Plus),
+            || {
+                Located::new(UnaryOp::PrefixIncrement, start.to_loc())
+            }
+        ) |
+        chain!(
+            start: token!(Token::Minus) ~
+            token!(Token::Minus),
+            || {
+                Located::new(UnaryOp::PrefixDecrement, start.to_loc())
+            }
+        ) |
         token!(Token::Plus) => { |s: LexToken| Located::new(UnaryOp::Plus, s.to_loc()) } |
         token!(Token::Minus) => { |s: LexToken| Located::new(UnaryOp::Minus, s.to_loc()) } |
-        token!(Token::ExclamationPoint) => { |s: LexToken| Located::new(UnaryOp::LogicalNot, s.to_loc()) } |
+        token!(Token::ExclamationPoint) => {
+            |s: LexToken| Located::new(UnaryOp::LogicalNot, s.to_loc())
+        } |
         token!(Token::Tilde) => { |s: LexToken| Located::new(UnaryOp::BitwiseNot, s.to_loc()) }
     )
 }
@@ -735,7 +839,12 @@ fn expr_p2<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
         chain!(
             unary: unaryop_prefix ~
             expr: call!(expr_p2, st),
-            || Located::new(Expression::UnaryOperation(unary.node.clone(), Box::new(expr)), unary.location.clone())
+            || {
+                Located::new(Expression::UnaryOperation(
+                    unary.node.clone(),
+                    Box::new(expr)
+                ), unary.location.clone())
+            }
         ) |
         chain!(
             start: token!(Token::LeftParen) ~
@@ -820,8 +929,16 @@ fn expr_p5<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
 
     fn parse_op(input: &[LexToken]) -> IResult<&[LexToken], BinOp, ParseErrorReason> {
         alt!(input,
-            chain!(token!(Token::LeftAngleBracket(FollowedBy::Token)) ~ token!(Token::LeftAngleBracket(_)), || { BinOp::LeftShift }) |
-            chain!(token!(Token::RightAngleBracket(FollowedBy::Token)) ~ token!(Token::RightAngleBracket(_)), || { BinOp::RightShift })
+            chain!(
+                token!(Token::LeftAngleBracket(FollowedBy::Token)) ~
+                token!(Token::LeftAngleBracket(_)),
+                || BinOp::LeftShift
+            ) |
+            chain!(
+                token!(Token::RightAngleBracket(FollowedBy::Token)) ~
+                token!(Token::RightAngleBracket(_)),
+                || BinOp::RightShift
+            )
         )
     }
 
@@ -846,8 +963,16 @@ fn expr_p6<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
 
     fn parse_op(input: &[LexToken]) -> IResult<&[LexToken], BinOp, ParseErrorReason> {
         alt!(input,
-            chain!(token!(Token::LeftAngleBracket(FollowedBy::Token)) ~ token!(Token::Equals), || { BinOp::LessEqual }) |
-            chain!(token!(Token::RightAngleBracket(FollowedBy::Token)) ~ token!(Token::Equals), || { BinOp::GreaterEqual }) |
+            chain!(
+                token!(Token::LeftAngleBracket(FollowedBy::Token)) ~
+                token!(Token::Equals),
+                || BinOp::LessEqual
+            ) |
+            chain!(
+                token!(Token::RightAngleBracket(FollowedBy::Token)) ~
+                token!(Token::Equals),
+                || BinOp::GreaterEqual
+            ) |
             token!(Token::LeftAngleBracket(_)) => { |_| BinOp::LessThan } |
             token!(Token::RightAngleBracket(_)) => { |_| BinOp::GreaterThan }
         )
@@ -936,7 +1061,11 @@ fn expr_p11<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Loca
     chain!(input,
         left: call!(expr_p10, st) ~
         rights: many0!(chain!(
-            op: chain!(token!(Token::Ampersand(FollowedBy::Token)) ~ token!(Token::Ampersand(_)), || BinOp::BooleanAnd) ~
+            op: chain!(
+                token!(Token::Ampersand(FollowedBy::Token)) ~
+                token!(Token::Ampersand(_)),
+                || BinOp::BooleanAnd
+            ) ~
             right: call!(expr_p10, st),
             || (op, right)
         )),
@@ -948,7 +1077,11 @@ fn expr_p12<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Loca
     chain!(input,
         left: call!(expr_p11, st) ~
         rights: many0!(chain!(
-            op: chain!(token!(Token::VerticalBar(FollowedBy::Token)) ~ token!(Token::VerticalBar(_)), || BinOp::BooleanOr) ~
+            op: chain!(
+                token!(Token::VerticalBar(FollowedBy::Token)) ~
+                token!(Token::VerticalBar(_)),
+                || BinOp::BooleanOr
+            ) ~
             right: call!(expr_p11, st),
             || (op, right)
         )),
@@ -970,7 +1103,11 @@ fn expr_p13<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Loca
             match opt.clone() {
                 Some((left, right)) => {
                     let loc = main.location.clone();
-                    Located::new(Expression::TernaryConditional(Box::new(main), Box::new(left), Box::new(right)), loc)
+                    Located::new(Expression::TernaryConditional(
+                        Box::new(main),
+                        Box::new(left),
+                        Box::new(right)
+                    ), loc)
                 }
                 None => main,
             }
@@ -986,7 +1123,11 @@ fn expr_p14<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Loca
              chain!(token!(Token::Plus) ~ token!(Token::Equals), || BinOp::SumAssignment) |
              chain!(token!(Token::Minus) ~ token!(Token::Equals), || BinOp::DifferenceAssignment) |
              chain!(token!(Token::Asterix) ~ token!(Token::Equals), || BinOp::ProductAssignment) |
-             chain!(token!(Token::ForwardSlash) ~ token!(Token::Equals), || BinOp::QuotientAssignment) |
+             chain!(
+                token!(Token::ForwardSlash) ~
+                token!(Token::Equals),
+                || BinOp::QuotientAssignment
+             ) |
              chain!(token!(Token::Percent) ~ token!(Token::Equals), || BinOp::RemainderAssignment)
         )
     }
@@ -1149,7 +1290,10 @@ impl Parse for VarDef {
                     init: parse!(Initializer, st),
                     || LocalVariableName {
                         name: varname.to_node(),
-                        bind: match array_dim { Some(ref expr) => VariableBind::Array(expr.clone()), None => VariableBind::Normal },
+                        bind: match array_dim {
+                            Some(ref expr) => VariableBind::Array(expr.clone()),
+                            None => VariableBind::Normal
+                        },
                         init: init
                     }
                 )
@@ -1289,7 +1433,12 @@ impl Parse for Statement {
                 }
                 _ => {
                     // Try parsing a variable definition
-                    let err = match chain!(input, var: parse!(VarDef, st) ~ token!(Token::Semicolon), || Statement::Var(var)) {
+                    let vd = chain!(input,
+                        var: parse!(VarDef, st) ~
+                        token!(Token::Semicolon),
+                        || Statement::Var(var)
+                    );
+                    let err = match vd {
                         IResult::Done(rest, statement) => return IResult::Done(rest, statement),
                         IResult::Incomplete(rem) => return IResult::Incomplete(rem),
                         IResult::Error(e) => e,
@@ -1349,7 +1498,10 @@ impl Parse for StructMemberName {
             array_dim: opt!(call!(parse_arraydim, st)),
             || StructMemberName {
                 name: name.to_node(),
-                bind: match array_dim { Some(ref expr) => VariableBind::Array(expr.clone()), None => VariableBind::Normal },
+                bind: match array_dim {
+                    Some(ref expr) => VariableBind::Array(expr.clone()),
+                    None => VariableBind::Normal
+                },
             }
         )
     }
@@ -1393,7 +1545,10 @@ impl Parse for ConstantVariableName {
             array_dim: opt!(call!(parse_arraydim, st)),
             || ConstantVariableName {
                 name: name.to_node(),
-                bind: match array_dim { Some(ref expr) => VariableBind::Array(expr.clone()), None => VariableBind::Normal },
+                bind: match array_dim {
+                    Some(ref expr) => VariableBind::Array(expr.clone()),
+                    None => VariableBind::Normal
+                },
                 offset: None,
             }
         )
@@ -1481,7 +1636,10 @@ impl Parse for GlobalVariableName {
             init: parse!(Initializer, st),
             || GlobalVariableName {
                 name: name.to_node(),
-                bind: match array_dim { Some(ref expr) => VariableBind::Array(expr.clone()), None => VariableBind::Normal },
+                bind: match array_dim {
+                    Some(ref expr) => VariableBind::Array(expr.clone()),
+                    None => VariableBind::Normal
+                },
                 slot: slot,
                 init: init
             }
@@ -1883,17 +2041,25 @@ fn test_expr() {
     let expr = node::<Expression>;
 
     assert_eq!(expr(&[
-            LexToken(Token::Id(Identifier("a".to_string())), FileLocation(File::Unknown, Line(1), Column(1))),
+            LexToken(
+                Token::Id(Identifier("a".to_string())),
+                FileLocation(File::Unknown, Line(1), Column(1))
+            ),
             LexToken(Token::Asterix, FileLocation(File::Unknown, Line(1), Column(2))),
-            LexToken(Token::Id(Identifier("b".to_string())), FileLocation(File::Unknown, Line(1), Column(3))),
+            LexToken(
+                Token::Id(Identifier("b".to_string())),
+                FileLocation(File::Unknown, Line(1), Column(3))),
             LexToken(Token::Eof, FileLocation(File::Unknown, Line(1), Column(4)))
-        ][..]), IResult::Done(&[LexToken(Token::Eof, FileLocation(File::Unknown, Line(1), Column(4)))][..],
-        Located::loc(1, 1, Expression::BinaryOperation(
-            BinOp::Multiply,
-            bexp_var("a", 1, 1),
-            bexp_var("b", 1, 3)
-        ))
-    ));
+        ][..]),
+        IResult::Done(
+            &[LexToken(Token::Eof, FileLocation(File::Unknown, Line(1), Column(4)))][..],
+            Located::loc(1, 1, Expression::BinaryOperation(
+                BinOp::Multiply,
+                bexp_var("a", 1, 1),
+                bexp_var("b", 1, 3)
+            ))
+        )
+    );
 
     let expr_str = parse_from_str::<Expression>();
     let expr_str_fail = parse_result_from_str::<Expression>();
@@ -1923,48 +2089,84 @@ fn test_expr() {
 
     assert_eq!(expr_str("a-b+c"), Located::loc(1, 1, Expression::BinaryOperation(
         BinOp::Add,
-        Box::new(Located::loc(1, 1, Expression::BinaryOperation(BinOp::Subtract, bexp_var("a", 1, 1), bexp_var("b", 1, 3)))),
+        Box::new(Located::loc(1, 1, Expression::BinaryOperation(
+            BinOp::Subtract,
+            bexp_var("a", 1, 1),
+            bexp_var("b", 1, 3))
+        )),
         bexp_var("c", 1, 5)
     )));
     assert_eq!(expr_str("a-b*c"), Located::loc(1, 1, Expression::BinaryOperation(
         BinOp::Subtract,
         bexp_var("a", 1, 1),
-        Box::new(Located::loc(1, 3, Expression::BinaryOperation(BinOp::Multiply, bexp_var("b", 1, 3), bexp_var("c", 1, 5))))
+        Box::new(Located::loc(1, 3, Expression::BinaryOperation(
+            BinOp::Multiply,
+            bexp_var("b", 1, 3),
+            bexp_var("c", 1, 5))
+        ))
     )));
     assert_eq!(expr_str("a*b-c"), Located::loc(1, 1, Expression::BinaryOperation(
         BinOp::Subtract,
-        Box::new(Located::loc(1, 1, Expression::BinaryOperation(BinOp::Multiply, bexp_var("a", 1, 1), bexp_var("b", 1, 3)))),
+        Box::new(Located::loc(1, 1, Expression::BinaryOperation(
+            BinOp::Multiply,
+            bexp_var("a", 1, 1),
+            bexp_var("b", 1, 3))
+        )),
         bexp_var("c", 1, 5)
     )));
     assert_eq!(expr_str("a-b*c"), Located::loc(1, 1, Expression::BinaryOperation(
         BinOp::Subtract,
         bexp_var("a", 1, 1),
-        Box::new(Located::loc(1, 3, Expression::BinaryOperation(BinOp::Multiply, bexp_var("b", 1, 3), bexp_var("c", 1, 5))))
+        Box::new(Located::loc(1, 3, Expression::BinaryOperation(
+            BinOp::Multiply,
+            bexp_var("b", 1, 3),
+            bexp_var("c", 1, 5))
+        ))
     )));
     assert_eq!(expr_str("a*b-c"), Located::loc(1, 1, Expression::BinaryOperation(
         BinOp::Subtract,
-        Box::new(Located::loc(1, 1, Expression::BinaryOperation(BinOp::Multiply, bexp_var("a", 1, 1), bexp_var("b", 1, 3)))),
+        Box::new(Located::loc(1, 1, Expression::BinaryOperation(
+            BinOp::Multiply,
+            bexp_var("a", 1, 1),
+            bexp_var("b", 1, 3))
+        )),
         bexp_var("c", 1, 5)
     )));
     assert_eq!(expr_str("a*(b-c)"), Located::loc(1, 1, Expression::BinaryOperation(
         BinOp::Multiply,
         bexp_var("a", 1, 1),
-        Box::new(Located::loc(1, 3, Expression::BinaryOperation(BinOp::Subtract, bexp_var("b", 1, 4), bexp_var("c", 1, 6))))
+        Box::new(Located::loc(1, 3, Expression::BinaryOperation(
+            BinOp::Subtract,
+            bexp_var("b", 1, 4),
+            bexp_var("c", 1, 6))
+        ))
     )));
     assert_eq!(expr_str("a*b/c"), Located::loc(1, 1, Expression::BinaryOperation(
         BinOp::Divide,
-        Box::new(Located::loc(1, 1, Expression::BinaryOperation(BinOp::Multiply, bexp_var("a", 1, 1), bexp_var("b", 1, 3)))),
+        Box::new(Located::loc(1, 1, Expression::BinaryOperation(
+            BinOp::Multiply,
+            bexp_var("a", 1, 1),
+            bexp_var("b", 1, 3))
+        )),
         bexp_var("c", 1, 5)
     )));
     assert_eq!(expr_str("(a*b)/c"), Located::loc(1, 1, Expression::BinaryOperation(
         BinOp::Divide,
-        Box::new(Located::loc(1, 1, Expression::BinaryOperation(BinOp::Multiply, bexp_var("a", 1, 2), bexp_var("b", 1, 4)))),
+        Box::new(Located::loc(1, 1, Expression::BinaryOperation(
+            BinOp::Multiply,
+            bexp_var("a", 1, 2),
+            bexp_var("b", 1, 4))
+        )),
         bexp_var("c", 1, 7)
     )));
     assert_eq!(expr_str("a*(b/c)"), Located::loc(1, 1, Expression::BinaryOperation(
         BinOp::Multiply,
         bexp_var("a", 1, 1),
-        Box::new(Located::loc(1, 3, Expression::BinaryOperation(BinOp::Divide, bexp_var("b", 1, 4), bexp_var("c", 1, 6))))
+        Box::new(Located::loc(1, 3, Expression::BinaryOperation(
+            BinOp::Divide,
+            bexp_var("b", 1, 4),
+            bexp_var("c", 1, 6))
+        ))
     )));
 
     let numeric_cast = "(float3) x";
@@ -2173,19 +2375,29 @@ fn test_expr() {
                             1,
                             Expression::Member(bexp_var("array", 1, 1), "Load".to_string())));
     assert_eq!(expr_str("array.Load()"), Located::loc(1, 1,
-        Expression::Call(Box::new(Located::loc(1, 1, Expression::Member(bexp_var("array", 1, 1), "Load".to_string()))), vec![])
+        Expression::Call(Box::new(Located::loc(1, 1,
+            Expression::Member(bexp_var("array", 1, 1), "Load".to_string())
+        )), vec![])
     ));
     assert_eq!(expr_str(" array . Load ( ) "), Located::loc(1, 2,
-        Expression::Call(Box::new(Located::loc(1, 2, Expression::Member(bexp_var("array", 1, 2), "Load".to_string()))), vec![])
+        Expression::Call(Box::new(Located::loc(1, 2,
+            Expression::Member(bexp_var("array", 1, 2), "Load".to_string())
+        )), vec![])
     ));
     assert_eq!(expr_str("array.Load(a)"), Located::loc(1, 1,
-        Expression::Call(Box::new(Located::loc(1, 1, Expression::Member(bexp_var("array", 1, 1), "Load".to_string()))), vec![exp_var("a", 1, 12)])
+        Expression::Call(Box::new(Located::loc(1, 1,
+            Expression::Member(bexp_var("array", 1, 1), "Load".to_string())
+        )), vec![exp_var("a", 1, 12)])
     ));
     assert_eq!(expr_str("array.Load(a,b)"), Located::loc(1, 1,
-        Expression::Call(Box::new(Located::loc(1, 1, Expression::Member(bexp_var("array", 1, 1), "Load".to_string()))), vec![exp_var("a", 1, 12), exp_var("b", 1, 14)])
+        Expression::Call(Box::new(Located::loc(1, 1,
+            Expression::Member(bexp_var("array", 1, 1), "Load".to_string())
+        )), vec![exp_var("a", 1, 12), exp_var("b", 1, 14)])
     ));
     assert_eq!(expr_str("array.Load(a, b)"), Located::loc(1, 1,
-        Expression::Call(Box::new(Located::loc(1, 1, Expression::Member(bexp_var("array", 1, 1), "Load".to_string()))), vec![exp_var("a", 1, 12), exp_var("b", 1, 15)])
+        Expression::Call(Box::new(Located::loc(1, 1,
+            Expression::Member(bexp_var("array", 1, 1), "Load".to_string())
+        )), vec![exp_var("a", 1, 12), exp_var("b", 1, 15)])
     ));
 
     assert_eq!(expr_str("(float) b"),
@@ -2335,7 +2547,9 @@ fn test_statement() {
             local_type: Type::from_layout(TypeLayout::float()).into(),
             defs: vec![LocalVariableName {
                 name: "x".to_string(),
-                bind: VariableBind::Array(Some(Located::loc(1, 9, Expression::Literal(Literal::UntypedInt(3))))),
+                bind: VariableBind::Array(Some(Located::loc(1, 9,
+                    Expression::Literal(Literal::UntypedInt(3))
+                ))),
                 init: None,
             }]
         })
@@ -2344,59 +2558,95 @@ fn test_statement() {
     // Blocks
     assert_eq!(statement_str("{one();two();}"),
         Statement::Block(vec![
-            Statement::Expression(Located::loc(1, 2, Expression::Call(bexp_var("one", 1, 2), vec![]))),
-            Statement::Expression(Located::loc(1, 8, Expression::Call(bexp_var("two", 1, 8), vec![])))
+            Statement::Expression(Located::loc(1, 2,
+                Expression::Call(bexp_var("one", 1, 2), vec![])
+            )),
+            Statement::Expression(Located::loc(1, 8,
+                Expression::Call(bexp_var("two", 1, 8), vec![])
+            ))
         ])
     );
     assert_eq!(statement_str(" { one(); two(); } "),
         Statement::Block(vec![
-            Statement::Expression(Located::loc(1, 4, Expression::Call(bexp_var("one", 1, 4), vec![]))),
-            Statement::Expression(Located::loc(1, 11, Expression::Call(bexp_var("two", 1, 11), vec![])))
+            Statement::Expression(Located::loc(1, 4,
+                Expression::Call(bexp_var("one", 1, 4), vec![])
+            )),
+            Statement::Expression(Located::loc(1, 11,
+                Expression::Call(bexp_var("two", 1, 11), vec![])
+            ))
         ])
     );
 
     // If statement
     assert_eq!(statement_str("if(a)func();"),
-        Statement::If(exp_var("a", 1, 4), Box::new(Statement::Expression(Located::loc(1, 6, Expression::Call(bexp_var("func", 1, 6), vec![])))))
-    );
+        Statement::If(exp_var("a", 1, 4), Box::new(Statement::Expression(Located::loc(1, 6,
+            Expression::Call(bexp_var("func", 1, 6), vec![])))
+    )));
     assert_eq!(statement_str("if (a) func(); "),
-        Statement::If(exp_var("a", 1, 5), Box::new(Statement::Expression(Located::loc(1, 8, Expression::Call(bexp_var("func", 1, 8), vec![])))))
-    );
+        Statement::If(exp_var("a", 1, 5), Box::new(Statement::Expression(Located::loc(1, 8,
+            Expression::Call(bexp_var("func", 1, 8), vec![])))
+    )));
     assert_eq!(statement_str("if (a)\n{\n\tone();\n\ttwo();\n}"),
         Statement::If(exp_var("a", 1, 5), Box::new(Statement::Block(vec![
-            Statement::Expression(Located::loc(3, 2, Expression::Call(bexp_var("one", 3, 2), vec![]))),
-            Statement::Expression(Located::loc(4, 2, Expression::Call(bexp_var("two", 4, 2), vec![])))
+            Statement::Expression(Located::loc(3, 2,
+                Expression::Call(bexp_var("one", 3, 2), vec![])
+            )),
+            Statement::Expression(Located::loc(4, 2,
+                Expression::Call(bexp_var("two", 4, 2), vec![])
+            ))
         ])))
     );
 
     // If-else statement
     assert_eq!(statement_str("if (a) one(); else two();"),
         Statement::IfElse(exp_var("a", 1, 5),
-            Box::new(Statement::Expression(Located::loc(1, 8, Expression::Call(bexp_var("one", 1, 8), vec![])))),
-            Box::new(Statement::Expression(Located::loc(1, 20, Expression::Call(bexp_var("two", 1, 20), vec![]))))
+            Box::new(Statement::Expression(Located::loc(1, 8,
+                Expression::Call(bexp_var("one", 1, 8), vec![]))
+            )),
+            Box::new(Statement::Expression(Located::loc(1, 20,
+                Expression::Call(bexp_var("two", 1, 20), vec![]))
+            ))
         )
     );
 
     // While loops
     assert_eq!(statement_str("while (a)\n{\n\tone();\n\ttwo();\n}"),
         Statement::While(exp_var("a", 1, 8), Box::new(Statement::Block(vec![
-            Statement::Expression(Located::loc(3, 2, Expression::Call(bexp_var("one", 3, 2), vec![]))),
-            Statement::Expression(Located::loc(4, 2, Expression::Call(bexp_var("two", 4, 2), vec![])))
+            Statement::Expression(Located::loc(3, 2,
+                Expression::Call(bexp_var("one", 3, 2), vec![])
+            )),
+            Statement::Expression(Located::loc(4, 2,
+                Expression::Call(bexp_var("two", 4, 2), vec![])
+            ))
         ])))
     );
 
     // For loops
     assert_eq!(statement_str("for(a;b;c)func();"),
-        Statement::For(InitStatement::Expression(exp_var("a", 1, 5)), exp_var("b", 1, 7), exp_var("c", 1, 9), Box::new(
-            Statement::Expression(Located::loc(1, 11, Expression::Call(bexp_var("func", 1, 11), vec![])))
-        ))
+        Statement::For(
+            InitStatement::Expression(exp_var("a", 1, 5)), exp_var("b", 1, 7), exp_var("c", 1, 9),
+            Box::new(Statement::Expression(Located::loc(1, 11,
+                Expression::Call(bexp_var("func", 1, 11), vec![])
+            )))
+        )
     );
     assert_eq!(statement_str("for (uint i = 0; i; i++) { func(); }"),
         Statement::For(
-            InitStatement::Declaration(VarDef::one_with_expr("i", Type::uint().into(), Located::loc(1, 15, Expression::Literal(Literal::UntypedInt(0))))),
+            InitStatement::Declaration(VarDef::one_with_expr(
+                "i",
+                Type::uint().into(),
+                Located::loc(1, 15, Expression::Literal(Literal::UntypedInt(0)))
+            )),
             exp_var("i", 1, 18),
-            Located::loc(1, 21, Expression::UnaryOperation(UnaryOp::PostfixIncrement, bexp_var("i", 1, 21))),
-            Box::new(Statement::Block(vec![Statement::Expression(Located::loc(1, 28, Expression::Call(bexp_var("func", 1, 28), vec![])))]))
+            Located::loc(1, 21, Expression::UnaryOperation(
+                UnaryOp::PostfixIncrement,
+                bexp_var("i", 1, 21)
+            )),
+            Box::new(Statement::Block(vec![
+                Statement::Expression(Located::loc(1, 28,
+                    Expression::Call(bexp_var("func", 1, 28), vec![])
+                ))
+            ]))
         )
     );
 }
@@ -2413,8 +2663,12 @@ fn test_rootdefinition() {
     let test_struct_ast = StructDefinition {
         name: "MyStruct".to_string(),
         members: vec![
-            StructMember { ty: Type::uint(), defs: vec![StructMemberName { name: "a".to_string(), bind: VariableBind::Normal }] },
-            StructMember { ty: Type::float(), defs: vec![StructMemberName { name: "b".to_string(), bind: VariableBind::Normal }] },
+            StructMember { ty: Type::uint(), defs: vec![
+                StructMemberName { name: "a".to_string(), bind: VariableBind::Normal }
+            ] },
+            StructMember { ty: Type::float(), defs: vec![
+                StructMemberName { name: "b".to_string(), bind: VariableBind::Normal }
+            ] },
         ],
     };
     assert_eq!(structdefinition_str(test_struct_str),
@@ -2503,18 +2757,21 @@ fn test_rootdefinition() {
                        offset: None,
                    }],
     };
+    let test_cbuffer2_ast_xy_m1 = ConstantVariableName {
+        name: "x".to_string(),
+        bind: VariableBind::Normal,
+        offset: None,
+    };
+    let test_cbuffer2_ast_xy_m2 = ConstantVariableName {
+        name: "y".to_string(),
+        bind: VariableBind::Array(Some(Located::loc(1,
+                                                    60,
+                                                    Expression::Literal(Literal::UntypedInt(2))))),
+        offset: None,
+    };
     let test_cbuffer2_ast_xy = ConstantVariable {
         ty: Type::float(),
-        defs: vec![ConstantVariableName {
-                       name: "x".to_string(),
-                       bind: VariableBind::Normal,
-                       offset: None,
-                   },
-                   ConstantVariableName {
-                       name: "y".to_string(),
-                       bind: VariableBind::Array(Some(Located::loc(1, 60, Expression::Literal(Literal::UntypedInt(2))))),
-                       offset: None,
-                   }],
+        defs: vec![test_cbuffer2_ast_xy_m1, test_cbuffer2_ast_xy_m2],
     };
     let test_cbuffer2_ast = ConstantBuffer {
         name: "globals".to_string(),
@@ -2530,7 +2787,11 @@ fn test_rootdefinition() {
 
     let test_buffersrv_str = "Buffer g_myBuffer : register(t1);";
     let test_buffersrv_ast = GlobalVariable {
-        global_type: Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::Float, 4), TypeModifier::default()))).into(),
+        global_type:
+            Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::Float,
+                                                                             4),
+                                                          TypeModifier::default())))
+            .into(),
         defs: vec![GlobalVariableName {
             name: "g_myBuffer".to_string(),
             bind: VariableBind::Normal,
@@ -2545,7 +2806,10 @@ fn test_rootdefinition() {
 
     let test_buffersrv2_str = "Buffer<uint4> g_myBuffer : register(t1);";
     let test_buffersrv2_ast = GlobalVariable {
-        global_type: Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::UInt, 4), TypeModifier::default()))).into(),
+        global_type:
+            Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::UInt, 4),
+                                                          TypeModifier::default())))
+            .into(),
         defs: vec![GlobalVariableName {
             name: "g_myBuffer".to_string(),
             bind: VariableBind::Normal,
@@ -2560,7 +2824,10 @@ fn test_rootdefinition() {
 
     let test_buffersrv3_str = "Buffer<vector<int, 4>> g_myBuffer : register(t1);";
     let test_buffersrv3_ast = GlobalVariable {
-        global_type: Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::Int, 4), TypeModifier::default()))).into(),
+        global_type:
+            Type::from_object(ObjectType::Buffer(DataType(DataLayout::Vector(ScalarType::Int, 4),
+                                                          TypeModifier::default())))
+            .into(),
         defs: vec![GlobalVariableName {
             name: "g_myBuffer".to_string(),
             bind: VariableBind::Normal,
@@ -2575,7 +2842,10 @@ fn test_rootdefinition() {
 
     let test_buffersrv4_str = "StructuredBuffer<CustomType> g_myBuffer : register(t1);";
     let test_buffersrv4_ast = GlobalVariable {
-        global_type: Type::from_object(ObjectType::StructuredBuffer(StructuredType(StructuredLayout::Custom("CustomType".to_string()), TypeModifier::default()))).into(),
+        global_type: Type::from_object(ObjectType::StructuredBuffer(StructuredType(
+            StructuredLayout::Custom("CustomType".to_string()),
+            TypeModifier::default()
+        ))).into(),
         defs: vec![GlobalVariableName {
             name: "g_myBuffer".to_string(),
             bind: VariableBind::Normal,
@@ -2620,17 +2890,20 @@ fn test_rootdefinition() {
         Initializer::Expression(Located::loc(1, 36, Expression::Literal(Literal::UntypedInt(2)))),
         Initializer::Expression(Located::loc(1, 39, Expression::Literal(Literal::UntypedInt(3)))),
     ];
+    let test_const_arr_ast_gvn = GlobalVariableName {
+        name: "data".to_string(),
+        bind: VariableBind::Array(Some(Located::loc(1,
+                                                    23,
+                                                    Expression::Literal(Literal::UntypedInt(4))))),
+        slot: None,
+        init: Some(Initializer::Aggregate(test_const_arr_ast_lits)),
+    };
     let test_const_arr_ast = GlobalVariable {
         global_type: GlobalType(Type(TypeLayout::int(),
                                      TypeModifier { is_const: true, ..TypeModifier::default() }),
                                 GlobalStorage::Static,
                                 None),
-        defs: vec![GlobalVariableName {
-                       name: "data".to_string(),
-                       bind: VariableBind::Array(Some(Located::loc(1, 23, Expression::Literal(Literal::UntypedInt(4))))),
-                       slot: None,
-                       init: Some(Initializer::Aggregate(test_const_arr_ast_lits)),
-                   }],
+        defs: vec![test_const_arr_ast_gvn],
     };
     assert_eq!(globalvariable_str(test_const_arr_str),
                test_const_arr_ast.clone());
@@ -2638,14 +2911,17 @@ fn test_rootdefinition() {
                RootDefinition::GlobalVariable(test_const_arr_ast.clone()));
 
     let test_groupshared_str = "groupshared float4 local_data[32];";
+    let test_groupshared_ast_gvn = GlobalVariableName {
+        name: "local_data".to_string(),
+        bind: VariableBind::Array(Some(Located::loc(1,
+                                                    31,
+                                                    Expression::Literal(Literal::UntypedInt(32))))),
+        slot: None,
+        init: None,
+    };
     let test_groupshared_ast = GlobalVariable {
         global_type: GlobalType(Type::floatn(4), GlobalStorage::GroupShared, None),
-        defs: vec![GlobalVariableName {
-                       name: "local_data".to_string(),
-                       bind: VariableBind::Array(Some(Located::loc(1, 31, Expression::Literal(Literal::UntypedInt(32))))),
-                       slot: None,
-                       init: None,
-                   }],
+        defs: vec![test_groupshared_ast_gvn],
     };
     assert_eq!(globalvariable_str(test_groupshared_str),
                test_groupshared_ast.clone());

@@ -417,7 +417,8 @@ impl Intrinsic for Intrinsic2 {
                 // value is a bool with the same dimensions as dty
                 Type::from_data(dty.clone()).transform_scalar(ScalarType::Bool).to_rvalue()
             }
-            Intrinsic2::Assignment(ref ty) | Intrinsic2::AssignSwizzle(ref ty, _) => {
+            Intrinsic2::Assignment(ref ty) |
+            Intrinsic2::AssignSwizzle(ref ty, _) => {
                 // ty is the type of the assigned value, so it the return value
                 ty.clone().to_lvalue()
             }

@@ -7,7 +7,7 @@ authors = ["Trark"]
 path = "src/shared"
 
 [dependencies.slp_lang_htk]
-path = "src/lang/hir"
+path = "src/lang/htk"
 
 [dependencies.slp_lang_hst]
 path = "src/lang/hst"

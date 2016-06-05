@@ -282,7 +282,7 @@ pub enum VariableExpression {
     Function(UnresolvedFunction),
 }
 
-pub trait ExpressionContext : StructIdFinder + ir::TypeContext + ReduceContext {
+pub trait ExpressionContext: StructIdFinder + ir::TypeContext + ReduceContext {
     fn find_variable(&self, name: &String) -> Result<VariableExpression, TyperError>;
     fn find_struct_member(&self,
                           id: &ir::StructId,
@@ -320,8 +320,8 @@ impl VariableBlock {
             Entry::Occupied(occupied) => {
                 Err(TyperError::ValueAlreadyDefined(name,
                                                     occupied.get()
-                                                            .0
-                                                            .to_error_type(),
+                                                        .0
+                                                        .to_error_type(),
                                                     typename.to_error_type()))
             }
             Entry::Vacant(vacant) => {
@@ -378,9 +378,7 @@ impl TypeBlock {
         match (self.struct_ids.entry(name.clone()),
                self.struct_names.entry(id.clone()),
                self.struct_definitions.entry(id.clone())) {
-            (Entry::Vacant(id_entry),
-             Entry::Vacant(name_entry),
-             Entry::Vacant(def_entry)) => {
+            (Entry::Vacant(id_entry), Entry::Vacant(name_entry), Entry::Vacant(def_entry)) => {
                 id_entry.insert(id.clone());
                 name_entry.insert(name.clone());
                 def_entry.insert(members);
@@ -397,10 +395,10 @@ impl TypeBlock {
         match self.struct_definitions.get(id) {
             Some(def) => {
                 def.get(member_name)
-                   .map(|ty| ty.clone())
-                   .ok_or(TyperError::UnknownTypeMember(ir::Type::from_struct(id.clone())
-                                                            .to_error_type(),
-                                                        member_name.clone()))
+                    .map(|ty| ty.clone())
+                    .ok_or(TyperError::UnknownTypeMember(ir::Type::from_struct(id.clone())
+                                                             .to_error_type(),
+                                                         member_name.clone()))
             }
             None => Err(TyperError::UnknownType(ir::Type::from_struct(id.clone()).to_error_type())),
         }
@@ -415,9 +413,7 @@ impl TypeBlock {
         match (self.cbuffer_ids.entry(name.clone()),
                self.cbuffer_names.entry(id.clone()),
                self.cbuffer_definitions.entry(id.clone())) {
-            (Entry::Vacant(id_entry),
-             Entry::Vacant(name_entry),
-             Entry::Vacant(def_entry)) => {
+            (Entry::Vacant(id_entry), Entry::Vacant(name_entry), Entry::Vacant(def_entry)) => {
                 id_entry.insert(id.clone());
                 name_entry.insert(name.clone());
                 def_entry.insert(members);
@@ -1151,8 +1147,8 @@ fn parse_interpolationmodifier(im: &ast::InterpolationModifier)
     })
 }
 
-fn parse_globalstorage(local_storage: &ast::GlobalStorage) -> Result<ir::GlobalStorage, TyperError> {
-    Ok(match *local_storage {
+fn parse_globalstorage(ls: &ast::GlobalStorage) -> Result<ir::GlobalStorage, TyperError> {
+    Ok(match *ls {
         ast::GlobalStorage::Extern => ir::GlobalStorage::Extern,
         ast::GlobalStorage::Static => ir::GlobalStorage::Static,
         ast::GlobalStorage::GroupShared => ir::GlobalStorage::GroupShared,
@@ -1351,7 +1347,8 @@ fn apply_variable_bind(ty: ir::Type,
                     match evaluate_constexpr_int(&**dim_expr) {
                         Ok(val) => val,
                         Err(()) => {
-                            return Err(TyperError::ArrayDimensionsMustBeConstantExpression((**dim_expr).clone()))
+                            let p = (**dim_expr).clone();
+                            return Err(TyperError::ArrayDimensionsMustBeConstantExpression(p));
                         }
                     }
                 }
@@ -1544,8 +1541,7 @@ fn parse_statement(ast: &ast::Statement,
             let (statements, scoped_context) = try!(parse_statement_vec(statement_vec,
                                                                         scoped_context));
             let decls = scoped_context.destruct();
-            Ok((vec![ir::Statement::Block(ir::ScopeBlock(statements, decls))],
-                context))
+            Ok((vec![ir::Statement::Block(ir::ScopeBlock(statements, decls))], context))
         }
         &ast::Statement::If(ref cond, ref statement) => {
             let scoped_context = ScopeContext::from_scope(&context);
@@ -1559,8 +1555,7 @@ fn parse_statement(ast: &ast::Statement,
             let scope_block = try!(parse_scopeblock(true_statement, scoped_context));
             let scoped_context = ScopeContext::from_scope(&context);
             let else_block = try!(parse_scopeblock(false_statement, scoped_context));
-            Ok((vec![ir::Statement::IfElse(cond_ir, scope_block, else_block)],
-                context))
+            Ok((vec![ir::Statement::IfElse(cond_ir, scope_block, else_block)], context))
         }
         &ast::Statement::For(ref init, ref cond, ref iter, ref statement) => {
             let scoped_context = ScopeContext::from_scope(&context);
@@ -1568,8 +1563,7 @@ fn parse_statement(ast: &ast::Statement,
             let cond_ir = try!(parse_expr(cond, &scoped_context)).0;
             let iter_ir = try!(parse_expr(iter, &scoped_context)).0;
             let scope_block = try!(parse_scopeblock(statement, scoped_context));
-            Ok((vec![ir::Statement::For(init_ir, cond_ir, iter_ir, scope_block)],
-                context))
+            Ok((vec![ir::Statement::For(init_ir, cond_ir, iter_ir, scope_block)], context))
         }
         &ast::Statement::While(ref cond, ref statement) => {
             let scoped_context = ScopeContext::from_scope(&context);
@@ -1580,10 +1574,7 @@ fn parse_statement(ast: &ast::Statement,
         &ast::Statement::Return(ref expr) => {
             let (expr_ir, expr_ty) = try!(parse_expr(expr, &context));
             match ImplicitConversion::find(&expr_ty, &context.get_return_type().to_rvalue()) {
-                Ok(rhs_cast) => {
-                    Ok((vec![ir::Statement::Return(rhs_cast.apply(expr_ir))],
-                        context))
-                }
+                Ok(rhs_cast) => Ok((vec![ir::Statement::Return(rhs_cast.apply(expr_ir))], context)),
                 Err(()) => return Err(TyperError::WrongTypeInReturnStatement),
             }
         }
@@ -1862,9 +1853,8 @@ pub fn typeparse(ast: &ast::Module) -> Result<ir::Module, TyperError> {
     let mut root_definitions = vec![];
 
     for def in &ast.root_definitions {
-        let (mut def_ir, next_context) = try!(parse_rootdefinition(&def,
-                                                                   context,
-                                                                   &ast.entry_point.clone()));
+        let (mut def_ir, next_context) =
+            try!(parse_rootdefinition(&def, context, &ast.entry_point.clone()));
         root_definitions.append(&mut def_ir);
         context = next_context;
     }
@@ -1872,79 +1862,76 @@ pub fn typeparse(ast: &ast::Module) -> Result<ir::Module, TyperError> {
     let analysis = GlobalUsage::analyse(&root_definitions);
 
     let root_definitions = root_definitions.into_iter()
-                                           .filter(|def| {
-                                               match *def {
-                                                   ir::RootDefinition::GlobalVariable(ref gv) => {
-                                                       analysis.kernel.globals.contains(&gv.id)
-                                                   }
-                                                   ir::RootDefinition::ConstantBuffer(ref cb) => {
-                                                       analysis.kernel.cbuffers.contains(&cb.id)
-                                                   }
-                                                   ir::RootDefinition::Function(ref func) => {
-                                                       analysis.kernel.functions.contains(&func.id)
-                                                   }
-                                                   _ => true,
-                                               }
-                                           })
-                                           .collect::<Vec<_>>();
+        .filter(|def| {
+            match *def {
+                ir::RootDefinition::GlobalVariable(ref gv) => {
+                    analysis.kernel.globals.contains(&gv.id)
+                }
+                ir::RootDefinition::ConstantBuffer(ref cb) => {
+                    analysis.kernel.cbuffers.contains(&cb.id)
+                }
+                ir::RootDefinition::Function(ref func) => {
+                    analysis.kernel.functions.contains(&func.id)
+                }
+                _ => true,
+            }
+        })
+        .collect::<Vec<_>>();
 
     // Gather remaining global declaration names
-    let global_declarations =
-        root_definitions.iter().fold(ir::GlobalDeclarations {
-                                         functions: HashMap::new(),
-                                         globals: HashMap::new(),
-                                         structs: HashMap::new(),
-                                         constants: HashMap::new(),
-                                     },
-                                     |mut map, def| {
-                                         match *def {
-                                             ir::RootDefinition::Struct(ref sd) => {
-                                                 match context.types.struct_names.get(&sd.id) {
-                                                     Some(name) => {
-                                                         map.structs.insert(sd.id, name.clone());
-                                                     }
-                                                     None => {
-                                                         panic!("struct name does not exist");
-                                                     }
-                                                 }
-                                             }
-                                             ir::RootDefinition::ConstantBuffer(ref cb) => {
-                                                 match context.types.cbuffer_names.get(&cb.id) {
-                                                     Some(name) => {
-                                                         map.constants.insert(cb.id, name.clone());
-                                                     }
-                                                     None => {
-                                                         panic!("constant buffer name does not \
-                                                                 exist");
-                                                     }
-                                                 }
-                                             }
-                                             ir::RootDefinition::GlobalVariable(ref gv) => {
-                                                 match context.global_names.get(&gv.id) {
-                                                     Some(name) => {
-                                                         map.globals.insert(gv.id, name.clone());
-                                                     }
-                                                     None => {
-                                                         panic!("global variable name does not \
-                                                                 exist");
-                                                     }
-                                                 }
-                                             }
-                                             ir::RootDefinition::Function(ref func) => {
-                                                 match context.function_names.get(&func.id) {
-                                                     Some(name) => {
-                                                         map.functions
-                                                            .insert(func.id, name.clone());
-                                                     }
-                                                     None => {
-                                                         panic!("function name does not exist");
-                                                     }
-                                                 }
-                                             }
-                                             _ => {}
-                                         }
-                                         map
-                                     });
+    let global_declarations = root_definitions.iter().fold(ir::GlobalDeclarations {
+                                                               functions: HashMap::new(),
+                                                               globals: HashMap::new(),
+                                                               structs: HashMap::new(),
+                                                               constants: HashMap::new(),
+                                                           },
+                                                           |mut map, def| {
+        match *def {
+            ir::RootDefinition::Struct(ref sd) => {
+                match context.types.struct_names.get(&sd.id) {
+                    Some(name) => {
+                        map.structs.insert(sd.id, name.clone());
+                    }
+                    None => {
+                        panic!("struct name does not exist");
+                    }
+                }
+            }
+            ir::RootDefinition::ConstantBuffer(ref cb) => {
+                match context.types.cbuffer_names.get(&cb.id) {
+                    Some(name) => {
+                        map.constants.insert(cb.id, name.clone());
+                    }
+                    None => {
+                        panic!("constant buffer name does not exist");
+                    }
+                }
+            }
+            ir::RootDefinition::GlobalVariable(ref gv) => {
+                match context.global_names.get(&gv.id) {
+                    Some(name) => {
+                        map.globals.insert(gv.id, name.clone());
+                    }
+                    None => {
+                        panic!("global variable name does not exist");
+                    }
+                }
+            }
+            ir::RootDefinition::Function(ref func) => {
+                match context.function_names.get(&func.id) {
+                    Some(name) => {
+                        map.functions
+                            .insert(func.id, name.clone());
+                    }
+                    None => {
+                        panic!("function name does not exist");
+                    }
+                }
+            }
+            _ => {}
+        }
+        map
+    });
 
     // Resolve used globals into SRV list
     let mut global_table_r = HashMap::new();
@@ -1954,7 +1941,7 @@ pub fn typeparse(ast: &ast::Module) -> Result<ir::Module, TyperError> {
             match global_table_r.insert(slot, entry) {
                 Some(currently_used_by) => {
                     return Err(TyperError::ReadResourceSlotAlreadyUsed(currently_used_by.id
-                                                                                        .clone(),
+                                                                           .clone(),
                                                                        error_id))
                 }
                 None => {}
@@ -1968,7 +1955,11 @@ pub fn typeparse(ast: &ast::Module) -> Result<ir::Module, TyperError> {
         if global_declarations.globals.contains_key(&entry.id) {
             let error_id = entry.id.clone();
             match global_table_rw.insert(slot, entry) {
-                Some(currently_used_by) => return Err(TyperError::ReadWriteResourceSlotAlreadyUsed(currently_used_by.id.clone(), error_id)),
+                Some(currently_used_by) => {
+                    return Err(TyperError::ReadWriteResourceSlotAlreadyUsed(currently_used_by.id
+                                                                                .clone(),
+                                                                            error_id))
+                }
                 None => {}
             }
         }
@@ -2034,7 +2025,10 @@ fn test_typeparse() {
         entry_point: "CSMAIN".to_string(),
         root_definitions: vec![
             ast::RootDefinition::GlobalVariable(ast::GlobalVariable {
-                global_type: ast::Type::from_object(ast::ObjectType::Buffer(ast::DataType(ast::DataLayout::Scalar(ast::ScalarType::Int), ast::TypeModifier::default()))).into(),
+                global_type: ast::Type::from_object(ast::ObjectType::Buffer(ast::DataType(
+                    ast::DataLayout::Scalar(ast::ScalarType::Int),
+                    ast::TypeModifier::default()
+                ))).into(),
                 defs: vec![ast::GlobalVariableName {
                     name: "g_myInBuffer".to_string(),
                     bind: ast::VariableBind::Normal,
@@ -2043,38 +2037,62 @@ fn test_typeparse() {
                 }],
             }),
             ast::RootDefinition::GlobalVariable(ast::GlobalVariable {
-                global_type: ast::GlobalType(ast::Type(ast::TypeLayout::from_scalar(ast::ScalarType::Int), ast::TypeModifier { is_const: true, .. ast::TypeModifier::default() }), ast::GlobalStorage::Static, None),
+                global_type: ast::GlobalType(ast::Type(
+                    ast::TypeLayout::from_scalar(ast::ScalarType::Int),
+                    ast::TypeModifier { is_const: true, .. ast::TypeModifier::default() }
+                ), ast::GlobalStorage::Static, None),
                 defs: vec![ast::GlobalVariableName {
                     name: "g_myFour".to_string(),
                     bind: ast::VariableBind::Normal,
                     slot: None,
-                    init: Some(ast::Initializer::Expression(Located::none(ast::Expression::Literal(ast::Literal::UntypedInt(4))))),
+                    init: Some(ast::Initializer::Expression(Located::none(
+                        ast::Expression::Literal(ast::Literal::UntypedInt(4)))
+                    )),
                 }],
             }),
             ast::RootDefinition::Function(ast::FunctionDefinition {
                 name: "myFunc".to_string(),
                 returntype: ast::Type::void(),
-                params: vec![ast::FunctionParam { name: "x".to_string(), param_type: ast::Type::uint().into(), semantic: None }],
+                params: vec![ast::FunctionParam {
+                    name: "x".to_string(),
+                    param_type: ast::Type::uint().into(),
+                    semantic: None
+                }],
                 body: vec![],
                 attributes: vec![],
             }),
             ast::RootDefinition::Function(ast::FunctionDefinition {
                 name: "myFunc".to_string(),
                 returntype: ast::Type::void(),
-                params: vec![ast::FunctionParam { name: "x".to_string(), param_type: ast::Type::float().into(), semantic: None }],
+                params: vec![ast::FunctionParam {
+                    name: "x".to_string(),
+                    param_type: ast::Type::float().into(),
+                    semantic: None
+                }],
                 body: vec![],
                 attributes: vec![],
             }),
             ast::RootDefinition::Function(ast::FunctionDefinition {
                 name: "outFunc".to_string(),
                 returntype: ast::Type::void(),
-                params: vec![ast::FunctionParam { name: "x".to_string(), param_type: ast::ParamType(ast::Type::float(), ast::InputModifier::Out, None), semantic: None }],
+                params: vec![ast::FunctionParam {
+                    name: "x".to_string(),
+                    param_type: ast::ParamType(ast::Type::float(), ast::InputModifier::Out, None),
+                    semantic: None
+                }],
                 body: vec![
-                    ast::Statement::Var(ast::VarDef::one("local_static", ast::LocalType(ast::Type::uint(), ast::LocalStorage::Static, None))),
+                    ast::Statement::Var(ast::VarDef::one(
+                        "local_static",
+                        ast::LocalType(ast::Type::uint(), ast::LocalStorage::Static, None)
+                    )),
                     ast::Statement::Expression(Located::loc(1, 1,
                         ast::Expression::BinaryOperation(ast::BinOp::Assignment,
-                            Box::new(Located::none(ast::Expression::Variable("x".to_string()))),
-                            Box::new(Located::none(ast::Expression::Literal(ast::Literal::Float(1.5f32))))
+                            Box::new(Located::none(
+                                ast::Expression::Variable("x".to_string())
+                            )),
+                            Box::new(Located::none(
+                                ast::Expression::Literal(ast::Literal::Float(1.5f32))
+                            ))
                         )
                     )),
                 ],
@@ -2101,15 +2119,21 @@ fn test_typeparse() {
                     ast::Statement::Expression(Located::none(
                         ast::Expression::BinaryOperation(ast::BinOp::Assignment,
                             Box::new(Located::none(ast::Expression::ArraySubscript(
-                                Box::new(Located::none(ast::Expression::Variable("g_myInBuffer".to_string()))),
-                                Box::new(Located::none(ast::Expression::Literal(ast::Literal::Int(0))))
+                                Box::new(Located::none(
+                                    ast::Expression::Variable("g_myInBuffer".to_string())
+                                )),
+                                Box::new(Located::none(
+                                    ast::Expression::Literal(ast::Literal::Int(0))
+                                ))
                             ))),
                             Box::new(Located::none(ast::Expression::Literal(ast::Literal::Int(4))))
                         )
                     )),
                     ast::Statement::Expression(Located::none(
                         ast::Expression::Call(
-                            Box::new(Located::none(ast::Expression::Variable("myFunc".to_string()))),
+                            Box::new(Located::none(
+                                ast::Expression::Variable("myFunc".to_string())
+                            )),
                             vec![
                                 Located::none(ast::Expression::Variable("b".to_string()))
                             ]
@@ -2120,13 +2144,17 @@ fn test_typeparse() {
                         local_type: ast::Type::from_layout(ast::TypeLayout::float()).into(),
                         defs: vec![ast::LocalVariableName {
                             name: "x".to_string(),
-                            bind: ast::VariableBind::Array(Some(Located::none(ast::Expression::Literal(ast::Literal::UntypedInt(3))))),
+                            bind: ast::VariableBind::Array(Some(Located::none(
+                                ast::Expression::Literal(ast::Literal::UntypedInt(3))
+                            ))),
                             init: None,
                         }]
                     }),
                     ast::Statement::Expression(Located::none(
                         ast::Expression::Call(
-                            Box::new(Located::none(ast::Expression::Variable("outFunc".to_string()))),
+                            Box::new(Located::none(
+                                ast::Expression::Variable("outFunc".to_string())
+                            )),
                             vec![Located::none(ast::Expression::Variable("testOut".to_string()))]
                         )
                     )),
@@ -2142,12 +2170,17 @@ fn test_typeparse() {
         entry_point: "CSMAIN".to_string(),
         root_definitions: vec![
             ast::RootDefinition::GlobalVariable(ast::GlobalVariable {
-                global_type: ast::GlobalType(ast::Type(ast::TypeLayout::from_scalar(ast::ScalarType::Int), ast::TypeModifier { is_const: true, .. ast::TypeModifier::default() }), ast::GlobalStorage::Static, None),
+                global_type: ast::GlobalType(ast::Type(
+                    ast::TypeLayout::from_scalar(ast::ScalarType::Int),
+                    ast::TypeModifier { is_const: true, .. ast::TypeModifier::default() }
+                ), ast::GlobalStorage::Static, None),
                 defs: vec![ast::GlobalVariableName {
                     name: "g_myFour".to_string(),
                     bind: ast::VariableBind::Normal,
                     slot: None,
-                    init: Some(ast::Initializer::Expression(Located::none(ast::Expression::Literal(ast::Literal::UntypedInt(4))))),
+                    init: Some(ast::Initializer::Expression(Located::none(
+                        ast::Expression::Literal(ast::Literal::UntypedInt(4))
+                    ))),
                 }],
             }),
             ast::RootDefinition::Function(ast::FunctionDefinition {
@@ -2155,7 +2188,9 @@ fn test_typeparse() {
                 returntype: ast::Type::void(),
                 params: vec![],
                 body: vec![
-                    ast::Statement::Expression(Located::none(ast::Expression::Variable("g_myFour".to_string())))
+                    ast::Statement::Expression(Located::none(
+                        ast::Expression::Variable("g_myFour".to_string())
+                    ))
                 ],
                 attributes: vec![ast::FunctionAttribute::numthreads(8, 8, 1)],
             }),
@@ -2167,15 +2202,25 @@ fn test_typeparse() {
         global_table: ir::GlobalTable::default(),
         global_declarations: ir::GlobalDeclarations {
             functions: HashMap::new(),
-            globals: { let mut map = HashMap::new(); map.insert(ir::GlobalId(0), "g_myFour".to_string()); map },
+            globals: {
+                let mut map = HashMap::new();
+                map.insert(ir::GlobalId(0), "g_myFour".to_string());
+                map
+            },
             structs: HashMap::new(),
             constants: HashMap::new(),
         },
         root_definitions: vec![
             ir::RootDefinition::GlobalVariable(ir::GlobalVariable {
                 id: ir::GlobalId(0),
-                global_type: ir::GlobalType(ir::Type(ir::TypeLayout::from_scalar(ir::ScalarType::Int), ir::TypeModifier { is_const: true, .. ir::TypeModifier::default() }), ir::GlobalStorage::Static, None),
-                init: Some(ir::Initializer::Expression(ir::Expression::Cast(ir::Type::int(), Box::new(ir::Expression::Literal(ir::Literal::UntypedInt(4)))))),
+                global_type: ir::GlobalType(ir::Type(
+                    ir::TypeLayout::from_scalar(ir::ScalarType::Int),
+                    ir::TypeModifier { is_const: true, .. ir::TypeModifier::default() }
+                ), ir::GlobalStorage::Static, None),
+                init: Some(ir::Initializer::Expression(ir::Expression::Cast(
+                    ir::Type::int(),
+                    Box::new(ir::Expression::Literal(ir::Literal::UntypedInt(4)))
+                ))),
             }),
             ir::RootDefinition::Kernel(ir::Kernel {
                 group_dimensions: ir::Dimension(8, 8, 1),

@@ -881,7 +881,7 @@ impl fmt::Display for TypeError {
 
 /// An object to hold all context of the type of definitions at a point in
 /// the program
-pub trait TypeContext : AsTypeContext {
+pub trait TypeContext: AsTypeContext {
     fn get_local(&self, var_ref: &VariableRef) -> Result<ExpressionType, TypeError>;
     fn get_global(&self, id: &GlobalId) -> Result<ExpressionType, TypeError>;
     fn get_constant(&self, id: &ConstantBufferId, name: &str) -> Result<ExpressionType, TypeError>;
@@ -1041,16 +1041,16 @@ pub struct TypeParser;
 impl TypeParser {
     pub fn get_literal_type(literal: &Literal) -> ExpressionType {
         (match *literal {
-            Literal::Bool(_) => Type::bool(),
-            Literal::UntypedInt(_) => Type::from_scalar(ScalarType::UntypedInt),
-            Literal::Int(_) => Type::int(),
-            Literal::UInt(_) => Type::uint(),
-            Literal::Long(_) => unimplemented!(),
-            Literal::Half(_) => Type::from_scalar(ScalarType::Half),
-            Literal::Float(_) => Type::float(),
-            Literal::Double(_) => Type::double(),
-        })
-        .to_rvalue()
+                Literal::Bool(_) => Type::bool(),
+                Literal::UntypedInt(_) => Type::from_scalar(ScalarType::UntypedInt),
+                Literal::Int(_) => Type::int(),
+                Literal::UInt(_) => Type::uint(),
+                Literal::Long(_) => unimplemented!(),
+                Literal::Half(_) => Type::from_scalar(ScalarType::Half),
+                Literal::Float(_) => Type::float(),
+                Literal::Double(_) => Type::double(),
+            })
+            .to_rvalue()
     }
 
     pub fn get_expression_type(expression: &Expression,

@@ -36,7 +36,7 @@ impl fmt::Display for ReduceError {
     }
 }
 
-pub trait ReduceContext : hir::TypeContext {
+pub trait ReduceContext: hir::TypeContext {
     fn find_overload(&self, id: &hir::FunctionId) -> FunctionOverload;
 }
 
@@ -148,10 +148,8 @@ fn reduce_node(expr: pel::Expression,
             (sb, bt)
         }
         pel::Expression::Member(composite, member) => {
-            let (sb, composite_id) = try!(reduce_node(*composite,
-                                                      input_modifier.clone(),
-                                                      sb,
-                                                      context));
+            let (sb, composite_id) =
+                try!(reduce_node(*composite, input_modifier.clone(), sb, context));
             (sb, Command::Member(composite_id, member))
         }
         pel::Expression::Call(id, args) => {
@@ -311,8 +309,8 @@ fn test_reduce_binary_operation() {
     let add = hir::Intrinsic2::Add(dty.clone());
     let pel = pel::Expression::Intrinsic2(add.clone(), Box::new(var_0), Box::new(var_1));
     let c = TestReduceContext::new()
-                .local(var_0_ref.clone(), ty.clone())
-                .local(var_1_ref.clone(), ty.clone());
+        .local(var_0_ref.clone(), ty.clone())
+        .local(var_1_ref.clone(), ty.clone());
     let rel = reduce(pel, &c);
     let expected_rel = Sequence {
         binds: vec![
@@ -353,15 +351,18 @@ fn test_reduce_texture_assignment() {
     let tex_ty =
         Type::from_layout(hir::TypeLayout::Object(hir::ObjectType::RWTexture2D(dty.clone())));
     let c = TestReduceContext::new()
-                .global(tex_0, tex_ty.clone())
-                .global(tex_1, tex_ty.clone());
+        .global(tex_0, tex_ty.clone())
+        .global(tex_1, tex_ty.clone());
     let rel = reduce(pel, &c);
     let expected_rel = Sequence {
         binds: vec![
             Bind::direct(0, Command::Global(tex_0), tex_ty.clone()),
             Bind::direct(1, Command::Literal(lit_zero.clone()), Type::int()),
             Bind::direct(2, Command::Literal(lit_zero.clone()), Type::int()),
-            Bind::direct(3, Command::NumericConstructor(dtyl_index.clone(), vec![ConstructorSlot { arity: 1, expr: BindId(1) }, ConstructorSlot { arity: 1, expr: BindId(2) }]), Type::intn(2)),
+            Bind::direct(3, Command::NumericConstructor(dtyl_index.clone(), vec![
+                ConstructorSlot { arity: 1, expr: BindId(1) },
+                ConstructorSlot { arity: 1, expr: BindId(2) }
+            ]), Type::intn(2)),
             Bind {
                 id: BindId(4),
                 value: Command::RWTexture2DIndex(dty.clone(), BindId(0), BindId(3)),
@@ -371,8 +372,15 @@ fn test_reduce_texture_assignment() {
             Bind::direct(5, Command::Global(tex_1), tex_ty),
             Bind::direct(6, Command::Literal(lit_zero.clone()), Type::int()),
             Bind::direct(7, Command::Literal(lit_zero.clone()), Type::int()),
-            Bind::direct(8, Command::NumericConstructor(dtyl_index, vec![ConstructorSlot { arity: 1, expr: BindId(6) }, ConstructorSlot { arity: 1, expr: BindId(7) }]), Type::intn(2)),
-            Bind::direct(9, Command::Intrinsic2(hir::Intrinsic2::Texture2DLoad(dty), BindId(5), BindId(8)), ty.clone()),
+            Bind::direct(8, Command::NumericConstructor(dtyl_index, vec![
+                ConstructorSlot { arity: 1, expr: BindId(6) },
+                ConstructorSlot { arity: 1, expr: BindId(7) }
+            ]), Type::intn(2)),
+            Bind::direct(9, Command::Intrinsic2(
+                hir::Intrinsic2::Texture2DLoad(dty),
+                BindId(5),
+                BindId(8)), ty.clone()
+            ),
             Bind::direct(10, Command::Intrinsic2(assign, BindId(4), BindId(9)), ty),
         ],
         last: Some(BindId(10)),

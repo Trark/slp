@@ -205,7 +205,14 @@ fn literal_float<'a>(input: &'a [u8]) -> IResult<&'a [u8], Token> {
     named!(digit_sequence<DigitSequence>, many1!(digit));
 
     named!(fractional_constant<Fraction>, alt!(
-        chain!(left: opt!(digit_sequence) ~ tag!(".") ~ right: digit_sequence, || { Fraction(match &left { &Some(ref l) => l.clone(), &None => vec![] }, right) }) |
+        chain!(
+            left: opt!(digit_sequence) ~
+            tag!(".") ~
+            right: digit_sequence,
+            || {
+                Fraction(match &left { &Some(ref l) => l.clone(), &None => vec![] }, right)
+            }
+        ) |
         chain!(left: digit_sequence ~ tag!("."), || { Fraction(left, vec![]) })
     ));
 
@@ -238,7 +245,12 @@ fn literal_float<'a>(input: &'a [u8]) -> IResult<&'a [u8], Token> {
         alt!(tag!("e") | tag!("E")) ~
         s_opt: opt!(sign) ~
         exponent: digits,
-        || { Exponent(match s_opt { Some(Sign::Negative) => -(exponent as i64), _ => exponent as i64 }) }
+        || {
+            Exponent(match s_opt {
+                Some(Sign::Negative) => -(exponent as i64),
+                _ => exponent as i64
+            })
+        }
     ));
 
     fn produce(left: DigitSequence,
@@ -377,9 +389,15 @@ fn identifier<'a>(input: &'a [u8]) -> IResult<&'a [u8], Identifier> {
 fn whitespace_ignore(_: Vec<()>) -> Result<(), ()> {
     Result::Ok(())
 }
-named!(whitespace_simple<()>, map!(alt!(tag!(" ") | tag!("\n") | tag!("\r") | tag!("\t")), |_: &[u8]| ()));
+named!(whitespace_simple<()>, map!(
+    alt!(tag!(" ") | tag!("\n") | tag!("\r") | tag!("\t")),
+    |_: &[u8]| ()
+));
 named!(line_comment<()>, chain!(tag!("//") ~ many0!(is_not!("\n")) ~ tag!("\n"), || ()));
-named!(not_block_comment_end<()>, alt!(is_not!("*") => { |_| () } | chain!(tag!("*") ~ none_of!("/"), || ())));
+named!(not_block_comment_end<()>, alt!(
+    is_not!("*") => { |_| () } |
+    chain!(tag!("*") ~ none_of!("/"), || ())
+));
 named!(block_comment<()>, chain!(tag!("/*") ~ many0!(not_block_comment_end) ~ tag!("*/"), || ()));
 named!(whitespace<()>, map_res!(
     complete!(many1!(alt!(
@@ -545,7 +563,11 @@ named!(register<Token>, chain!(
     opt!(whitespace) ~
     tag!("(") ~
     opt!(whitespace) ~
-    slot_type: alt!(tag!("t") => { |_| { RegisterType::T }} | tag!("u") => { |_| { RegisterType::U }} | tag!("b") => { |_| { RegisterType::B }}) ~
+    slot_type: alt!(
+        tag!("t") => { |_| { RegisterType::T }} |
+        tag!("u") => { |_| { RegisterType::U }} |
+        tag!("b") => { |_| { RegisterType::B }}
+    ) ~
     num: digits ~
     tag!(")"),
     || { Token::Register(match slot_type {
@@ -566,7 +588,7 @@ fn lookahead_token(input: &[u8]) -> IResult<&[u8], Option<Token>> {
 named!(leftanglebracket<Token>, chain!(
     tag!("<") ~
     next: lookahead_token,
-    || { 
+    || {
         match next {
             Some(_) => Token::LeftAngleBracket(FollowedBy::Token),
             _ => Token::LeftAngleBracket(FollowedBy::Whitespace)
@@ -577,7 +599,7 @@ named!(leftanglebracket<Token>, chain!(
 named!(rightanglebracket<Token>, chain!(
     tag!(">") ~
     next: lookahead_token,
-    || { 
+    || {
         match next {
             Some(_) => Token::RightAngleBracket(FollowedBy::Token),
             _ => Token::RightAngleBracket(FollowedBy::Whitespace)
@@ -705,18 +727,19 @@ fn token_no_whitespace(input: &[u8]) -> IResult<&[u8], IntermediateToken> {
          |intermediate| IntermediateToken(intermediate, IntermediateLocation(input.len() as u64)))
 }
 
-named!(token<IntermediateToken>, delimited!(opt!(whitespace), alt!(token_no_whitespace), opt!(whitespace)));
+named!(token<IntermediateToken>, delimited!(
+    opt!(whitespace),
+    alt!(token_no_whitespace),
+    opt!(whitespace)
+));
 
 fn token_stream(input: &[u8]) -> IResult<&[u8], Vec<StreamToken>> {
     let total_length = input.len() as u64;
     match many0!(input, token) {
         IResult::Done(rest, itokens) => {
             let tokens = itokens.into_iter()
-                                .map(|itoken| {
-                                    StreamToken(itoken.0,
-                                                StreamLocation(total_length - (itoken.1).0))
-                                })
-                                .collect::<Vec<_>>();
+                .map(|itoken| StreamToken(itoken.0, StreamLocation(total_length - (itoken.1).0)))
+                .collect::<Vec<_>>();
             IResult::Done(rest, tokens)
         }
         IResult::Incomplete(rest) => IResult::Incomplete(rest),

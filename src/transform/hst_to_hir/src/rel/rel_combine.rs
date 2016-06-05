@@ -164,8 +164,8 @@ pub fn hir_relocate(expr: hir::Expression,
                 e
             };
             let cons = elements.into_iter()
-                               .map(fun)
-                               .collect();
+                .map(fun)
+                .collect();
             Expression::NumericConstructor(dtyl, cons)
         }
         Expression::Cast(ty, expr) => {
@@ -420,14 +420,14 @@ fn combine_group(seq: Sequence) -> Sequence {
                 };
                 assert_eq!(vals.len(), arity.len());
                 let cons = arity.into_iter()
-                                .zip(vals)
-                                .map(|(a, e)| {
-                                    hir::ConstructorSlot {
-                                        arity: a,
-                                        expr: e,
-                                    }
-                                })
-                                .collect();
+                    .zip(vals)
+                    .map(|(a, e)| {
+                        hir::ConstructorSlot {
+                            arity: a,
+                            expr: e,
+                        }
+                    })
+                    .collect();
                 let expr = hir::Expression::NumericConstructor(dtyl, cons);
                 Command::Trivial(expr, MutationParam::Mutable)
             }
@@ -706,9 +706,7 @@ fn combine_complex(seq: Sequence, context: &mut CombineContext) -> CombineResult
                         let value = Box::new(var_ref.clone());
                         hir::Expression::Intrinsic3(si, texture, index, value)
                     };
-                    (vec![hir::Statement::Var(vd)],
-                     var_ref,
-                     WriteBack::Invoke(store))
+                    (vec![hir::Statement::Var(vd)], var_ref, WriteBack::Invoke(store))
                 };
                 let p = ProcessedBind {
                     reference: Some(reference),
@@ -1119,7 +1117,10 @@ fn test_combine_texture_assignment() {
             Bind::direct(0, Command::Global(tex_0), tex_ty.clone()),
             Bind::direct(1, Command::Literal(lit_zero.clone()), hir::Type::int()),
             Bind::direct(2, Command::Literal(lit_zero.clone()), hir::Type::int()),
-            Bind::direct(3, Command::NumericConstructor(dtyl_index.clone(), vec![ConstructorSlot { arity: 1, expr: BindId(1) }, ConstructorSlot { arity: 1, expr: BindId(2) }]), hir::Type::intn(2)),
+            Bind::direct(3, Command::NumericConstructor(dtyl_index.clone(), vec![
+                ConstructorSlot { arity: 1, expr: BindId(1) },
+                ConstructorSlot { arity: 1, expr: BindId(2) }
+            ]), hir::Type::intn(2)),
             Bind {
                 id: BindId(4),
                 value: Command::RWTexture2DIndex(dty.clone(), BindId(0), BindId(3)),
@@ -1129,8 +1130,15 @@ fn test_combine_texture_assignment() {
             Bind::direct(5, Command::Global(tex_1), tex_ty),
             Bind::direct(6, Command::Literal(lit_zero.clone()), hir::Type::int()),
             Bind::direct(7, Command::Literal(lit_zero.clone()), hir::Type::int()),
-            Bind::direct(8, Command::NumericConstructor(dtyl_index, vec![ConstructorSlot { arity: 1, expr: BindId(6) }, ConstructorSlot { arity: 1, expr: BindId(7) }]), hir::Type::intn(2)),
-            Bind::direct(9, Command::Intrinsic2(hir::Intrinsic2::Texture2DLoad(dty), BindId(5), BindId(8)), ty.clone()),
+            Bind::direct(8, Command::NumericConstructor(dtyl_index, vec![
+                ConstructorSlot { arity: 1, expr: BindId(6) },
+                ConstructorSlot { arity: 1, expr: BindId(7) }
+            ]), hir::Type::intn(2)),
+            Bind::direct(9, Command::Intrinsic2(
+                hir::Intrinsic2::Texture2DLoad(dty),
+                BindId(5),
+                BindId(8)
+            ), ty.clone()),
             Bind::direct(10, Command::Intrinsic2(assign, BindId(4), BindId(9)), ty),
         ],
         last: Some(BindId(10)),

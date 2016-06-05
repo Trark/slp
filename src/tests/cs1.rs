@@ -21,7 +21,8 @@ fn cs1_lex() {
     // changing them
     let cs1_str = CS1.to_string().replace("\r\n", "\n");
 
-    let cs1_preprocessed = preprocess(&cs1_str, &mut NullIncludeHandler).expect("cs1 failed preprocess");
+    let cs1_preprocessed = preprocess(&cs1_str, &mut NullIncludeHandler)
+        .expect("cs1 failed preprocess");
 
     let tokens_res = lex(&cs1_preprocessed);
 
@@ -137,20 +138,29 @@ fn cs1_lex() {
         (Token::RightBrace, 17, 1),
         (Token::Eof, 17, 2),
     ];
-    let expected_tokens = Tokens { stream: expected_tokens_data.iter().map(|&(ref tok, ref line, ref column)|
+    let s = expected_tokens_data.iter().map(|&(ref tok, ref line, ref column)|
         LexToken(tok.clone(), FileLocation(File::Unknown, Line(*line), Column(*column)))
-    ).collect::<Vec<_>>()};
+    ).collect::<Vec<_>>();
+    let expected_tokens = Tokens {
+        stream: s
+    };
 
     match tokens_res {
         Ok(tokens) => {
-            for (lexed_ftoken, &(ref expected_token, _, _)) in tokens.stream.iter().zip(expected_tokens_data.iter()) {
+            let i1 = tokens.stream.iter().zip(expected_tokens_data.iter());
+            for (lexed_ftoken, &(ref expected_token, _, _)) in i1 {
                 let lexed_token: &Token = &lexed_ftoken.0;
                 let expected_token: &Token = expected_token;
                 assert_eq!(lexed_token, expected_token);
             }
-            for (lexed_ftoken, &(_, ref expected_line, ref expected_column)) in tokens.stream.iter().zip(expected_tokens_data.iter()) {
+            let i2 = tokens.stream.iter().zip(expected_tokens_data.iter());
+            for (lexed_ftoken, &(_, ref expected_line, ref expected_column)) in i2 {
                 let lexed_loc = &lexed_ftoken.1;
-                let expected_loc = FileLocation(File::Unknown, Line(*expected_line), Column(*expected_column));
+                let expected_loc = FileLocation(
+                    File::Unknown,
+                    Line(*expected_line),
+                    Column(*expected_column)
+                );
                 assert_eq!(*lexed_loc, expected_loc);
             }
             assert_eq!(tokens, expected_tokens);

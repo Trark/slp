@@ -19,7 +19,6 @@ use slp_lang_hir as hir;
 use slp_lang_hir::ExpressionType;
 use slp_lang_hir::ToExpressionType;
 use slp_lang_hir::Intrinsic;
-use slp_lang_hir::Intrinsic2;
 
 pub type ClassType = hir::Type;
 
@@ -83,7 +82,8 @@ fn find_function_type(overloads: &Vec<FunctionOverload>,
 
             let ety = match *it {
                 hir::InputModifier::In => ty.to_rvalue(),
-                hir::InputModifier::Out | hir::InputModifier::InOut => ty.to_lvalue(),
+                hir::InputModifier::Out |
+                hir::InputModifier::InOut => ty.to_lvalue(),
             };
             match *interp {
                 Some(_) => return Err(()),
@@ -141,15 +141,15 @@ fn find_function_type(overloads: &Vec<FunctionOverload>,
 
         fn count_by_rank(casts: &[ImplicitConversion], rank: &VectorRank) -> usize {
             casts.iter()
-                 .filter(|ref cast| cast.get_rank().get_vector_rank() == rank)
-                 .count()
+                .filter(|ref cast| cast.get_rank().get_vector_rank() == rank)
+                .count()
         }
 
         let map_order = |(overload, casts): (_, Vec<ImplicitConversion>)| {
             let order = VectorRank::worst_to_best()
-                            .iter()
-                            .map(|rank| count_by_rank(&casts, rank))
-                            .collect::<Vec<_>>();
+                .iter()
+                .map(|rank| count_by_rank(&casts, rank))
+                .collect::<Vec<_>>();
             (overload, casts, order)
         };
 
@@ -163,8 +163,8 @@ fn find_function_type(overloads: &Vec<FunctionOverload>,
         }
 
         let casts = casts.into_iter()
-                         .filter(|&(_, _, ref order)| *order == best_order)
-                         .collect::<Vec<_>>();
+            .filter(|&(_, _, ref order)| *order == best_order)
+            .collect::<Vec<_>>();
 
         if casts.len() == 1 {
             let (candidate, casts, _) = casts[0].clone();
@@ -180,9 +180,9 @@ fn apply_casts(casts: Vec<ImplicitConversion>,
                -> Vec<pel::Expression> {
     assert_eq!(casts.len(), values.len());
     values.into_iter()
-          .enumerate()
-          .map(|(index, value)| casts[index].apply_pel(value))
-          .collect::<Vec<_>>()
+        .enumerate()
+        .map(|(index, value)| casts[index].apply_pel(value))
+        .collect::<Vec<_>>()
 }
 
 fn write_function(unresolved: UnresolvedFunction,
@@ -279,11 +279,13 @@ fn parse_expr_unaryop(op: &hst::UnaryOp,
                     ExpressionType(_, hir::ValueType::Rvalue) => {
                         Err(TyperError::UnaryOperationWrongTypes(op.clone(), ErrorType::Unknown))
                     }
-                    ExpressionType(hir::Type(hir::TypeLayout::Scalar(hir::ScalarType::Bool), _),
+                    ExpressionType(hir::Type(hir::TypeLayout::Scalar(hir::ScalarType::Bool),
+                                             _),
                                    _) => {
                         Err(TyperError::UnaryOperationWrongTypes(op.clone(), ErrorType::Unknown))
                     }
-                    ExpressionType(hir::Type(hir::TypeLayout::Vector(hir::ScalarType::Bool, _),
+                    ExpressionType(hir::Type(hir::TypeLayout::Vector(hir::ScalarType::Bool,
+                                                                     _),
                                              _),
                                    _) => {
                         Err(TyperError::UnaryOperationWrongTypes(op.clone(), ErrorType::Unknown))
@@ -301,37 +303,25 @@ fn parse_expr_unaryop(op: &hst::UnaryOp,
             let (intrinsic, eir, ety) = match *op {
                 hst::UnaryOp::PrefixIncrement => {
                     try!(enforce_increment_type(&expr_ty, op));
-                    (hir::Intrinsic1::PrefixIncrement(expr_ty.0.clone()),
-                     expr_ir,
-                     expr_ty)
+                    (hir::Intrinsic1::PrefixIncrement(expr_ty.0.clone()), expr_ir, expr_ty)
                 }
                 hst::UnaryOp::PrefixDecrement => {
                     try!(enforce_increment_type(&expr_ty, op));
-                    (hir::Intrinsic1::PrefixDecrement(expr_ty.0.clone()),
-                     expr_ir,
-                     expr_ty)
+                    (hir::Intrinsic1::PrefixDecrement(expr_ty.0.clone()), expr_ir, expr_ty)
                 }
                 hst::UnaryOp::PostfixIncrement => {
                     try!(enforce_increment_type(&expr_ty, op));
-                    (hir::Intrinsic1::PostfixIncrement(expr_ty.0.clone()),
-                     expr_ir,
-                     expr_ty)
+                    (hir::Intrinsic1::PostfixIncrement(expr_ty.0.clone()), expr_ir, expr_ty)
                 }
                 hst::UnaryOp::PostfixDecrement => {
                     try!(enforce_increment_type(&expr_ty, op));
-                    (hir::Intrinsic1::PostfixDecrement(expr_ty.0.clone()),
-                     expr_ir,
-                     expr_ty)
+                    (hir::Intrinsic1::PostfixDecrement(expr_ty.0.clone()), expr_ir, expr_ty)
                 }
                 hst::UnaryOp::Plus => {
-                    (hir::Intrinsic1::Plus(expr_ty.0.clone()),
-                     expr_ir,
-                     expr_ty.0.to_rvalue())
+                    (hir::Intrinsic1::Plus(expr_ty.0.clone()), expr_ir, expr_ty.0.to_rvalue())
                 }
                 hst::UnaryOp::Minus => {
-                    (hir::Intrinsic1::Minus(expr_ty.0.clone()),
-                     expr_ir,
-                     expr_ty.0.to_rvalue())
+                    (hir::Intrinsic1::Minus(expr_ty.0.clone()), expr_ir, expr_ty.0.to_rvalue())
                 }
                 hst::UnaryOp::LogicalNot => {
                     let ty = match expr_ty.0 {
@@ -464,18 +454,14 @@ fn resolve_arithmetic_types
             let ls = left.0.to_scalar().expect("non-numeric type in binary operation (lhs)");
             let rs = right.0.to_scalar().expect("non-numeric type in binary operation (rhs)");;
             match *op {
-                hst::BinOp::LeftShift |
-                hst::BinOp::RightShift |
-                hst::BinOp::BitwiseAnd |
-                hst::BinOp::BitwiseOr |
-                hst::BinOp::BitwiseXor => {
+                hst::BinOp::LeftShift | hst::BinOp::RightShift | hst::BinOp::BitwiseAnd |
+                hst::BinOp::BitwiseOr | hst::BinOp::BitwiseXor => {
                     assert!(ls == ScalarType::Int || ls == ScalarType::UInt,
                             "hir: non-integer source in bitwise op (lhs)");
                     assert!(rs == ScalarType::Int || rs == ScalarType::UInt,
                             "hir: non-integer source in bitwise op (rhs)");
                 }
-                hst::BinOp::BooleanAnd |
-                hst::BinOp::BooleanOr => {
+                hst::BinOp::BooleanAnd | hst::BinOp::BooleanOr => {
                     assert!(ls == ScalarType::Bool,
                             "hir: non-boolean source in boolean op (lhs)");
                     assert!(rs == ScalarType::Bool,
@@ -528,38 +514,33 @@ fn resolve_arithmetic_types
         let &ExpressionType(hir::Type(ref left_l, ref modl), _) = left;
         let &ExpressionType(hir::Type(ref right_l, ref modr), _) = right;
         let (ltl, rtl) = match (left_l, right_l) {
-            (&hir::TypeLayout::Scalar(ref ls),
-             &hir::TypeLayout::Scalar(ref rs)) => {
+            (&hir::TypeLayout::Scalar(ref ls), &hir::TypeLayout::Scalar(ref rs)) => {
                 let common_scalar = try!(common_real_type(ls, rs));
                 let common_left = hir::TypeLayout::from_scalar(common_scalar);
                 let common_right = common_left.clone();
                 (common_left, common_right)
             }
-            (&hir::TypeLayout::Scalar(ref ls),
-             &hir::TypeLayout::Vector(ref rs, ref x2)) => {
+            (&hir::TypeLayout::Scalar(ref ls), &hir::TypeLayout::Vector(ref rs, ref x2)) => {
                 let common_scalar = try!(common_real_type(ls, rs));
                 let common_left = hir::TypeLayout::from_scalar(common_scalar.clone());
                 let common_right = hir::TypeLayout::from_vector(common_scalar, *x2);
                 (common_left, common_right)
             }
-            (&hir::TypeLayout::Vector(ref ls, ref x1),
-             &hir::TypeLayout::Scalar(ref rs)) => {
+            (&hir::TypeLayout::Vector(ref ls, ref x1), &hir::TypeLayout::Scalar(ref rs)) => {
                 let common_scalar = try!(common_real_type(ls, rs));
                 let common_left = hir::TypeLayout::from_vector(common_scalar.clone(), *x1);
                 let common_right = hir::TypeLayout::from_scalar(common_scalar);
                 (common_left, common_right)
             }
             (&hir::TypeLayout::Vector(ref ls, ref x1),
-             &hir::TypeLayout::Vector(ref rs, ref x2))
-                if x1 == x2 || *x1 == 1 || *x2 == 1 => {
+             &hir::TypeLayout::Vector(ref rs, ref x2)) if x1 == x2 || *x1 == 1 || *x2 == 1 => {
                 let common_scalar = try!(common_real_type(ls, rs));
                 let common_left = hir::TypeLayout::from_vector(common_scalar.clone(), *x1);
                 let common_right = hir::TypeLayout::from_vector(common_scalar, *x2);
                 (common_left, common_right)
             }
             (&hir::TypeLayout::Matrix(ref ls, ref x1, ref y1),
-             &hir::TypeLayout::Matrix(ref rs, ref x2, ref y2))
-                if x1 == x2 && y1 == y2 => {
+             &hir::TypeLayout::Matrix(ref rs, ref x2, ref y2)) if x1 == x2 && y1 == y2 => {
                 let common_scalar = try!(common_real_type(ls, rs));
                 let common_left = hir::TypeLayout::from_matrix(common_scalar, *x2, *y2);
                 let common_right = common_left.clone();
@@ -612,19 +593,10 @@ fn parse_expr_binop(op: &hst::BinOp,
         _ => return err_bad_type,
     };
     match *op {
-        hst::BinOp::Add |
-        hst::BinOp::Subtract |
-        hst::BinOp::Multiply |
-        hst::BinOp::Divide |
-        hst::BinOp::Modulus |
-        hst::BinOp::LessThan |
-        hst::BinOp::LessEqual |
-        hst::BinOp::GreaterThan |
-        hst::BinOp::GreaterEqual |
-        hst::BinOp::Equality |
-        hst::BinOp::Inequality |
-        hst::BinOp::LeftShift |
-        hst::BinOp::RightShift => {
+        hst::BinOp::Add | hst::BinOp::Subtract | hst::BinOp::Multiply | hst::BinOp::Divide |
+        hst::BinOp::Modulus | hst::BinOp::LessThan | hst::BinOp::LessEqual |
+        hst::BinOp::GreaterThan | hst::BinOp::GreaterEqual | hst::BinOp::Equality |
+        hst::BinOp::Inequality | hst::BinOp::LeftShift | hst::BinOp::RightShift => {
             if *op == hst::BinOp::LeftShift || *op == hst::BinOp::RightShift {
                 fn is_integer(ety: &ExpressionType) -> bool {
                     let sty = match (ety.0).0.to_scalar() {
@@ -646,11 +618,8 @@ fn parse_expr_binop(op: &hst::BinOp,
             let node = pel::Expression::Intrinsic2(output_intrinsic, lhs_final, rhs_final);
             Ok(TypedExpression::Value(node, output_type))
         }
-        hst::BinOp::BitwiseAnd |
-        hst::BinOp::BitwiseOr |
-        hst::BinOp::BitwiseXor |
-        hst::BinOp::BooleanAnd |
-        hst::BinOp::BooleanOr => {
+        hst::BinOp::BitwiseAnd | hst::BinOp::BitwiseOr | hst::BinOp::BitwiseXor |
+        hst::BinOp::BooleanAnd | hst::BinOp::BooleanOr => {
             let lhs_tyl = &(lhs_type.0).0;
             let rhs_tyl = &(rhs_type.0).0;
             let lhs_mod = &(lhs_type.0).1;
@@ -659,9 +628,9 @@ fn parse_expr_binop(op: &hst::BinOp,
                 hir::ScalarType::Bool
             } else {
                 let lhs_scalar = try!(lhs_tyl.to_scalar()
-                                             .ok_or(TyperError::BinaryOperationNonNumericType));
+                    .ok_or(TyperError::BinaryOperationNonNumericType));
                 let rhs_scalar = try!(rhs_tyl.to_scalar()
-                                             .ok_or(TyperError::BinaryOperationNonNumericType));
+                    .ok_or(TyperError::BinaryOperationNonNumericType));
                 match (lhs_scalar, rhs_scalar) {
                     (hir::ScalarType::Int, hir::ScalarType::Int) => hir::ScalarType::Int,
                     (hir::ScalarType::Int, hir::ScalarType::UInt) => hir::ScalarType::UInt,
@@ -764,9 +733,8 @@ fn parse_expr_binop(op: &hst::BinOp,
                         _ => unreachable!(),
                     };
                     let output_type = i.get_return_type();
-                    let node = pel::Expression::Intrinsic2(i,
-                                                           Box::new(lhs_ir),
-                                                           Box::new(rhs_final));
+                    let node =
+                        pel::Expression::Intrinsic2(i, Box::new(lhs_ir), Box::new(rhs_final));
                     Ok(TypedExpression::Value(node, output_type))
                 }
                 Err(()) => err_bad_type,
@@ -955,14 +923,18 @@ fn parse_expr_unchecked(ast: &hst::Expression,
             match &composite_tyl {
                 &hir::TypeLayout::Struct(ref id) => {
                     match context.find_struct_member(id, member) {
-                        Ok(ty) => Ok(TypedExpression::Value(pel::Expression::Member(Box::new(composite_ir), member.clone()), ty.to_lvalue())),
+                        Ok(ty) => {
+                            let composite = Box::new(composite_ir);
+                            let member = pel::Expression::Member(composite, member.clone());
+                            Ok(TypedExpression::Value(member, ty.to_lvalue()))
+                        }
                         Err(err) => Err(err),
                     }
                 }
                 &hir::TypeLayout::Scalar(_) => {
                     if member == "x" || member == "r" {
-                        let ty = ExpressionType(hir::Type(composite_tyl.clone(), composite_mod),
-                                                vt);
+                        let composite_ty = hir::Type(composite_tyl.clone(), composite_mod);
+                        let ty = ExpressionType(composite_ty, vt);
                         // Just emit the composite expression and drop the member / swizzle
                         return Ok(TypedExpression::Value(composite_ir, ty));
                     }
@@ -1000,15 +972,19 @@ fn parse_expr_unchecked(ast: &hst::Expression,
                 &hir::TypeLayout::Object(ref object_type) => {
                     match intrinsics::get_method(object_type, &member) {
                         Ok(intrinsics::MethodDefinition(object_type, name, method_overloads)) => {
-                            let overloads = method_overloads.iter().map(|&(ref param_types, ref factory)| {
-                                let return_type = match *factory {
-                                    IntrinsicFactory::Intrinsic0(ref i) => i.get_return_type(),
-                                    IntrinsicFactory::Intrinsic1(ref i) => i.get_return_type(),
-                                    IntrinsicFactory::Intrinsic2(ref i) => i.get_return_type(),
-                                    IntrinsicFactory::Intrinsic3(ref i) => i.get_return_type(),
-                                };
-                                FunctionOverload(FunctionName::Intrinsic(factory.clone()), return_type.0, param_types.clone())
-                            }).collect::<Vec<_>>();
+                            let overloads = method_overloads.iter()
+                                .map(|&(ref param_types, ref factory)| {
+                                    let return_type = match *factory {
+                                        IntrinsicFactory::Intrinsic0(ref i) => i.get_return_type(),
+                                        IntrinsicFactory::Intrinsic1(ref i) => i.get_return_type(),
+                                        IntrinsicFactory::Intrinsic2(ref i) => i.get_return_type(),
+                                        IntrinsicFactory::Intrinsic3(ref i) => i.get_return_type(),
+                                    };
+                                    FunctionOverload(FunctionName::Intrinsic(factory.clone()),
+                                                     return_type.0,
+                                                     param_types.clone())
+                                })
+                                .collect::<Vec<_>>();
                             Ok(
                                 TypedExpression::Method(UnresolvedMethod(
                                     name,

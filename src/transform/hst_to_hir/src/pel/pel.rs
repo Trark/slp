@@ -86,7 +86,8 @@ impl From<hir::InputModifier> for RequiredVt {
     fn from(im: hir::InputModifier) -> RequiredVt {
         match im {
             hir::InputModifier::In => RequiredVt::Rvt,
-            hir::InputModifier::Out | hir::InputModifier::InOut => RequiredVt::Lvt,
+            hir::InputModifier::Out |
+            hir::InputModifier::InOut => RequiredVt::Lvt,
         }
     }
 }

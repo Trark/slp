@@ -70,9 +70,7 @@ pub fn hlsl_to_cl(mut input: Input) -> Result<Output, CompileError> {
 
     let cl_binary = slp_transform_cst_printer::Binary::from_cir(&cst);
 
-    let dimensions = (cst.kernel_dimensions.0,
-                      cst.kernel_dimensions.1,
-                      cst.kernel_dimensions.2);
+    let dimensions = (cst.kernel_dimensions.0, cst.kernel_dimensions.1, cst.kernel_dimensions.2);
     Ok(Output {
         code: cl_binary,
         binds: cst.binds,
