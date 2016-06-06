@@ -1421,6 +1421,8 @@ impl Parse for Statement {
                         || Statement::While(cond, Box::new(inner))
                     )
                 }
+                LexToken(Token::Break, _) => IResult::Done(tail, Statement::Break),
+                LexToken(Token::Continue, _) => IResult::Done(tail, Statement::Continue),
                 LexToken(Token::Return, _) => {
                     chain!(tail,
                         expression_statement: parse!(Expression, st) ~

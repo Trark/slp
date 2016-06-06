@@ -177,6 +177,7 @@ fn search_statement(statement: &Statement, usage: &mut LocalFunctionGlobalUsage)
             search_expression(update, usage);
             search_scope_block(sb, usage);
         }
+        Statement::Break | Statement::Continue => {}
         Statement::Return(ref expr) => search_expression(expr, usage),
     }
 }

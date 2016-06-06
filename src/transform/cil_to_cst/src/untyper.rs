@@ -417,6 +417,8 @@ fn untype_statement(statement: &src::Statement,
             dst::Statement::While(try!(untype_expression(cond, context)),
                                   Box::new(try!(untype_statement(statement, context))))
         }
+        src::Statement::Break => dst::Statement::Break,
+        src::Statement::Continue => dst::Statement::Continue,
         src::Statement::Return(ref expr) => {
             dst::Statement::Return(try!(untype_expression(expr, context)))
         }

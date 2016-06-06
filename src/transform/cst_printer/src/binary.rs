@@ -605,6 +605,12 @@ fn print_statement(statement: &Statement, printer: &mut Printer) {
             printer.print(")");
             print_statement(statement, printer);
         }
+        &Statement::Break => {
+            printer.print("break;");
+        }
+        &Statement::Continue => {
+            printer.print("continue;");
+        }
         &Statement::Return(ref expr) => {
             printer.print("return");
             printer.space();

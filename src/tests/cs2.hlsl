@@ -135,5 +135,13 @@ void CSMAIN(uint3 dtid : SV_DispatchThreadID)
     }
     for (; false; 0)
     {
+        if (1)
+        {
+            break;
+        }
+        else
+        {
+            continue;
+        }
     }
 }

@@ -1910,6 +1910,8 @@ fn transpile_statement(statement: &src::Statement,
             context.pop_scope();
             Ok(vec![dst::Statement::While(cl_cond, Box::new(dst::Statement::Block(cl_statements)))])
         }
+        &src::Statement::Break => Ok(vec![dst::Statement::Break]),
+        &src::Statement::Continue => Ok(vec![dst::Statement::Continue]),
         &src::Statement::Return(ref expr) => {
             Ok(vec![dst::Statement::Return(try!(transpile_expression(expr, context)))])
         }

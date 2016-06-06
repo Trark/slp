@@ -444,6 +444,8 @@ pub enum Statement {
     IfElse(Located<Expression>, Box<Statement>, Box<Statement>),
     For(InitStatement, Located<Expression>, Located<Expression>, Box<Statement>),
     While(Located<Expression>, Box<Statement>),
+    Break,
+    Continue,
     Return(Located<Expression>),
 }
 

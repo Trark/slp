@@ -428,6 +428,8 @@ named!(reserved_word_for, complete!(tag!("for")));
 named!(reserved_word_while, complete!(tag!("while")));
 named!(reserved_word_switch, complete!(tag!("switch")));
 named!(reserved_word_return, complete!(tag!("return")));
+named!(reserved_word_break, complete!(tag!("break")));
+named!(reserved_word_continue, complete!(tag!("continue")));
 named!(reserved_word_struct, complete!(tag!("struct")));
 named!(reserved_word_samplerstate, complete!(tag!("SamplerState")));
 named!(reserved_word_cbuffer, complete!(tag!("cbuffer")));
@@ -486,6 +488,8 @@ named!(reserved_word_s0, alt!(
     reserved_word_while |
     reserved_word_switch |
     reserved_word_return |
+    reserved_word_break |
+    reserved_word_continue |
     reserved_word_struct |
     reserved_word_samplerstate |
     reserved_word_cbuffer |
@@ -682,6 +686,8 @@ named!(token_no_whitespace_words<Token>, alt!(
     reserved_word_case => { |_| { Token::Case } } |
     reserved_word_default => { |_| { Token::Default } } |
     reserved_word_return => { |_| { Token::Return } } |
+    reserved_word_break => { |_| { Token::Break } } |
+    reserved_word_continue => { |_| { Token::Continue } } |
 
     reserved_word_struct => { |_| { Token::Struct } } |
     reserved_word_samplerstate => { |_| { Token::SamplerState } } |
@@ -898,6 +904,10 @@ fn test_token() {
                IResult::Done(&b""[..], from_end(Token::Switch, 6)));
     assert_eq!(token(&b"return"[..]),
                IResult::Done(&b""[..], from_end(Token::Return, 6)));
+    assert_eq!(token(&b"break"[..]),
+               IResult::Done(&b""[..], from_end(Token::Break, 5)));
+    assert_eq!(token(&b"continue"[..]),
+               IResult::Done(&b""[..], from_end(Token::Continue, 8)));
 
     assert_eq!(token(&b"struct"[..]),
                IResult::Done(&b""[..], from_end(Token::Struct, 6)));

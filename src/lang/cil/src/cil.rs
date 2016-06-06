@@ -139,6 +139,8 @@ pub enum Statement {
     IfElse(Expression, Box<Statement>, Box<Statement>),
     For(InitStatement, Expression, Expression, Box<Statement>),
     While(Expression, Box<Statement>),
+    Break,
+    Continue,
     Return(Expression),
 }
 

@@ -145,5 +145,13 @@ kernel void MyKernel
 	}
 	for (; false; 0)
 	{
+		if (1)
+		{
+			break;
+		}
+		else
+		{
+			continue;
+		}
 	}
 }

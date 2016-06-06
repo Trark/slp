@@ -1571,6 +1571,8 @@ fn parse_statement(ast: &ast::Statement,
             let scope_block = try!(parse_scopeblock(statement, scoped_context));
             Ok((vec![ir::Statement::While(cond_ir, scope_block)], context))
         }
+        &ast::Statement::Break => Ok((vec![ir::Statement::Break], context)),
+        &ast::Statement::Continue => Ok((vec![ir::Statement::Continue], context)),
         &ast::Statement::Return(ref expr) => {
             let (expr_ir, expr_ty) = try!(parse_expr(expr, &context));
             match ImplicitConversion::find(&expr_ty, &context.get_return_type().to_rvalue()) {

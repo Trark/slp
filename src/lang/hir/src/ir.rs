@@ -685,6 +685,8 @@ pub enum Statement {
     IfElse(Expression, ScopeBlock, ScopeBlock),
     For(ForInit, Expression, Expression, ScopeBlock),
     While(Expression, ScopeBlock),
+    Break,
+    Continue,
     Return(Expression),
 }
 
