@@ -6,8 +6,34 @@ use slp_lang_htk::*;
 use slp_lang_hst::*;
 use nom::{IResult, Needed, Err, ErrorKind};
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Clone)]
 pub struct ParseError(pub ParseErrorReason, pub Option<Vec<LexToken>>, pub Option<Box<ParseError>>);
+
+impl fmt::Debug for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let tokens = match self.1 {
+            Some(ref vec) => {
+                let mut slice = &vec[..];
+                let mut line = None;
+                for i in 0..vec.len() {
+                    let FileLocation(_, ref cur_line, _) = vec[i].1;
+                    match line {
+                        Some(last_line) => {
+                            if cur_line != last_line {
+                                break;
+                            }
+                        }
+                        None => line = Some(cur_line),
+                    }
+                    slice = &vec[..(i + 1)]
+                }
+                Some(slice)
+            }
+            None => None,
+        };
+        write!(f, "ParseError({:?}, {:?}, {:?})", self.0, tokens, self.2)
+    }
+}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum ParseErrorReason {
