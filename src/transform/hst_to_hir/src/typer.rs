@@ -19,6 +19,7 @@ use rel::ReduceContext;
 pub enum TyperError {
     Unimplemented,
     ExpressionSequenceOperatorNotImplemented,
+    SamplerSupportNotImplemented,
 
     ValueAlreadyDefined(String, ErrorType, ErrorType),
     StructAlreadyDefined(String),
@@ -135,6 +136,7 @@ impl error::Error for TyperError {
         match *self {
             TyperError::Unimplemented => "unimplemented",
             TyperError::ExpressionSequenceOperatorNotImplemented => "operator ',' not implemented",
+            TyperError::SamplerSupportNotImplemented => "Samplers not implemented",
 
             TyperError::ValueAlreadyDefined(_, _, _) => "identifier already defined",
             TyperError::StructAlreadyDefined(_) => "struct aready defined",
@@ -1702,6 +1704,9 @@ fn parse_rootdefinition_globalvariable
             }
             Some(ast::GlobalSlot::ReadWriteSlot(slot)) => {
                 context.global_slots_rw.push((slot, entry));
+            }
+            Some(ast::GlobalSlot::SamplerSlot(_)) => {
+                return Err(TyperError::SamplerSupportNotImplemented)
             }
             None => {}
         }

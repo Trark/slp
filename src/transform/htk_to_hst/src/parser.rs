@@ -1641,11 +1641,13 @@ impl Parse for GlobalSlot {
                  |reg| {
                      match reg {
                          LexToken(Token::Register(RegisterSlot::T(slot)), _) => {
-                             Ok(GlobalSlot::ReadSlot(slot)) as Result<GlobalSlot, ParseErrorReason>
+                             Ok(GlobalSlot::ReadSlot(slot))
                          }
                          LexToken(Token::Register(RegisterSlot::U(slot)), _) => {
-                             Ok(GlobalSlot::ReadWriteSlot(slot)) as Result<GlobalSlot,
-                                                                           ParseErrorReason>
+                             Ok(GlobalSlot::ReadWriteSlot(slot))
+                         }
+                         LexToken(Token::Register(RegisterSlot::S(slot)), _) => {
+                             Ok(GlobalSlot::SamplerSlot(slot))
                          }
                          LexToken(Token::Register(_), _) => Err(ParseErrorReason::WrongSlotType),
                          _ => unreachable!(),

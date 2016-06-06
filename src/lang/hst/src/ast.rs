@@ -509,6 +509,7 @@ pub struct SamplerSlot(pub u32);
 pub enum GlobalSlot {
     ReadSlot(u32),
     ReadWriteSlot(u32),
+    SamplerSlot(u32),
 }
 
 #[derive(PartialEq, Debug, Clone)]
