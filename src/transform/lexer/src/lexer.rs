@@ -6,7 +6,7 @@ use slp_lang_htk::*;
 use slp_transform_preprocess::PreprocessedText;
 use nom::{IResult, Needed, Err, ErrorKind};
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Clone)]
 pub enum LexError {
     Unknown,
     FailedToParse(Vec<u8>),
@@ -19,6 +19,27 @@ impl error::Error for LexError {
             LexError::Unknown => "unknown lexer error",
             LexError::FailedToParse(_) => "failed to parse stream",
             LexError::UnexpectedEndOfStream => "unexpected end of stream",
+        }
+    }
+}
+
+impl fmt::Debug for LexError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            LexError::Unknown => write!(f, "Unknown"),
+            LexError::FailedToParse(ref data) => {
+                match String::from_utf8(data.clone()) {
+                    Ok(friendly) => {
+                        let substr = match friendly.find('\n') {
+                            Some(index) => &friendly[..index],
+                            None => &friendly,
+                        };
+                        write!(f, "FailedToParse(\"{}\")", substr)
+                    }
+                    Err(_) => write!(f, "FailedToParse({:?})", data),
+                }
+            }
+            LexError::UnexpectedEndOfStream => write!(f, "UnexpectedEndOfStream"),
         }
     }
 }
