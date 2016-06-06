@@ -582,6 +582,7 @@ enum RegisterType {
     T,
     U,
     B,
+    S,
 }
 named!(register<Token>, chain!(
     reserved_word_register ~
@@ -591,7 +592,8 @@ named!(register<Token>, chain!(
     slot_type: alt!(
         tag!("t") => { |_| { RegisterType::T }} |
         tag!("u") => { |_| { RegisterType::U }} |
-        tag!("b") => { |_| { RegisterType::B }}
+        tag!("b") => { |_| { RegisterType::B }} |
+        tag!("s") => { |_| { RegisterType::S }}
     ) ~
     num: digits ~
     tag!(")"),
@@ -599,6 +601,7 @@ named!(register<Token>, chain!(
         RegisterType::T => RegisterSlot::T(num as u32),
         RegisterType::U => RegisterSlot::U(num as u32),
         RegisterType::B => RegisterSlot::B(num as u32),
+        RegisterType::S => RegisterSlot::S(num as u32),
     }) }
 ));
 

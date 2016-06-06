@@ -15,6 +15,7 @@ pub enum RegisterSlot {
     T(u32),
     U(u32),
     B(u32),
+    S(u32),
 }
 
 #[derive(PartialEq, Debug, Clone)]
