@@ -1,13 +1,12 @@
 
 use std::error;
 use std::fmt;
-use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::collections::HashMap;
 use hir_intrinsics::*;
 
 /// Basic scalar types
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Clone)]
 pub enum ScalarType {
     Bool,
     UntypedInt,
@@ -18,6 +17,21 @@ pub enum ScalarType {
     Double,
 }
 
+impl fmt::Debug for ScalarType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let name = match *self {
+            ScalarType::Bool => "bool",
+            ScalarType::UntypedInt => "UntypedInt",
+            ScalarType::Int => "int",
+            ScalarType::UInt => "uint",
+            ScalarType::Half => "half",
+            ScalarType::Float => "float",
+            ScalarType::Double => "double",
+        };
+        write!(f, "{}", name)
+    }
+}
+
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum NumericDimension {
     Scalar,
@@ -26,11 +40,21 @@ pub enum NumericDimension {
 }
 
 /// Layout for DataType
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Clone)]
 pub enum DataLayout {
     Scalar(ScalarType),
     Vector(ScalarType, u32),
     Matrix(ScalarType, u32, u32),
+}
+
+impl fmt::Debug for DataLayout {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            DataLayout::Scalar(ref st) => write!(f, "{:?}", st),
+            DataLayout::Vector(ref st, ref x) => write!(f, "{:?}{}", st, x),
+            DataLayout::Matrix(ref st, ref x, ref y) => write!(f, "{:?}{}x{}", st, x, y),
+        }
+    }
 }
 
 impl DataLayout {
@@ -73,8 +97,14 @@ impl From<TypeLayout> for Option<DataLayout> {
 /// FormatType might be a better name because they can bind resource
 /// views with a format, but HLSL just called them Buffer and other
 /// apis call them data buffers
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Clone)]
 pub struct DataType(pub DataLayout, pub TypeModifier);
+
+impl fmt::Debug for DataType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}{:?}", self.1, self.0)
+    }
+}
 
 impl From<Type> for Option<DataType> {
     fn from(ty: Type) -> Option<DataType> {
@@ -87,7 +117,7 @@ impl From<Type> for Option<DataType> {
 }
 
 /// Layout for StructuredType
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Clone)]
 pub enum StructuredLayout {
     Scalar(ScalarType),
     Vector(ScalarType, u32),
@@ -95,12 +125,29 @@ pub enum StructuredLayout {
     Struct(StructId),
 }
 
+impl fmt::Debug for StructuredLayout {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            StructuredLayout::Scalar(ref st) => write!(f, "{:?}", st),
+            StructuredLayout::Vector(ref st, ref x) => write!(f, "{:?}{}", st, x),
+            StructuredLayout::Matrix(ref st, ref x, ref y) => write!(f, "{:?}{}x{}", st, x, y),
+            StructuredLayout::Struct(ref sid) => write!(f, "struct<{}>", sid.0),
+        }
+    }
+}
+
 /// A type that can be used in structured buffers
 /// These are the both all the data types and user defined structs
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Clone)]
 pub struct StructuredType(pub StructuredLayout, pub TypeModifier);
 
-#[derive(PartialEq, Debug, Clone)]
+impl fmt::Debug for StructuredType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}{:?}", self.1, self.0)
+    }
+}
+
+#[derive(PartialEq, Clone)]
 pub enum ObjectType {
     Buffer(DataType),
     RWBuffer(DataType),
@@ -132,7 +179,39 @@ pub enum ObjectType {
     OutputPatch,
 }
 
-#[derive(PartialEq, Debug, Clone)]
+impl fmt::Debug for ObjectType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use self::ObjectType::*;
+        match *self {
+            Buffer(ref dt) => write!(f, "Buffer<{:?}>", dt),
+            RWBuffer(ref dt) => write!(f, "RWBuffer<{:?}>", dt),
+            ByteAddressBuffer => write!(f, "ByteAddressBuffer"),
+            RWByteAddressBuffer => write!(f, "RWByteAddressBuffer"),
+            StructuredBuffer(ref st) => write!(f, "StructuredBuffer<{:?}>", st),
+            RWStructuredBuffer(ref st) => write!(f, "RWStructuredBuffer<{:?}>", st),
+            AppendStructuredBuffer(ref st) => write!(f, "AppendStructuredBuffer<{:?}>", st),
+            ConsumeStructuredBuffer(ref st) => write!(f, "ConsumeStructuredBuffer<{:?}>", st),
+            Texture1D(ref dt) => write!(f, "Texture1D<{:?}>", dt),
+            Texture1DArray(ref dt) => write!(f, "Texture1DArray<{:?}>", dt),
+            Texture2D(ref dt) => write!(f, "Texture2D<{:?}>", dt),
+            Texture2DArray(ref dt) => write!(f, "Texture2DArray<{:?}>", dt),
+            Texture2DMS(ref dt) => write!(f, "Texture2DMS<{:?}>", dt),
+            Texture2DMSArray(ref dt) => write!(f, "Texture2DMSArray<{:?}>", dt),
+            Texture3D(ref dt) => write!(f, "Texture3D<{:?}>", dt),
+            TextureCube(ref dt) => write!(f, "TextureCube<{:?}>", dt),
+            TextureCubeArray(ref dt) => write!(f, "TextureCubeArray<{:?}>", dt),
+            RWTexture1D(ref dt) => write!(f, "RWTexture1D<{:?}>", dt),
+            RWTexture1DArray(ref dt) => write!(f, "RWTexture1DArray<{:?}>", dt),
+            RWTexture2D(ref dt) => write!(f, "RWTexture2D<{:?}>", dt),
+            RWTexture2DArray(ref dt) => write!(f, "RWTexture2DArray<{:?}>", dt),
+            RWTexture3D(ref dt) => write!(f, "RWTexture3D<{:?}>", dt),
+            InputPatch => write!(f, "InputPatch"),
+            OutputPatch => write!(f, "OutputPatch"),
+        }
+    }
+}
+
+#[derive(PartialEq, Clone)]
 pub enum TypeLayout {
     Void,
     Scalar(ScalarType),
@@ -235,6 +314,21 @@ impl TypeLayout {
     }
 }
 
+impl fmt::Debug for TypeLayout {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            TypeLayout::Void => write!(f, "void"),
+            TypeLayout::Scalar(ref st) => write!(f, "{:?}", st),
+            TypeLayout::Vector(ref st, ref x) => write!(f, "{:?}{}", st, x),
+            TypeLayout::Matrix(ref st, ref x, ref y) => write!(f, "{:?}{}x{}", st, x, y),
+            TypeLayout::Struct(ref sid) => write!(f, "struct<{}>", sid.0),
+            TypeLayout::SamplerState => write!(f, "SamplerState"),
+            TypeLayout::Object(ref ot) => write!(f, "{:?}", ot),
+            TypeLayout::Array(ref ty, ref len) => write!(f, "{:?}[{}]", ty, len),
+        }
+    }
+}
+
 impl From<DataLayout> for TypeLayout {
     fn from(data: DataLayout) -> TypeLayout {
         match data {
@@ -290,30 +384,29 @@ impl TypeModifier {
     }
 }
 
-impl Debug for TypeModifier {
+impl fmt::Debug for TypeModifier {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
-        let mut parts = vec![];
-        if self.is_const {
-            parts.push("const")
+        let p1 = if self.is_const {
+            "const "
+        } else {
+            ""
         };
-        if self.row_order == RowOrder::Row {
-            parts.push("row_major")
+        let p2 = if self.row_order == RowOrder::Row {
+            "row_major "
+        } else {
+            ""
         };
-        if self.precise {
-            parts.push("precise")
+        let p3 = if self.precise {
+            "precise "
+        } else {
+            ""
         };
-        if self.volatile {
-            parts.push("volatile")
+        let p4 = if self.volatile {
+            "volatile "
+        } else {
+            ""
         };
-        try!(write!(f, "{}", "{"));
-        for (index, part) in parts.iter().enumerate() {
-            try!(write!(f, "{}", part));
-            if index != parts.len() - 1 {
-                try!(write!(f, ", "));
-            }
-        }
-        try!(write!(f, "{}", "}"));
-        Ok(())
+        write!(f, "{}{}{}{}", p1, p2, p3, p4)
     }
 }
 
@@ -398,7 +491,7 @@ impl Default for LocalStorage {
 }
 
 /// The full type when paired with modifiers
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Clone)]
 pub struct Type(pub TypeLayout, pub TypeModifier);
 
 impl Type {
@@ -479,6 +572,12 @@ impl Type {
 
     pub fn is_void(&self) -> bool {
         self.0 == TypeLayout::Void
+    }
+}
+
+impl fmt::Debug for Type {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}{:?}", self.1, self.0)
     }
 }
 
