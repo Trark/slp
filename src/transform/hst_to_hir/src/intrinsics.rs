@@ -63,6 +63,7 @@ const T_FLOAT1_TY: Type = Type(TypeLayout::Vector(ScalarType::Float, 1), T_MOD);
 const T_FLOAT2_TY: Type = Type(TypeLayout::Vector(ScalarType::Float, 2), T_MOD);
 const T_FLOAT3_TY: Type = Type(TypeLayout::Vector(ScalarType::Float, 3), T_MOD);
 const T_FLOAT4_TY: Type = Type(TypeLayout::Vector(ScalarType::Float, 4), T_MOD);
+const T_SAMPLER_TY: Type = Type(TypeLayout::SamplerState, T_MOD);
 
 const T_INT: ParamType = ParamType(T_INT_TY, InputModifier::In, None);
 const T_INT1: ParamType = ParamType(T_INT1_TY, InputModifier::In, None);
@@ -82,6 +83,7 @@ const T_FLOAT_OUT: ParamType = ParamType(T_FLOAT_TY, InputModifier::Out, None);
 const T_FLOAT2_OUT: ParamType = ParamType(T_FLOAT2_TY, InputModifier::Out, None);
 const T_FLOAT3_OUT: ParamType = ParamType(T_FLOAT3_TY, InputModifier::Out, None);
 const T_FLOAT4_OUT: ParamType = ParamType(T_FLOAT4_TY, InputModifier::Out, None);
+const T_SAMPLER: ParamType = ParamType(T_SAMPLER_TY, InputModifier::In, None);
 
 use self::IntrinsicFactory::Intrinsic0 as I0;
 use self::IntrinsicFactory::Intrinsic1 as I1;
@@ -327,6 +329,12 @@ pub fn get_method(object: &ObjectType, name: &str) -> Result<MethodDefinition, (
         ObjectType::RWStructuredBuffer(ref structured_type) => {
             let methods: &[MethodT] = &[
                 ("Load", vec![T_INT], I2(RWStructuredBufferLoad(structured_type.clone()))),
+            ];
+            find_method(object, &methods, name)
+        }
+        ObjectType::Texture2D(ref data_type) => {
+            let methods: &[MethodT] = &[
+                ("Sample", vec![T_SAMPLER, T_FLOAT2], I3(Texture2DSample(data_type.clone()))),
             ];
             find_method(object, &methods, name)
         }

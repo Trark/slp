@@ -19,7 +19,6 @@ use rel::ReduceContext;
 pub enum TyperError {
     Unimplemented,
     ExpressionSequenceOperatorNotImplemented,
-    SamplerSupportNotImplemented,
 
     ValueAlreadyDefined(String, ErrorType, ErrorType),
     StructAlreadyDefined(String),
@@ -28,6 +27,7 @@ pub enum TyperError {
     ConstantSlotAlreadyUsed(ir::ConstantBufferId, ir::ConstantBufferId),
     ReadResourceSlotAlreadyUsed(ir::GlobalId, ir::GlobalId),
     ReadWriteResourceSlotAlreadyUsed(ir::GlobalId, ir::GlobalId),
+    SamplerResourceSlotAlreadyUsed(ir::GlobalId, ir::GlobalId),
 
     UnknownIdentifier(String),
     UnknownType(ErrorType),
@@ -136,7 +136,6 @@ impl error::Error for TyperError {
         match *self {
             TyperError::Unimplemented => "unimplemented",
             TyperError::ExpressionSequenceOperatorNotImplemented => "operator ',' not implemented",
-            TyperError::SamplerSupportNotImplemented => "Samplers not implemented",
 
             TyperError::ValueAlreadyDefined(_, _, _) => "identifier already defined",
             TyperError::StructAlreadyDefined(_) => "struct aready defined",
@@ -147,6 +146,7 @@ impl error::Error for TyperError {
             TyperError::ReadWriteResourceSlotAlreadyUsed(_, _) => {
                 "global writable resource slot already used"
             }
+            TyperError::SamplerResourceSlotAlreadyUsed(_, _) => "sampler slot already used",
 
             TyperError::UnknownIdentifier(_) => "unknown identifier",
             TyperError::UnknownType(_) => "unknown type name",
@@ -261,6 +261,7 @@ struct GlobalContext {
 
     global_slots_r: Vec<(u32, ir::GlobalEntry)>,
     global_slots_rw: Vec<(u32, ir::GlobalEntry)>,
+    global_slots_s: Vec<(u32, ir::GlobalEntry)>,
     global_slots_constants: Vec<(u32, ir::ConstantBufferId)>,
 }
 
@@ -460,6 +461,7 @@ impl GlobalContext {
             current_return_type: None,
             global_slots_r: vec![],
             global_slots_rw: vec![],
+            global_slots_s: vec![],
             global_slots_constants: vec![],
         }
     }
@@ -1705,8 +1707,8 @@ fn parse_rootdefinition_globalvariable
             Some(ast::GlobalSlot::ReadWriteSlot(slot)) => {
                 context.global_slots_rw.push((slot, entry));
             }
-            Some(ast::GlobalSlot::SamplerSlot(_)) => {
-                return Err(TyperError::SamplerSupportNotImplemented)
+            Some(ast::GlobalSlot::SamplerSlot(slot)) => {
+                context.global_slots_s.push((slot, entry));
             }
             None => {}
         }
@@ -1947,9 +1949,8 @@ pub fn typeparse(ast: &ast::Module) -> Result<ir::Module, TyperError> {
             let error_id = entry.id.clone();
             match global_table_r.insert(slot, entry) {
                 Some(currently_used_by) => {
-                    return Err(TyperError::ReadResourceSlotAlreadyUsed(currently_used_by.id
-                                                                           .clone(),
-                                                                       error_id))
+                    let id = currently_used_by.id.clone();
+                    return Err(TyperError::ReadResourceSlotAlreadyUsed(id, error_id));
                 }
                 None => {}
             }
@@ -1963,24 +1964,38 @@ pub fn typeparse(ast: &ast::Module) -> Result<ir::Module, TyperError> {
             let error_id = entry.id.clone();
             match global_table_rw.insert(slot, entry) {
                 Some(currently_used_by) => {
-                    return Err(TyperError::ReadWriteResourceSlotAlreadyUsed(currently_used_by.id
-                                                                                .clone(),
-                                                                            error_id))
+                    let id = currently_used_by.id.clone();
+                    return Err(TyperError::ReadWriteResourceSlotAlreadyUsed(id, error_id));
                 }
                 None => {}
             }
         }
     }
 
-    // Resolve used constant buffers into constabt buffer list
+    // Resolve used samplers into sampler list
+    let mut global_table_s = HashMap::new();
+    for (slot, entry) in context.global_slots_s {
+        if global_declarations.globals.contains_key(&entry.id) {
+            let error_id = entry.id.clone();
+            match global_table_s.insert(slot, entry) {
+                Some(currently_used_by) => {
+                    let id = currently_used_by.id.clone();
+                    return Err(TyperError::SamplerResourceSlotAlreadyUsed(id, error_id));
+                }
+                None => {}
+            }
+        }
+    }
+
+    // Resolve used constant buffers into constant buffer list
     let mut global_table_constants = HashMap::new();
     for (slot, cb_id) in context.global_slots_constants {
         if global_declarations.constants.contains_key(&cb_id) {
             let error_id = cb_id.clone();
             match global_table_constants.insert(slot, cb_id) {
                 Some(currently_used_by) => {
-                    return Err(TyperError::ConstantSlotAlreadyUsed(currently_used_by.clone(),
-                                                                   error_id))
+                    let by = currently_used_by.clone();
+                    return Err(TyperError::ConstantSlotAlreadyUsed(by, error_id));
                 }
                 None => {}
             }
@@ -1991,7 +2006,7 @@ pub fn typeparse(ast: &ast::Module) -> Result<ir::Module, TyperError> {
     let global_table = ir::GlobalTable {
         r_resources: global_table_r,
         rw_resources: global_table_rw,
-        samplers: HashMap::new(),
+        samplers: global_table_s,
         constants: global_table_constants,
     };
 

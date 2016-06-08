@@ -336,6 +336,14 @@ impl Context {
                 binds.cbuffer_map.insert(*cbuffer_key, current);
                 current = current + 1;
             }
+            let mut s_keys = table.samplers.keys().collect::<Vec<&u32>>();
+            s_keys.sort();
+            for global_entry_key in s_keys {
+                let global_entry = table.samplers.get(global_entry_key).expect("bad s key");
+                context.kernel_arguments.push(GlobalArgument::Global(global_entry.id.clone()));
+                binds.sampler_map.insert(*global_entry_key, current);
+                current = current + 1;
+            }
             let mut r_keys = table.r_resources.keys().collect::<Vec<&u32>>();
             r_keys.sort();
             for global_entry_key in r_keys {
@@ -721,6 +729,7 @@ fn get_cl_global_type(id: &src::GlobalId,
             dst::Type::Pointer(dst::AddressSpace::Global,
                                Box::new(dst::Type::Scalar(dst::Scalar::UChar)))
         }
+        src::TypeLayout::SamplerState => dst::Type::Sampler,
         _ => return Err(TranspileError::TypeIsNotAllowedAsGlobal(ty.clone())),
     })
 }
@@ -822,6 +831,25 @@ fn transpile_literal(lit: &src::Literal) -> Result<dst::Literal, TranspileError>
         &src::Literal::Float(f) => Ok(dst::Literal::Float(f)),
         &src::Literal::Double(f) => Ok(dst::Literal::Double(f)),
     }
+}
+
+fn get_image_func(base_func: &'static str,
+                  dtyl: &src::DataLayout)
+                  -> Result<(String, dst::Type), TranspileError> {
+    let (ext, ty) = match *dtyl {
+        src::DataLayout::Scalar(ref scalar) |
+        src::DataLayout::Vector(ref scalar, _) => {
+            let dim = dst::VectorDimension::Four;
+            match *scalar {
+                src::ScalarType::Int => ("i", dst::Type::Vector(dst::Scalar::Int, dim)),
+                src::ScalarType::UInt => ("ui", dst::Type::Vector(dst::Scalar::UInt, dim)),
+                src::ScalarType::Float => ("f", dst::Type::Vector(dst::Scalar::Float, dim)),
+                _ => return Err(TranspileError::Unknown),
+            }
+        }
+        src::DataLayout::Matrix(_, _, _) => return Err(TranspileError::Unknown),
+    };
+    Ok((format!("{}{}", base_func, ext), ty))
 }
 
 fn write_unary(op: dst::UnaryOp, expr: dst::Expression) -> Result<dst::Expression, TranspileError> {
@@ -1125,25 +1153,7 @@ fn transpile_intrinsic2(intrinsic: &src::Intrinsic2,
         }
         I::Texture2DLoad(ref data_type) |
         I::RWTexture2DLoad(ref data_type) => {
-            let (func_name, read_type) = match data_type.0 {
-                src::DataLayout::Scalar(ref scalar) |
-                src::DataLayout::Vector(ref scalar, _) => {
-                    let dim = dst::VectorDimension::Four;
-                    match *scalar {
-                        src::ScalarType::Int => {
-                            ("read_imagei", dst::Type::Vector(dst::Scalar::Int, dim))
-                        }
-                        src::ScalarType::UInt => {
-                            ("read_imageui", dst::Type::Vector(dst::Scalar::UInt, dim))
-                        }
-                        src::ScalarType::Float => {
-                            ("read_imagef", dst::Type::Vector(dst::Scalar::Float, dim))
-                        }
-                        _ => return Err(TranspileError::Unknown),
-                    }
-                }
-                src::DataLayout::Matrix(_, _, _) => return Err(TranspileError::Unknown),
-            };
+            let (func_name, read_type) = try!(get_image_func("read_image", &data_type.0));
             let cast_type = try!(transpile_datatype(data_type, context));
             let expr = dst::Expression::UntypedIntrinsic(func_name.to_string(), vec![e1, e2]);
             write_cast(read_type, cast_type, expr, false, context)
@@ -1214,6 +1224,12 @@ fn transpile_intrinsic3(intrinsic: &src::Intrinsic3,
         I::SmoothStep | I::SmoothStep2 | I::SmoothStep3 | I::SmoothStep4 => {
             write_func("smoothstep", &[e1, e2, e3])
         }
+        I::Texture2DSample(ref data_type) => {
+            let (func_name, read_type) = try!(get_image_func("read_image", &data_type.0));
+            let cast_type = try!(transpile_datatype(data_type, context));
+            let expr = dst::Expression::UntypedIntrinsic(func_name.to_string(), vec![e1, e2, e3]);
+            write_cast(read_type, cast_type, expr, false, context)
+        }
         I::RWTexture2DStore(ref data_type) => {
             // If we detect a write to an image location, emit
             // a write_image function. We can't currently handle ending
@@ -1223,25 +1239,8 @@ fn transpile_intrinsic3(intrinsic: &src::Intrinsic3,
             let rhs = e3;
 
             // Find the right cl function to call
-            let (func_name, read_type) = match data_type.0 {
-                src::DataLayout::Scalar(ref scalar) |
-                src::DataLayout::Vector(ref scalar, _) => {
-                    let dim = dst::VectorDimension::Four;
-                    match *scalar {
-                        src::ScalarType::Int => {
-                            ("write_imagei", dst::Type::Vector(dst::Scalar::Int, dim))
-                        }
-                        src::ScalarType::UInt => {
-                            ("write_imageui", dst::Type::Vector(dst::Scalar::UInt, dim))
-                        }
-                        src::ScalarType::Float => {
-                            ("write_imagef", dst::Type::Vector(dst::Scalar::Float, dim))
-                        }
-                        _ => return Err(TranspileError::Unknown),
-                    }
-                }
-                src::DataLayout::Matrix(_, _, _) => return Err(TranspileError::Unknown),
-            };
+            let (func_name, read_type) = try!(get_image_func("write_image", &data_type.0));
+
             let cast_type = try!(transpile_datatype(data_type, context));
             let args = vec![tex_dst, index_dst, rhs];
             let expr = dst::Expression::UntypedIntrinsic(func_name.to_string(), args);
@@ -2199,7 +2198,6 @@ fn transpile_roots(root_defs: &[src::RootDefinition],
                     None => {}
                 }
             }
-            src::RootDefinition::SamplerState => unimplemented!(),
             _ => {}
         };
     }

@@ -88,7 +88,7 @@ int2 load_coord()
 	return (int2)((int)1, (int)1);
 }
 
-void test_texture_2d(read_only image2d_t g_roTexture2DFloat, read_only image2d_t g_roTexture2DInt, read_only image2d_t g_roTexture2DUInt, read_write image2d_t g_rwTexture2DFloat, write_only image2d_t g_rwTexture2DInt, write_only image2d_t g_rwTexture2DUInt, uint3 dtid)
+void test_texture_2d(sampler_t g_sampler, read_only image2d_t g_roTexture2DFloat, read_only image2d_t g_roTexture2DInt, read_only image2d_t g_roTexture2DUInt, read_write image2d_t g_rwTexture2DFloat, write_only image2d_t g_rwTexture2DInt, write_only image2d_t g_rwTexture2DUInt, uint3 dtid)
 {
 	int2 coord;
 	coord.x = (int)dtid.x;
@@ -109,6 +109,7 @@ void test_texture_2d(read_only image2d_t g_roTexture2DFloat, read_only image2d_t
 		write_imageui(g_rwTexture2DUInt, expr, tex);
 		uint4 i2_0 = read_load_ui = i2;
 	}
+	float3 read_sample_f = read_imagef(g_roTexture2DFloat, g_sampler, (float2)((float)dtid.x, (float)dtid.y)).xyz;
 }
 
 void test_byte_address_buffer(__global uchar* g_roRawBuffer, __global uchar* g_rwRawBuffer, uint3 dtid)
@@ -130,6 +131,7 @@ void test_byte_address_buffer(__global uchar* g_roRawBuffer, __global uchar* g_r
 __attribute__((reqd_work_group_size(8, 8, 1)))
 kernel void MyKernel
 (
+	sampler_t g_sampler,
 	__global uint4* g_roBuffer,
 	__global struct testStruct* g_roStructuredBuffer,
 	read_only image2d_t g_roTexture2DFloat,
@@ -147,7 +149,7 @@ kernel void MyKernel
 	uint3 dtid = (uint3)(get_global_id(0u), get_global_id(1u), get_global_id(2u));
 	test_buffer(g_roBuffer, g_rwBuffer, dtid);
 	test_structured_buffer(g_roStructuredBuffer, g_rwStructuredBuffer, dtid);
-	test_texture_2d(g_roTexture2DFloat, g_roTexture2DInt, g_roTexture2DUInt, g_rwTexture2DFloat, g_rwTexture2DInt, g_rwTexture2DUInt, dtid);
+	test_texture_2d(g_sampler, g_roTexture2DFloat, g_roTexture2DInt, g_roTexture2DUInt, g_rwTexture2DFloat, g_rwTexture2DInt, g_rwTexture2DUInt, dtid);
 	test_byte_address_buffer(g_roRawBuffer, g_rwRawBuffer, dtid);
 	barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 	barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);

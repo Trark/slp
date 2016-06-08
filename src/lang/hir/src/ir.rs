@@ -865,7 +865,6 @@ pub struct Kernel {
 #[derive(PartialEq, Debug, Clone)]
 pub enum RootDefinition {
     Struct(StructDefinition),
-    SamplerState,
     ConstantBuffer(ConstantBuffer),
     GlobalVariable(GlobalVariable),
     Function(FunctionDefinition),
@@ -882,7 +881,7 @@ pub struct GlobalEntry {
 pub struct GlobalTable {
     pub r_resources: HashMap<u32, GlobalEntry>,
     pub rw_resources: HashMap<u32, GlobalEntry>,
-    pub samplers: HashMap<u32, String>,
+    pub samplers: HashMap<u32, GlobalEntry>,
     pub constants: HashMap<u32, ConstantBufferId>,
 }
 
@@ -1035,7 +1034,6 @@ impl TypeState {
                         Some(_) => return Err(()),
                     }
                 }
-                RootDefinition::SamplerState => unimplemented!(),
                 RootDefinition::GlobalVariable(ref gv) => {
                     match context.globals.insert(gv.id.clone(), gv.global_type.0.clone()) {
                         None => {}

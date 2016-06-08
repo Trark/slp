@@ -250,6 +250,8 @@ pub enum Intrinsic3 {
     SmoothStep3,
     SmoothStep4,
 
+    Texture2DSample(DataType),
+
     // RWTexture2D methods
     RWTexture2DStore(DataType),
 
@@ -513,6 +515,7 @@ impl Intrinsic for Intrinsic3 {
             Intrinsic3::SmoothStep2 => Type::floatn(2).to_rvalue(),
             Intrinsic3::SmoothStep3 => Type::floatn(3).to_rvalue(),
             Intrinsic3::SmoothStep4 => Type::floatn(4).to_rvalue(),
+            Intrinsic3::Texture2DSample(ref dty) => Type::from_data(dty.clone()).to_rvalue(),
             Intrinsic3::RWTexture2DStore(_) => Type::void().to_rvalue(),
             Intrinsic3::RWByteAddressBufferStore => Type::void().to_rvalue(),
             Intrinsic3::RWByteAddressBufferStore2 => Type::void().to_rvalue(),
@@ -819,6 +822,7 @@ impl Intrinsic3 {
             Intrinsic3::SmoothStep2 |
             Intrinsic3::SmoothStep3 |
             Intrinsic3::SmoothStep4 |
+            Intrinsic3::Texture2DSample(_) |
             Intrinsic3::RWTexture2DStore(_) |
             Intrinsic3::RWByteAddressBufferStore |
             Intrinsic3::RWByteAddressBufferStore2 |
@@ -845,6 +849,7 @@ impl Intrinsic3 {
             Intrinsic3::SmoothStep2 |
             Intrinsic3::SmoothStep3 |
             Intrinsic3::SmoothStep4 |
+            Intrinsic3::Texture2DSample(_) |
             Intrinsic3::RWTexture2DStore(_) |
             Intrinsic3::RWByteAddressBufferStore |
             Intrinsic3::RWByteAddressBufferStore2 |
@@ -876,6 +881,7 @@ impl Intrinsic3 {
             Intrinsic3::SmoothStep2 |
             Intrinsic3::SmoothStep3 |
             Intrinsic3::SmoothStep4 |
+            Intrinsic3::Texture2DSample(_) |
             Intrinsic3::RWTexture2DStore(_) |
             Intrinsic3::RWByteAddressBufferStore |
             Intrinsic3::RWByteAddressBufferStore2 |

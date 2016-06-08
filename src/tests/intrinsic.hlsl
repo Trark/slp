@@ -1,4 +1,6 @@
 
+SamplerState g_sampler : register(s0);
+
 Buffer<uint4> g_roBuffer : register(t0);
 RWBuffer<uint4> g_rwBuffer : register(u0);
 
@@ -57,6 +59,7 @@ void test_texture_2d(uint3 dtid)
     g_rwTexture2DFloat[coord] = read_load_f;
     g_rwTexture2DInt[coord] = g_roTexture2DInt[coord];
     read_load_ui = g_rwTexture2DUInt[coord + load_coord()] = g_roTexture2DUInt[coord];
+    float3 read_sample_f = g_roTexture2DFloat.Sample(g_sampler, float2(dtid.x, dtid.y));
 }
 
 ByteAddressBuffer g_roRawBuffer : register(t5);

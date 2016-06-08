@@ -131,6 +131,9 @@ fn print_typename(typename: &Type, printer: &mut Printer) {
             print_access_modifier(access_modifier, printer);
             printer.print("image2d_t");
         }
+        &Type::Sampler => {
+            printer.print("sampler_t");
+        }
         _ => unimplemented!(),
     };
 }

@@ -77,26 +77,30 @@ fn intrinsic_full() {
              BindMap {
                  read_map: {
                      let mut map = HashMap::new();
-                     map.insert(0, 0);
-                     map.insert(1, 1);
-                     map.insert(2, 2);
-                     map.insert(3, 3);
-                     map.insert(4, 4);
-                     map.insert(5, 5);
+                     map.insert(0, 1);
+                     map.insert(1, 2);
+                     map.insert(2, 3);
+                     map.insert(3, 4);
+                     map.insert(4, 5);
+                     map.insert(5, 6);
                      map
                  },
                  write_map: {
                      let mut map = HashMap::new();
-                     map.insert(0, 6);
-                     map.insert(1, 7);
-                     map.insert(2, 8);
-                     map.insert(3, 9);
-                     map.insert(4, 10);
-                     map.insert(5, 11);
+                     map.insert(0, 7);
+                     map.insert(1, 8);
+                     map.insert(2, 9);
+                     map.insert(3, 10);
+                     map.insert(4, 11);
+                     map.insert(5, 12);
                      map
                  },
                  cbuffer_map: HashMap::new(),
-                 sampler_map: HashMap::new(),
+                 sampler_map: {
+                     let mut map = HashMap::new();
+                     map.insert(0, 0);
+                     map
+                 },
              });
 }
 
