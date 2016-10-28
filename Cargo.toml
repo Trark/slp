@@ -3,6 +3,9 @@ name = "slp"
 version = "0.1.0"
 authors = ["Trark"]
 
+[workspace]
+members = [ "capi", "slipstream" ]
+
 [dependencies.slp_shared]
 path = "src/shared"
 
