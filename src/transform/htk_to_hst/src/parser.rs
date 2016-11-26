@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use slp_shared::*;
 use slp_lang_htk::*;
 use slp_lang_hst::*;
-use nom::{IResult, Needed, Err, ErrorKind};
+use nom::{IResult, Needed, ErrorKind};
 
 #[derive(PartialEq, Clone)]
 pub struct ParseError(pub ParseErrorReason, pub Option<Vec<LexToken>>, pub Option<Box<ParseError>>);
@@ -68,10 +68,7 @@ macro_rules! token (
             } else {
                 match $i[0] {
                     LexToken($inp, _) => IResult::Done(&$i[1..], $i[0].clone()),
-                    _ => IResult::Error(Err::Position(
-                        ErrorKind::Custom(ParseErrorReason::WrongToken),
-                        $i
-                    ))
+                    _ => IResult::Error(ErrorKind::Custom(ParseErrorReason::WrongToken))
                 }
             };
             res
@@ -85,10 +82,7 @@ macro_rules! token (
             } else {
                 match $i[0] {
                     $inp => IResult::Done(&$i[1..], $res),
-                    _ => IResult::Error(Err::Position(
-                        ErrorKind::Custom(ParseErrorReason::WrongToken),
-                        $i
-                    ))
+                    _ => IResult::Error(ErrorKind::Custom(ParseErrorReason::WrongToken))
                 }
             }
         }
@@ -179,8 +173,7 @@ fn parse_datalayout_str(typename: &str) -> Option<DataLayout> {
                                         if rest.len() == 0 {
                                             IResult::Done(&[], DataLayout::Matrix(ty, x, y))
                                         } else {
-                                            IResult::Error(Err::Position(ErrorKind::Custom(0),
-                                                                         input))
+                                            IResult::Error(ErrorKind::Custom(0))
                                         }
                                     }
                                 }
@@ -226,25 +219,16 @@ impl Parse for DataLayout {
                                 if rest.len() == 0 {
                                     IResult::Done(&input[1..], ty)
                                 } else {
-                                    IResult::Error(Err::Position(
-                                        ErrorKind::Custom(ParseErrorReason::UnknownType),
-                                        input
-                                    ))
+                                    IResult::Error(ErrorKind::Custom(ParseErrorReason::UnknownType))
                                 }
                             }
                             IResult::Incomplete(rem) => IResult::Incomplete(rem),
-                            IResult::Error(_) => IResult::Error(Err::Position(
-                                ErrorKind::Custom(ParseErrorReason::UnknownType),
-                                input
-                            )),
+                            IResult::Error(_) => {
+                                IResult::Error(ErrorKind::Custom(ParseErrorReason::UnknownType))
+                            }
                         }
                     }
-                    _ => {
-                        IResult::Error(Err::Position(
-                            ErrorKind::Custom(ParseErrorReason::WrongToken),
-                            input
-                        ))
-                    }
+                    _ => IResult::Error(ErrorKind::Custom(ParseErrorReason::WrongToken)),
                 }
             }
         }
@@ -280,18 +264,14 @@ impl Parse for DataLayout {
                         _ => {
                             match parse_datalayout_str(&name[..]) {
                                 Some(ty) => IResult::Done(&input[1..], ty),
-                                None => IResult::Error(Err::Position(
-                                    ErrorKind::Custom(ParseErrorReason::UnknownType),
-                                    input
-                                )),
+                                None => {
+                                    IResult::Error(ErrorKind::Custom(ParseErrorReason::UnknownType))
+                                }
                             }
                         }
                     }
                 }
-                _ => {
-                    IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::WrongToken),
-                                                 input))
-                }
+                _ => IResult::Error(ErrorKind::Custom(ParseErrorReason::WrongToken)),
             }
         }
     }
@@ -325,7 +305,7 @@ impl Parse for StructuredLayout {
                         }
                         _ => {
                             let reason = ErrorKind::Custom(ParseErrorReason::SymbolIsNotAStruct);
-                            IResult::Error(Err::Position(reason, input))
+                            IResult::Error(reason)
                         }
                     }
                 }
@@ -430,18 +410,10 @@ impl Parse for ObjectType {
                     "InputPatch" => ParseType::InputPatch,
                     "OutputPatch" => ParseType::OutputPatch,
 
-                    _ => return IResult::Error(Err::Position(
-                        ErrorKind::Custom(ParseErrorReason::UnknownType),
-                        input
-                    )),
+                    _ => return IResult::Error(ErrorKind::Custom(ParseErrorReason::UnknownType)),
                 }
             }
-            _ => {
-                return IResult::Error(Err::Position(
-                    ErrorKind::Custom(ParseErrorReason::UnknownType),
-                    input
-                ))
-            }
+            _ => return IResult::Error(ErrorKind::Custom(ParseErrorReason::UnknownType)),
         };
 
         let rest = &input[1..];
@@ -551,14 +523,10 @@ fn parse_voidtype(input: &[LexToken]) -> IResult<&[LexToken], TypeLayout, ParseE
                 if name == "void" {
                     IResult::Done(&input[1..], TypeLayout::Void)
                 } else {
-                    IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::UnknownType),
-                                                 input))
+                    IResult::Error(ErrorKind::Custom(ParseErrorReason::UnknownType))
                 }
             }
-            _ => {
-                IResult::Error(Err::Position(ErrorKind::Custom(ParseErrorReason::WrongToken),
-                                             input))
-            }
+            _ => IResult::Error(ErrorKind::Custom(ParseErrorReason::WrongToken)),
         }
     }
 }
@@ -1829,26 +1797,10 @@ fn rootdefinition_with_semicolon<'t>(input: &'t [LexToken],
 }
 
 // Find the error with the longest tokens used
-fn get_most_relevant_error<'a: 'c, 'b: 'c, 'c>(lhs: Err<&'a [LexToken], ParseErrorReason>,
-                                               rhs: Err<&'b [LexToken], ParseErrorReason>)
-                                               -> Err<&'c [LexToken], ParseErrorReason> {
-    let lhs_len = match lhs {
-        Err::Code(_) => panic!("expected error position"),
-        Err::Node(_, _) => panic!("expected error position"),
-        Err::Position(_, ref p) => p.len(),
-        Err::NodePosition(_, ref p, _) => p.len(),
-    };
-    let rhs_len = match lhs {
-        Err::Code(_) => panic!("expected error position"),
-        Err::Node(_, _) => panic!("expected error position"),
-        Err::Position(_, ref p) => p.len(),
-        Err::NodePosition(_, ref p, _) => p.len(),
-    };
-    if rhs_len < lhs_len {
-        lhs as Err<&'c [LexToken], ParseErrorReason>
-    } else {
-        rhs as Err<&'c [LexToken], ParseErrorReason>
-    }
+fn get_most_relevant_error<'a: 'c, 'b: 'c, 'c>(lhs: ErrorKind<ParseErrorReason>,
+                                               _: ErrorKind<ParseErrorReason>)
+                                               -> ErrorKind<ParseErrorReason> {
+    lhs as ErrorKind<ParseErrorReason>
 }
 
 pub fn module(input: &[LexToken]) -> IResult<&[LexToken], Vec<RootDefinition>, ParseErrorReason> {
@@ -1863,7 +1815,7 @@ pub fn module(input: &[LexToken]) -> IResult<&[LexToken], Vec<RootDefinition>, P
                     match symbol_table.0.insert(sd.name.clone(), SymbolType::Struct) {
                         Some(_) => {
                             let reason = ParseErrorReason::DuplicateStructSymbol;
-                            return IResult::Error(Err::Code(ErrorKind::Custom(reason)));
+                            return IResult::Error(ErrorKind::Custom(reason));
                         }
                         None => {}
                     }
@@ -1894,23 +1846,8 @@ fn errorkind_to_reason(errkind: ErrorKind<ParseErrorReason>) -> ParseErrorReason
     }
 }
 
-fn iresult_to_error(err: Err<&[LexToken], ParseErrorReason>) -> ParseError {
-    match err {
-        Err::Code(error) => ParseError(errorkind_to_reason(error), None, None),
-        Err::Node(error, inner_err) => {
-            ParseError(errorkind_to_reason(error),
-                       None,
-                       Some(Box::new(iresult_to_error(*inner_err))))
-        }
-        Err::Position(error, position) => {
-            ParseError(errorkind_to_reason(error), Some(position.to_vec()), None)
-        }
-        Err::NodePosition(error, position, inner_err) => {
-            ParseError(errorkind_to_reason(error),
-                       Some(position.to_vec()),
-                       Some(Box::new(iresult_to_error(*inner_err))))
-        }
-    }
+fn iresult_to_error(err: ErrorKind<ParseErrorReason>) -> ParseError {
+    ParseError(errorkind_to_reason(err), None, None)
 }
 
 pub fn parse(entry_point: String, source: &[LexToken]) -> Result<Module, ParseError> {

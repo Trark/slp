@@ -4,7 +4,7 @@ use std::fmt;
 use slp_shared::*;
 use slp_lang_htk::*;
 use slp_transform_preprocess::PreprocessedText;
-use nom::{IResult, Needed, Err, ErrorKind};
+use nom::{IResult, Needed, ErrorKind};
 
 #[derive(PartialEq, Clone)]
 pub enum LexError {
@@ -346,7 +346,7 @@ fn identifier_firstchar<'a>(input: &'a [u8]) -> IResult<&'a [u8], u8> {
         if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch == '_') {
             IResult::Done(&input[1..], byte)
         } else {
-            IResult::Error(Err::Position(ErrorKind::Custom(0), input))
+            IResult::Error(ErrorKind::Custom(0))
         }
     }
 }
@@ -361,7 +361,7 @@ fn identifier_char<'a>(input: &'a [u8]) -> IResult<&'a [u8], u8> {
            (ch >= '0' && ch <= '9') {
             IResult::Done(&input[1..], byte)
         } else {
-            IResult::Error(Err::Position(ErrorKind::Custom(0), input))
+            IResult::Error(ErrorKind::Custom(0))
         }
     }
 }
@@ -399,7 +399,7 @@ fn identifier<'a>(input: &'a [u8]) -> IResult<&'a [u8], Identifier> {
     // Maybe just combine the identifier and reserved word parsing?
     if let IResult::Done(slice, _) = reserved_word(&chars[..]) {
         if slice.len() == 0 {
-            return IResult::Error(Err::Code(ErrorKind::Custom(1)));
+            return IResult::Error(ErrorKind::Custom(1));
         }
     }
 
