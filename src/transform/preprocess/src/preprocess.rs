@@ -847,10 +847,7 @@ fn preprocess_command<'a>(
                     None => resolved_str,
                 };
 
-                let active = {
-                    use crate::condition_parser::parse;
-                    parse(resolved_no_comment)?
-                };
+                let active = crate::condition_parser::parse(resolved_no_comment)?;
                 condition_chain.push(active);
 
                 Ok(remaining)
