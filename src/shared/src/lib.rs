@@ -2,10 +2,7 @@ use std::collections::HashMap;
 
 /// A file used as an input
 #[derive(PartialEq, Debug, Clone)]
-pub enum File {
-    Unknown,
-    Name(String),
-}
+pub struct FileName(pub String);
 
 /// A line number in a file
 #[derive(PartialEq, Debug, Clone)]
@@ -17,11 +14,16 @@ pub struct Column(pub u64);
 
 /// Fully qualified location
 #[derive(PartialEq, Debug, Clone)]
-pub struct FileLocation(pub File, pub Line, pub Column);
+pub struct FileLocation(
+    // TODO: Avoid using a string here so this can be used where it is replicated many times
+    pub FileName,
+    pub Line,
+    pub Column,
+);
 
 impl FileLocation {
     pub fn none() -> FileLocation {
-        FileLocation(File::Unknown, Line(0), Column(0))
+        FileLocation(FileName(String::new()), Line(0), Column(0))
     }
 }
 
@@ -52,7 +54,7 @@ impl<T> Located<T> {
     pub fn loc(line: u64, column: u64, node: T) -> Located<T> {
         Located {
             node: node,
-            location: FileLocation(File::Unknown, Line(line), Column(column)),
+            location: FileLocation(FileName(String::new()), Line(line), Column(column)),
         }
     }
     pub fn none(node: T) -> Located<T> {
@@ -70,17 +72,24 @@ impl<T> std::ops::Deref for Located<T> {
     }
 }
 
+/// Error cases for file loading
+#[derive(PartialEq, Debug, Clone)]
+pub enum IncludeError {
+    FileNotFound,
+    FileNotText,
+}
+
 /// Trait for loading files from #include directives
 pub trait IncludeHandler {
-    fn load(&mut self, file_name: &str) -> Result<String, ()>;
+    fn load(&mut self, file_name: &str) -> Result<String, IncludeError>;
 }
 
 /// A file loader that fails to load any files
 pub struct NullIncludeHandler;
 
 impl IncludeHandler for NullIncludeHandler {
-    fn load(&mut self, _: &str) -> Result<String, ()> {
-        Err(())
+    fn load(&mut self, _: &str) -> Result<String, IncludeError> {
+        Err(IncludeError::FileNotFound)
     }
 }
 

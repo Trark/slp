@@ -20,7 +20,8 @@ fn cs1_lex() {
     // changing them
     let cs1_str = CS1.to_string().replace("\r\n", "\n");
 
-    let cs1_preprocessed = preprocess(&cs1_str, &mut NullIncludeHandler)
+    let file_name = FileName("test.hlsl".to_string());
+    let cs1_preprocessed = preprocess(&cs1_str, file_name.clone(), &mut NullIncludeHandler)
         .expect("cs1 failed preprocess");
 
     let tokens_res = lex(&cs1_preprocessed);
@@ -138,7 +139,7 @@ fn cs1_lex() {
         (Token::Eof, 17, 2),
     ];
     let s = expected_tokens_data.iter().map(|&(ref tok, ref line, ref column)|
-        LexToken(tok.clone(), FileLocation(File::Unknown, Line(*line), Column(*column)))
+        LexToken(tok.clone(), FileLocation(file_name.clone(), Line(*line), Column(*column)))
     ).collect::<Vec<_>>();
     let expected_tokens = Tokens {
         stream: s
@@ -156,7 +157,7 @@ fn cs1_lex() {
             for (lexed_ftoken, &(_, ref expected_line, ref expected_column)) in i2 {
                 let lexed_loc = &lexed_ftoken.1;
                 let expected_loc = FileLocation(
-                    File::Unknown,
+                    file_name.clone(),
                     Line(*expected_line),
                     Column(*expected_column)
                 );
@@ -170,14 +171,14 @@ fn cs1_lex() {
 
 #[test]
 fn cs1_parse() {
-    let tokens = lex(&preprocess_single(CS1).unwrap()).unwrap();
+    let tokens = lex(&preprocess_single(CS1, FileName("test.hlsl".to_string())).unwrap()).unwrap();
     let parse_result = parse("CSMain".to_string(), &tokens.stream);
     assert!(parse_result.is_ok(), "{:?}", parse_result);
 }
 
 #[test]
 fn cs1_typecheck() {
-    let tokens = lex(&preprocess_single(CS1).unwrap()).unwrap();
+    let tokens = lex(&preprocess_single(CS1, FileName("test.hlsl".to_string())).unwrap()).unwrap();
     let ast = parse("CSMain".to_string(), &tokens.stream).unwrap();
     let ir_result = typeparse(&ast);
     assert!(ir_result.is_ok(), "{:?}", ir_result);

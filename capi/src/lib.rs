@@ -2,6 +2,7 @@ use libc::c_char;
 use libc::c_void;
 use slp::sequence::hlsl_to_cl::hlsl_to_cl;
 use slp::sequence::hlsl_to_cl::Input;
+use slp::shared::IncludeError;
 use slp::shared::IncludeHandler;
 use slp::shared::KernelParamSlot;
 use std::collections::HashMap;
@@ -15,6 +16,7 @@ use std::thread;
 pub struct slp_hlsl_to_cl_input {
     pub entry_point: *const libc::c_char,
     pub main_file: *const libc::c_char,
+    pub main_file_name: *const libc::c_char,
     pub include_handler: extern "C" fn(*mut c_void, *const c_char) -> *const c_char,
     pub user_data: *mut c_void,
     pub kernel_name: *const libc::c_char,
@@ -92,12 +94,12 @@ pub struct CIncludeHandler {
 }
 
 impl IncludeHandler for CIncludeHandler {
-    fn load(&mut self, file_name: &str) -> Result<String, ()> {
+    fn load(&mut self, file_name: &str) -> Result<String, IncludeError> {
         let c_name = CString::new(file_name).expect("expect file_name in CIncludeHandler");
         let c_user_data = self.user_data as *mut c_void;
         let data = (self.include_handler)(c_user_data, c_name.as_ptr());
         if data == ptr::null() {
-            Err(())
+            Err(IncludeError::FileNotFound)
         } else {
             let ret = unsafe { CStr::from_ptr(data).to_string_lossy().into_owned() };
             Ok(ret)
@@ -118,6 +120,9 @@ pub unsafe extern "C" fn slp_hlsl_to_cl(input: slp_hlsl_to_cl_input) -> slp_hlsl
         let main_file = CStr::from_ptr(input.main_file)
             .to_string_lossy()
             .into_owned();
+        let main_file_name = CStr::from_ptr(input.main_file_name)
+            .to_string_lossy()
+            .into_owned();
         let kernel_name = CStr::from_ptr(input.kernel_name)
             .to_string_lossy()
             .into_owned();
@@ -134,6 +139,7 @@ pub unsafe extern "C" fn slp_hlsl_to_cl(input: slp_hlsl_to_cl_input) -> slp_hlsl
                     entry_point: entry_point,
                     file_loader: Box::new(include_handler),
                     main_file: main_file,
+                    main_file_name: main_file_name,
                     kernel_name: kernel_name,
                 };
 

@@ -1,6 +1,7 @@
 use slp_sequence_hlsl_to_cl::hlsl_to_cl;
 use slp_sequence_hlsl_to_cl::Input;
 use slp_shared::BindMap;
+use slp_shared::IncludeError;
 use slp_shared::IncludeHandler;
 use slp_shared::NullIncludeHandler;
 use std::collections::HashMap;
@@ -26,6 +27,7 @@ fn run_full(hlsl: &'static str, cl: &'static str, binds: BindMap) {
         Input {
             entry_point: "CSMAIN".to_string(),
             main_file: hlsl.to_string(),
+            main_file_name: "test.hlsl".to_string(),
             file_loader: Box::new(NullIncludeHandler),
             kernel_name: "MyKernel".to_string(),
         },
@@ -135,10 +137,10 @@ fn include() {
 
     struct TestFileLoader;
     impl IncludeHandler for TestFileLoader {
-        fn load(&mut self, file_name: &str) -> Result<String, ()> {
+        fn load(&mut self, file_name: &str) -> Result<String, IncludeError> {
             match file_name.as_ref() {
                 "aux.csh" => Ok(include_str!("include_aux.hlsl").to_string()),
-                _ => Err(()),
+                _ => Err(IncludeError::FileNotFound),
             }
         }
     }
@@ -147,6 +149,7 @@ fn include() {
         Input {
             entry_point: "CSMAIN".to_string(),
             main_file: HLSL_MAIN.to_string(),
+            main_file_name: "include_main.hlsl".to_string(),
             file_loader: Box::new(TestFileLoader),
             kernel_name: "Main".to_string(),
         },

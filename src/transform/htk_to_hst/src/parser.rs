@@ -1924,7 +1924,8 @@ where
     let parse_func = node::<T>;
     Box::new(move |string: &'static str| {
         let modified_string = string.to_string() + "\n";
-        let preprocessed_text = preprocess_single(&modified_string).expect("preprocess failed");
+        let preprocessed_text = preprocess_single(&modified_string, FileName(String::new()))
+            .expect("preprocess failed");
         let lex_result = lex(&preprocessed_text);
         match lex_result {
             Ok(tokens) => {
@@ -1956,7 +1957,8 @@ where
     let parse_func = node::<T>;
     Box::new(move |string: &'static str| {
         let modified_string = string.to_string() + "\n";
-        let preprocessed_text = preprocess_single(&modified_string).expect("preprocess failed");
+        let preprocessed_text = preprocess_single(&modified_string, FileName(String::new()))
+            .expect("preprocess failed");
         let lex_result = lex(&preprocessed_text);
         match lex_result {
             Ok(tokens) => {
@@ -2004,7 +2006,8 @@ where
     let parse_func = node_with_symbols::<T>;
     Box::new(move |string: &'static str, symbols: &SymbolTable| {
         let modified_string = string.to_string() + "\n";
-        let preprocessed_text = preprocess_single(&modified_string).expect("preprocess failed");
+        let preprocessed_text = preprocess_single(&modified_string, FileName(String::new()))
+            .expect("preprocess failed");
         let lex_result = lex(&preprocessed_text);
         match lex_result {
             Ok(tokens) => {
@@ -2032,7 +2035,7 @@ where
 
 #[test]
 fn test_expr() {
-    use slp_shared::{Column, File, FileLocation, Line};
+    use slp_shared::{Column, FileLocation, FileName, Line};
 
     let expr = node::<Expression>;
 
@@ -2041,23 +2044,26 @@ fn test_expr() {
             &[
                 LexToken(
                     Token::Id(Identifier("a".to_string())),
-                    FileLocation(File::Unknown, Line(1), Column(1))
+                    FileLocation(FileName(String::new()), Line(1), Column(1))
                 ),
                 LexToken(
                     Token::Asterix,
-                    FileLocation(File::Unknown, Line(1), Column(2))
+                    FileLocation(FileName(String::new()), Line(1), Column(2))
                 ),
                 LexToken(
                     Token::Id(Identifier("b".to_string())),
-                    FileLocation(File::Unknown, Line(1), Column(3))
+                    FileLocation(FileName(String::new()), Line(1), Column(3))
                 ),
-                LexToken(Token::Eof, FileLocation(File::Unknown, Line(1), Column(4)))
+                LexToken(
+                    Token::Eof,
+                    FileLocation(FileName(String::new()), Line(1), Column(4))
+                )
             ][..]
         ),
         IResult::Done(
             &[LexToken(
                 Token::Eof,
-                FileLocation(File::Unknown, Line(1), Column(4))
+                FileLocation(FileName(String::new()), Line(1), Column(4))
             )][..],
             Located::loc(
                 1,

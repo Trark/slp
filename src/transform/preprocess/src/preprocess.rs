@@ -1,16 +1,16 @@
 use slp_shared::*;
-use std::fmt;
+use std::collections::{HashMap, HashSet};
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum PreprocessError {
-    UnknownCommand,
+    UnknownCommand(String),
     InvalidInclude,
     InvalidDefine,
     MacroAlreadyDefined(String),
     MacroRequiresArguments,
     MacroArgumentsNeverEnd,
     MacroExpectsDifferentNumberOfArguments,
-    FailedToFindFile,
+    FailedToFindFile(String, IncludeError),
     InvalidIf(String),
     FailedToParseIfCondition(String),
     InvalidIfndef(String),
@@ -21,36 +21,38 @@ pub enum PreprocessError {
     EndIfNotMatched,
 }
 
-impl fmt::Display for PreprocessError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            PreprocessError::UnknownCommand => write!(f, "unknown preprocessor command"),
-            PreprocessError::InvalidInclude => write!(f, "invalid #include command"),
-            PreprocessError::InvalidDefine => write!(f, "invalid #define command"),
-            PreprocessError::MacroAlreadyDefined(_) => write!(f, "macro already defined"),
+impl std::fmt::Display for PreprocessError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            PreprocessError::UnknownCommand(s) => write!(f, "Unknown preprocessor command: {}", s),
+            PreprocessError::InvalidInclude => write!(f, "Invalid #include command"),
+            PreprocessError::InvalidDefine => write!(f, "Invalid #define command"),
+            PreprocessError::MacroAlreadyDefined(s) => write!(f, "Macro already defined: {}", s),
             PreprocessError::MacroRequiresArguments => {
-                write!(f, "macro function requires arguments")
+                write!(f, "Macro function requires arguments")
             }
             PreprocessError::MacroArgumentsNeverEnd => write!(f, "expected end of macro arguments"),
             PreprocessError::MacroExpectsDifferentNumberOfArguments => {
-                write!(f, "macro requires different number of arguments")
+                write!(f, "Macro requires different number of arguments")
             }
-            PreprocessError::FailedToFindFile => write!(f, "could not find file"),
-            PreprocessError::InvalidIf(_) => write!(f, "invalid #if"),
+            PreprocessError::FailedToFindFile(name, _) => {
+                write!(f, "Failed to load file: {}", name)
+            }
+            PreprocessError::InvalidIf(s) => write!(f, "invalid #if: {}", s),
             PreprocessError::FailedToParseIfCondition(_) => {
                 write!(f, "#if condition parser failed")
             }
-            PreprocessError::InvalidIfndef(_) => write!(f, "invalid #ifndef"),
-            PreprocessError::InvalidElse => write!(f, "invalid #else"),
-            PreprocessError::InvalidEndIf => write!(f, "invalid #endif"),
+            PreprocessError::InvalidIfndef(s) => write!(f, "Invalid #ifndef: {}", s),
+            PreprocessError::InvalidElse => write!(f, "Invalid #else"),
+            PreprocessError::InvalidEndIf => write!(f, "Invalid #endif"),
             PreprocessError::ConditionChainNotFinished => {
-                write!(f, "not enough #endif's encountered")
+                write!(f, "Not enough #endif's encountered")
             }
             PreprocessError::ElseNotMatched => {
-                write!(f, "encountered #else but with no matching #if")
+                write!(f, "Encountered #else but with no matching #if")
             }
             PreprocessError::EndIfNotMatched => {
-                write!(f, "encountered #endif but with no matching #if")
+                write!(f, "Encountered #endif but with no matching #if")
             }
         }
     }
@@ -145,6 +147,45 @@ impl LineMap {
             }
             None => Err(()),
         }
+    }
+}
+
+/// Manage files that are returned from the external include handler
+struct FileLoader<'a> {
+    file_store: HashMap<String, String>,
+    pragma_once_files: HashSet<String>,
+    include_handler: &'a mut dyn IncludeHandler,
+}
+
+impl<'a> FileLoader<'a> {
+    fn new(include_handler: &'a mut dyn IncludeHandler) -> Self {
+        FileLoader {
+            file_store: HashMap::new(),
+            pragma_once_files: HashSet::new(),
+            include_handler: include_handler,
+        }
+    }
+
+    fn load(&mut self, file_name: &str) -> Result<String, IncludeError> {
+        // If the file users #pragma once and has already been included then return nothing
+        if self.pragma_once_files.contains(file_name) {
+            return Ok(String::new());
+        }
+
+        if let Some(d) = self.file_store.get(file_name) {
+            return Ok(d.clone());
+        }
+
+        let file_source = self.include_handler.load(file_name)?;
+        self.file_store
+            .insert(file_name.to_string(), file_source.clone());
+
+        Ok(file_source)
+    }
+
+    fn mark_as_pragma_once(&mut self, file_name: &str) {
+        debug_assert!(self.file_store.contains_key(file_name));
+        self.pragma_once_files.insert(file_name.to_string());
     }
 }
 
@@ -586,7 +627,7 @@ impl ConditionChain {
     }
 }
 
-fn build_file_linemap(file_contents: &str, file_name: File) -> LineMap {
+fn build_file_linemap(file_contents: &str, file_name: FileName) -> LineMap {
     let mut line_map = LineMap { lines: vec![] };
     let file_length = file_contents.len() as u64;
     let mut stream = file_contents;
@@ -633,7 +674,7 @@ fn find_macro_end(mut remaining: &str) -> usize {
     initial_length - remaining.len() - 1
 }
 
-fn get_normal_end(remaining: &str) -> &str {
+fn get_after_single_line(remaining: &str) -> &str {
     let len = match remaining.find('\n') {
         Some(sz) => sz + 1,
         None => remaining.len(),
@@ -641,14 +682,49 @@ fn get_normal_end(remaining: &str) -> &str {
     &remaining[len..]
 }
 
-fn get_macro_end(remaining: &str) -> &str {
+#[test]
+fn test_get_after_single_line() {
+    assert_eq!(get_after_single_line("one\ntwo"), "two");
+    assert_eq!(get_after_single_line("one\ntwo\nthree"), "two\nthree");
+    assert_eq!(get_after_single_line("one\\\ntwo\nthree"), "two\nthree");
+    assert_eq!(get_after_single_line("one\r\ntwo\r\nthree"), "two\r\nthree");
+    assert_eq!(
+        get_after_single_line("one\\\r\ntwo\r\nthree"),
+        "two\r\nthree"
+    );
+}
+
+fn get_after_macro(remaining: &str) -> &str {
     let len = find_macro_end(remaining) + 1;
     &remaining[len..]
 }
 
+#[test]
+fn test_get_after_macro() {
+    assert_eq!(get_after_macro("one\ntwo"), "two");
+    assert_eq!(get_after_macro("one\ntwo\nthree"), "two\nthree");
+    assert_eq!(get_after_macro("one\\\ntwo\nthree"), "three");
+    assert_eq!(get_after_macro("one\r\ntwo\r\nthree"), "two\r\nthree");
+    assert_eq!(get_after_macro("one\\\r\ntwo\r\nthree"), "three");
+}
+
+fn get_macro_line(remaining: &str) -> &str {
+    let len = find_macro_end(remaining);
+    &remaining[..len].trim_end()
+}
+
+#[test]
+fn test_get_macro_line() {
+    assert_eq!(get_macro_line("one\ntwo"), "one");
+    assert_eq!(get_macro_line("one\ntwo\nthree"), "one");
+    assert_eq!(get_macro_line("one\\\ntwo\nthree"), "one\\\ntwo");
+    assert_eq!(get_macro_line("one\r\ntwo\r\nthree"), "one");
+    assert_eq!(get_macro_line("one\\\r\ntwo\r\nthree"), "one\\\r\ntwo");
+}
+
 fn preprocess_command<'a>(
     buffer: &mut IntermediateText,
-    include_handler: &mut dyn IncludeHandler,
+    include_handler: &mut FileLoader,
     command: &'a str,
     location: FileLocation,
     macros: &mut Vec<Macro>,
@@ -657,7 +733,7 @@ fn preprocess_command<'a>(
     let skip = !condition_chain.is_active();
     if command.starts_with("include") {
         if skip {
-            return Ok(get_normal_end(command));
+            return Ok(get_after_single_line(command));
         }
         let next = &command[7..];
         match next.chars().next() {
@@ -682,6 +758,7 @@ fn preprocess_command<'a>(
                                 preprocess_file(
                                     buffer,
                                     include_handler,
+                                    FileName(file_name.to_string()),
                                     &file,
                                     macros,
                                     condition_chain,
@@ -706,7 +783,12 @@ fn preprocess_command<'a>(
 
                                 Ok(next)
                             }
-                            Err(()) => return Err(PreprocessError::FailedToFindFile),
+                            Err(err) => {
+                                return Err(PreprocessError::FailedToFindFile(
+                                    file_name.to_string(),
+                                    err,
+                                ))
+                            }
                         }
                     }
                     None => return Err(PreprocessError::InvalidInclude),
@@ -717,7 +799,7 @@ fn preprocess_command<'a>(
     } else if command.starts_with("ifdef") || command.starts_with("ifndef") {
         if skip {
             condition_chain.push(false);
-            return Ok(get_normal_end(command));
+            return Ok(get_after_single_line(command));
         }
         let not = command.starts_with("ifndef");
         let next = if not { &command[6..] } else { &command[5..] };
@@ -741,7 +823,7 @@ fn preprocess_command<'a>(
     } else if command.starts_with("if") {
         if skip {
             condition_chain.push(false);
-            return Ok(get_normal_end(command));
+            return Ok(get_after_single_line(command));
         }
         let next = &command[2..];
         match next.chars().next() {
@@ -819,7 +901,7 @@ fn preprocess_command<'a>(
         }
     } else if command.starts_with("define") {
         if skip {
-            return Ok(get_macro_end(command));
+            return Ok(get_after_macro(command));
         }
         let next = &command[6..];
         match next.chars().next() {
@@ -886,19 +968,34 @@ fn preprocess_command<'a>(
             }
             _ => return Err(PreprocessError::InvalidDefine),
         }
+    } else if command.starts_with("pragma once") {
+        let pragma_command = get_macro_line(&command[7..]).trim();
+        if pragma_command == "once" {
+            include_handler.mark_as_pragma_once(&location.0 .0);
+            return Ok(get_after_single_line(command));
+        } else {
+            return Err(PreprocessError::UnknownCommand(format!(
+                "#pragma {}",
+                pragma_command
+            )));
+        }
     } else {
-        return Err(PreprocessError::UnknownCommand);
+        return Err(PreprocessError::UnknownCommand(format!(
+            "#{}",
+            get_macro_line(command)
+        )));
     }
 }
 
 fn preprocess_file(
     buffer: &mut IntermediateText,
-    include_handler: &mut dyn IncludeHandler,
+    include_handler: &mut FileLoader,
+    file_name: FileName,
     file: &str,
     macros: &mut Vec<Macro>,
     condition_chain: &mut ConditionChain,
 ) -> Result<(), PreprocessError> {
-    let line_map = build_file_linemap(file, File::Unknown);
+    let line_map = build_file_linemap(file, file_name);
     let file_length = file.len() as u64;
 
     let mut stream = file;
@@ -957,14 +1054,19 @@ fn preprocess_file(
 
 pub fn preprocess(
     input: &str,
+    file_name: FileName,
     include_handler: &mut dyn IncludeHandler,
 ) -> Result<PreprocessedText, PreprocessError> {
     let mut intermediate_text = IntermediateText::new();
     let mut macros = vec![];
     let mut condition_chain = ConditionChain::new();
+
+    let mut file_loader = FileLoader::new(include_handler);
+
     preprocess_file(
         &mut intermediate_text,
-        include_handler,
+        &mut file_loader,
+        file_name,
         input,
         &mut macros,
         &mut condition_chain,
@@ -977,21 +1079,34 @@ pub fn preprocess(
     Ok(PreprocessedText::from_intermediate_text(intermediate_text))
 }
 
-pub fn preprocess_single(input: &str) -> Result<PreprocessedText, PreprocessError> {
-    preprocess(input, &mut NullIncludeHandler)
+pub fn preprocess_single(
+    input: &str,
+    file_name: FileName,
+) -> Result<PreprocessedText, PreprocessError> {
+    preprocess(input, file_name, &mut NullIncludeHandler)
+}
+
+#[cfg(test)]
+fn preprocess_single_test(input: &str) -> Result<PreprocessedText, PreprocessError> {
+    preprocess(
+        input,
+        FileName("test.hlsl".to_string()),
+        &mut NullIncludeHandler,
+    )
 }
 
 #[test]
 fn test_empty() {
-    assert_eq!(preprocess_single("").unwrap().code, b"");
-    assert_eq!(preprocess_single("test").unwrap().code, b"test");
-    assert_eq!(preprocess_single("t1\nt2").unwrap().code, b"t1\nt2");
-    assert_eq!(preprocess_single("t1\r\nt2").unwrap().code, b"t1\r\nt2");
+    let pp = preprocess_single_test;
+    assert_eq!(pp("").unwrap().code, b"");
+    assert_eq!(pp("test").unwrap().code, b"test");
+    assert_eq!(pp("t1\nt2").unwrap().code, b"t1\nt2");
+    assert_eq!(pp("t1\r\nt2").unwrap().code, b"t1\r\nt2");
 }
 
 #[test]
 fn test_define() {
-    let pp = preprocess_single;
+    let pp = preprocess_single_test;
     assert_eq!(pp("#define X 0\nX").unwrap().code, b"0");
     assert_eq!(pp("#define X 0\nX X").unwrap().code, b"0 0");
     assert_eq!(pp("#define X 1\r\nX").unwrap().code, b"1");
@@ -1019,7 +1134,7 @@ fn test_define() {
 
 #[test]
 fn test_condition() {
-    let pp = preprocess_single;
+    let pp = preprocess_single_test;
     assert!(pp("#if 0\nX").is_err());
     assert_eq!(pp("#if 0\nX\n#endif").unwrap().code, b"");
     assert_eq!(pp("#if 1\nX\n#endif").unwrap().code, b"X\n");
@@ -1091,18 +1206,22 @@ fn test_condition() {
 fn test_include() {
     struct TestFileLoader;
     impl IncludeHandler for TestFileLoader {
-        fn load(&mut self, file_name: &str) -> Result<String, ()> {
+        fn load(&mut self, file_name: &str) -> Result<String, IncludeError> {
             Ok(match file_name.as_ref() {
                 "1.csh" => "X",
                 "2.csh" => "Y",
-                _ => return Err(()),
+                _ => return Err(IncludeError::FileNotFound),
             }
             .to_string())
         }
     }
 
     fn pf(contents: &str) -> Result<PreprocessedText, PreprocessError> {
-        preprocess(contents, &mut TestFileLoader)
+        preprocess(
+            contents,
+            FileName("test.hlsl".to_string()),
+            &mut TestFileLoader,
+        )
     }
 
     // Unknown files should always fail

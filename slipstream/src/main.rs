@@ -37,7 +37,7 @@ struct FileLoader {
 }
 
 impl IncludeHandler for FileLoader {
-    fn load(&mut self, file_name: &str) -> Result<String, ()> {
+    fn load(&mut self, file_name: &str) -> Result<String, IncludeError> {
         let file_path = Path::new(file_name);
         let mut file_res = File::open(file_path);
         if file_path.is_relative() {
@@ -57,10 +57,10 @@ impl IncludeHandler for FileLoader {
                 let mut buffer = String::new();
                 match file.read_to_string(&mut buffer) {
                     Ok(_) => Ok(buffer),
-                    Err(_) => Err(()),
+                    Err(_) => Err(IncludeError::FileNotText),
                 }
             }
-            Err(_) => Err(()),
+            Err(_) => Err(IncludeError::FileNotFound),
         }
     }
 }
@@ -120,6 +120,7 @@ fn main() {
             let input = Input {
                 entry_point: entry_point,
                 main_file: source_contents,
+                main_file_name: arg_source_file,
                 file_loader: include_handler,
                 kernel_name: kernel_name,
             };

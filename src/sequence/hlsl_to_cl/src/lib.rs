@@ -1,5 +1,6 @@
 //! Compiles source Hlsl to OpenCL C and exports bindmaps
 
+use slp_shared::FileName;
 use slp_transform_cil_to_cst::UntyperError;
 use slp_transform_cst_printer::Binary;
 use slp_transform_hir_to_cil::TranspileError;
@@ -9,8 +10,7 @@ use slp_transform_lexer::LexError;
 use slp_transform_preprocess::PreprocessError;
 use std::fmt;
 
-pub use slp_shared::BindMap;
-pub use slp_shared::IncludeHandler;
+pub use slp_shared::{BindMap, IncludeError, IncludeHandler};
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum CompileError {
@@ -25,6 +25,7 @@ pub enum CompileError {
 pub struct Input {
     pub entry_point: String,
     pub main_file: String,
+    pub main_file_name: String,
     pub file_loader: Box<dyn IncludeHandler>,
     pub kernel_name: String,
 }
@@ -38,8 +39,11 @@ pub struct Output {
 }
 
 pub fn hlsl_to_cl(mut input: Input) -> Result<Output, CompileError> {
-    let preprocessed =
-        slp_transform_preprocess::preprocess(&input.main_file, &mut *input.file_loader)?;
+    let preprocessed = slp_transform_preprocess::preprocess(
+        &input.main_file,
+        FileName(input.main_file_name),
+        &mut *input.file_loader,
+    )?;
 
     let tokens = slp_transform_lexer::lex(&preprocessed)?;
 
