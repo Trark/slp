@@ -93,6 +93,8 @@ pub enum Token {
     Static,
     GroupShared,
 
+    SizeOf,
+
     Auto,
     Case,
     Catch,
@@ -116,7 +118,6 @@ pub enum Token {
     ReinterpretCast,
     Short,
     Signed,
-    SizeOf,
     StaticCast,
     Template,
     This,
