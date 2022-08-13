@@ -208,13 +208,13 @@ pub unsafe extern "C" fn slp_hlsl_to_cl(input: slp_hlsl_to_cl_input) -> slp_hlsl
 #[no_mangle]
 pub unsafe extern "C" fn slp_hlsl_to_cl_free(free: slp_hlsl_to_cl_output) {
     if free.error != ptr::null_mut() {
-        CString::from_raw(free.error);
+        let _ = CString::from_raw(free.error);
     }
     if free.source != ptr::null_mut() {
-        CString::from_raw(free.source);
+        let _ = CString::from_raw(free.source);
     }
     if free.kernel_name != ptr::null_mut() {
-        CString::from_raw(free.kernel_name);
+        let _ = CString::from_raw(free.kernel_name);
     }
     free.constant_buffers.free();
     free.shader_resource_views.free();
