@@ -19,6 +19,7 @@ pub enum PreprocessError {
     ConditionChainNotFinished,
     ElseNotMatched,
     EndIfNotMatched,
+    PragmaOnceInUnknownFile,
 }
 
 impl std::fmt::Display for PreprocessError {
@@ -53,6 +54,9 @@ impl std::fmt::Display for PreprocessError {
             }
             PreprocessError::EndIfNotMatched => {
                 write!(f, "Encountered #endif but with no matching #if")
+            }
+            PreprocessError::PragmaOnceInUnknownFile => {
+                write!(f, "Encountered #pragma once in an unknown file")
             }
         }
     }
@@ -94,11 +98,12 @@ impl IntermediateText {
         let parts = segment.split('\n');
         let last = parts.clone().count() - 1;
         for (index, part) in parts.enumerate() {
-            let location = FileLocation(
-                segment_location.0.clone(),
-                Line((segment_location.1).0 + index as u64),
-                segment_location.2.clone(),
-            );
+            let location = match segment_location {
+                FileLocation::Known(ref file, line, column) => {
+                    FileLocation::Known(file.clone(), Line(line.0 + index as u64), column)
+                }
+                FileLocation::Unknown => FileLocation::Unknown,
+            };
             let stream_location_in_buffer = StreamLocation(self.buffer.len() as u64);
             self.buffer.push_str(part);
             if index != last {
@@ -141,9 +146,13 @@ impl LineMap {
         match last_line {
             Some(index) => {
                 let (ref line_stream, ref line_file) = self.lines[index];
-                let FileLocation(base_file, base_line, base_column) = line_file.clone();
-                let column = Column(base_column.0 + (stream_location.0 - line_stream.0));
-                Ok(FileLocation(base_file, base_line, column))
+                Ok(match line_file {
+                    FileLocation::Known(file, line, column) => {
+                        let column = Column(column.0 + (stream_location.0 - line_stream.0));
+                        FileLocation::Known(file.clone(), *line, column)
+                    }
+                    FileLocation::Unknown => FileLocation::Unknown,
+                })
             }
             None => Err(()),
         }
@@ -514,43 +523,43 @@ impl SubstitutedText {
 #[test]
 fn macro_from_definition() {
     assert_eq!(
-        Macro::from_definition("B", "0", FileLocation::none()).unwrap(),
+        Macro::from_definition("B", "0", FileLocation::Unknown).unwrap(),
         Macro(
             "B".to_string(),
             0,
             vec![MacroSegment::Text("0".to_string())],
-            FileLocation::none()
+            FileLocation::Unknown
         )
     );
     assert_eq!(
-        Macro::from_definition("B(x)", "x", FileLocation::none()).unwrap(),
+        Macro::from_definition("B(x)", "x", FileLocation::Unknown).unwrap(),
         Macro(
             "B".to_string(),
             1,
             vec![MacroSegment::Arg(MacroArg(0))],
-            FileLocation::none()
+            FileLocation::Unknown
         )
     );
     assert_eq!(
-        Macro::from_definition("B(x,y)", "x", FileLocation::none()).unwrap(),
+        Macro::from_definition("B(x,y)", "x", FileLocation::Unknown).unwrap(),
         Macro(
             "B".to_string(),
             2,
             vec![MacroSegment::Arg(MacroArg(0))],
-            FileLocation::none()
+            FileLocation::Unknown
         )
     );
     assert_eq!(
-        Macro::from_definition("B(x,y)", "y", FileLocation::none()).unwrap(),
+        Macro::from_definition("B(x,y)", "y", FileLocation::Unknown).unwrap(),
         Macro(
             "B".to_string(),
             2,
             vec![MacroSegment::Arg(MacroArg(1))],
-            FileLocation::none()
+            FileLocation::Unknown
         )
     );
     assert_eq!(
-        Macro::from_definition("B(x,xy)", "(x || xy)", FileLocation::none()).unwrap(),
+        Macro::from_definition("B(x,xy)", "(x || xy)", FileLocation::Unknown).unwrap(),
         Macro(
             "B".to_string(),
             2,
@@ -561,7 +570,7 @@ fn macro_from_definition() {
                 MacroSegment::Arg(MacroArg(1)),
                 MacroSegment::Text(")".to_string()),
             ],
-            FileLocation::none()
+            FileLocation::Unknown
         )
     );
 }
@@ -577,8 +586,8 @@ fn macro_resolve() {
     run(
         "(A || B) && BC",
         &[
-            Macro::from_definition("B", "0", FileLocation::none()).unwrap(),
-            Macro::from_definition("BC", "1", FileLocation::none()).unwrap(),
+            Macro::from_definition("B", "0", FileLocation::Unknown).unwrap(),
+            Macro::from_definition("BC", "1", FileLocation::Unknown).unwrap(),
         ],
         "(A || 0) && 1",
     );
@@ -586,8 +595,8 @@ fn macro_resolve() {
     run(
         "(A || B(0, 1)) && BC",
         &[
-            Macro::from_definition("B(x, y)", "(x && y)", FileLocation::none()).unwrap(),
-            Macro::from_definition("BC", "1", FileLocation::none()).unwrap(),
+            Macro::from_definition("B(x, y)", "(x && y)", FileLocation::Unknown).unwrap(),
+            Macro::from_definition("BC", "1", FileLocation::Unknown).unwrap(),
         ],
         "(A || (0 && 1)) && 1",
     );
@@ -640,7 +649,7 @@ fn build_file_linemap(file_contents: &str, file_name: FileName) -> LineMap {
         let length_left = stream.len() as u64;
         line_map.lines.push((
             StreamLocation(file_length - length_left),
-            FileLocation(file_name.clone(), Line(current_line), Column(1)),
+            FileLocation::Known(file_name.clone(), Line(current_line), Column(1)),
         ));
         current_line = current_line + 1;
         stream = &stream[sz..];
@@ -968,7 +977,10 @@ fn preprocess_command<'a>(
     } else if command.starts_with("pragma once") {
         let pragma_command = get_macro_line(&command[7..]).trim();
         if pragma_command == "once" {
-            include_handler.mark_as_pragma_once(&location.0 .0);
+            match location {
+                FileLocation::Known(file, _, _) => include_handler.mark_as_pragma_once(&file.0),
+                FileLocation::Unknown => return Err(PreprocessError::PragmaOnceInUnknownFile),
+            }
             return Ok(get_after_single_line(command));
         } else {
             return Err(PreprocessError::UnknownCommand(format!(

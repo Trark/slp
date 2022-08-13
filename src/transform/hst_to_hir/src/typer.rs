@@ -2235,17 +2235,13 @@ fn test_typeparse() {
                         "local_static",
                         ast::LocalType(ast::Type::uint(), ast::LocalStorage::Static, None),
                     )),
-                    ast::Statement::Expression(Located::loc(
-                        1,
-                        1,
-                        ast::Expression::BinaryOperation(
-                            ast::BinOp::Assignment,
-                            Box::new(Located::none(ast::Expression::Variable("x".to_string()))),
-                            Box::new(Located::none(ast::Expression::Literal(
-                                ast::Literal::Float(1.5f32),
-                            ))),
-                        ),
-                    )),
+                    ast::Statement::Expression(Located::none(ast::Expression::BinaryOperation(
+                        ast::BinOp::Assignment,
+                        Box::new(Located::none(ast::Expression::Variable("x".to_string()))),
+                        Box::new(Located::none(ast::Expression::Literal(
+                            ast::Literal::Float(1.5f32),
+                        ))),
+                    ))),
                 ],
                 attributes: vec![],
             }),

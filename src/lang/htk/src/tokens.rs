@@ -134,11 +134,14 @@ pub enum Token {
 pub struct LexToken(pub Token, pub FileLocation);
 
 impl LexToken {
+    /// Extract the file location from a lex token
     pub fn to_loc(self) -> FileLocation {
         self.1
     }
+
+    /// Create a token with no file location
     pub fn with_no_loc(token: Token) -> LexToken {
-        LexToken(token, FileLocation::none())
+        LexToken(token, FileLocation::Unknown)
     }
 }
 

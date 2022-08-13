@@ -139,7 +139,7 @@ fn cs1_lex() {
         (Token::Eof, 17, 2),
     ];
     let s = expected_tokens_data.iter().map(|&(ref tok, ref line, ref column)|
-        LexToken(tok.clone(), FileLocation(file_name.clone(), Line(*line), Column(*column)))
+        LexToken(tok.clone(), FileLocation::Known(file_name.clone(), Line(*line), Column(*column)))
     ).collect::<Vec<_>>();
     let expected_tokens = Tokens {
         stream: s
@@ -156,7 +156,7 @@ fn cs1_lex() {
             let i2 = tokens.stream.iter().zip(expected_tokens_data.iter());
             for (lexed_ftoken, &(_, ref expected_line, ref expected_column)) in i2 {
                 let lexed_loc = &lexed_ftoken.1;
-                let expected_loc = FileLocation(
+                let expected_loc = FileLocation::Known(
                     file_name.clone(),
                     Line(*expected_line),
                     Column(*expected_column)

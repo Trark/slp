@@ -5,26 +5,23 @@ use std::collections::HashMap;
 pub struct FileName(pub String);
 
 /// A line number in a file
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Copy, Clone)]
 pub struct Line(pub u64);
 
 /// The column index in a line
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Copy, Clone)]
 pub struct Column(pub u64);
 
 /// Fully qualified location
 #[derive(PartialEq, Debug, Clone)]
-pub struct FileLocation(
-    // TODO: Avoid using a string here so this can be used where it is replicated many times
-    pub FileName,
-    pub Line,
-    pub Column,
-);
-
-impl FileLocation {
-    pub fn none() -> FileLocation {
-        FileLocation(FileName(String::new()), Line(0), Column(0))
-    }
+pub enum FileLocation {
+    Known(
+        // TODO: Avoid using a string here so this can be used where it is replicated many times
+        FileName,
+        Line,
+        Column,
+    ),
+    Unknown,
 }
 
 /// The raw number of bytes from the start of a stream
@@ -39,28 +36,24 @@ pub struct Located<T> {
 }
 
 impl<T> Located<T> {
+    /// Create a located object with a location
     pub fn new(node: T, loc: FileLocation) -> Located<T> {
         Located {
             node: node,
             location: loc,
         }
     }
+
+    // Extract the node and discard the location
     pub fn to_node(self) -> T {
         self.node
     }
-    pub fn to_loc(self) -> FileLocation {
-        self.location
-    }
-    pub fn loc(line: u64, column: u64, node: T) -> Located<T> {
-        Located {
-            node: node,
-            location: FileLocation(FileName(String::new()), Line(line), Column(column)),
-        }
-    }
+
+    /// Create a located object with no location
     pub fn none(node: T) -> Located<T> {
         Located {
             node: node,
-            location: FileLocation::none(),
+            location: FileLocation::Unknown,
         }
     }
 }
