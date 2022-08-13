@@ -1,10 +1,9 @@
-
-use std::collections::HashMap;
+use slp_sequence_hlsl_to_cl::hlsl_to_cl;
 use slp_sequence_hlsl_to_cl::Input;
+use slp_shared::BindMap;
 use slp_shared::IncludeHandler;
 use slp_shared::NullIncludeHandler;
-use slp_sequence_hlsl_to_cl::hlsl_to_cl;
-use slp_shared::BindMap;
+use std::collections::HashMap;
 
 mod cs1;
 
@@ -23,41 +22,44 @@ fn run_input(input: Input, cl: &'static str, binds: BindMap) {
 }
 
 fn run_full(hlsl: &'static str, cl: &'static str, binds: BindMap) {
-    run_input(Input {
-                  entry_point: "CSMAIN".to_string(),
-                  main_file: hlsl.to_string(),
-                  file_loader: Box::new(NullIncludeHandler),
-                  kernel_name: "MyKernel".to_string(),
-              },
-              cl,
-              binds)
+    run_input(
+        Input {
+            entry_point: "CSMAIN".to_string(),
+            main_file: hlsl.to_string(),
+            file_loader: Box::new(NullIncludeHandler),
+            kernel_name: "MyKernel".to_string(),
+        },
+        cl,
+        binds,
+    )
 }
-
 
 #[test]
 fn cs2_full() {
     const HLSL: &'static str = include_str!("cs2.hlsl");
     const CL: &'static str = include_str!("cs2.cl");
-    run_full(HLSL,
-             CL,
-             BindMap {
-                 read_map: {
-                     let mut map = HashMap::new();
-                     map.insert(0, 1);
-                     map
-                 },
-                 write_map: {
-                     let mut map = HashMap::new();
-                     map.insert(0, 2);
-                     map
-                 },
-                 cbuffer_map: {
-                     let mut map = HashMap::new();
-                     map.insert(0, 0);
-                     map
-                 },
-                 sampler_map: HashMap::new(),
-             });
+    run_full(
+        HLSL,
+        CL,
+        BindMap {
+            read_map: {
+                let mut map = HashMap::new();
+                map.insert(0, 1);
+                map
+            },
+            write_map: {
+                let mut map = HashMap::new();
+                map.insert(0, 2);
+                map
+            },
+            cbuffer_map: {
+                let mut map = HashMap::new();
+                map.insert(0, 0);
+                map
+            },
+            sampler_map: HashMap::new(),
+        },
+    );
 }
 
 #[test]
@@ -67,41 +69,42 @@ fn overload_full() {
     run_full(HLSL, CL, BindMap::new());
 }
 
-
 #[test]
 fn intrinsic_full() {
     const HLSL: &'static str = include_str!("intrinsic.hlsl");
     const CL: &'static str = include_str!("intrinsic.cl");
-    run_full(HLSL,
-             CL,
-             BindMap {
-                 read_map: {
-                     let mut map = HashMap::new();
-                     map.insert(0, 1);
-                     map.insert(1, 2);
-                     map.insert(2, 3);
-                     map.insert(3, 4);
-                     map.insert(4, 5);
-                     map.insert(5, 6);
-                     map
-                 },
-                 write_map: {
-                     let mut map = HashMap::new();
-                     map.insert(0, 7);
-                     map.insert(1, 8);
-                     map.insert(2, 9);
-                     map.insert(3, 10);
-                     map.insert(4, 11);
-                     map.insert(5, 12);
-                     map
-                 },
-                 cbuffer_map: HashMap::new(),
-                 sampler_map: {
-                     let mut map = HashMap::new();
-                     map.insert(0, 0);
-                     map
-                 },
-             });
+    run_full(
+        HLSL,
+        CL,
+        BindMap {
+            read_map: {
+                let mut map = HashMap::new();
+                map.insert(0, 1);
+                map.insert(1, 2);
+                map.insert(2, 3);
+                map.insert(3, 4);
+                map.insert(4, 5);
+                map.insert(5, 6);
+                map
+            },
+            write_map: {
+                let mut map = HashMap::new();
+                map.insert(0, 7);
+                map.insert(1, 8);
+                map.insert(2, 9);
+                map.insert(3, 10);
+                map.insert(4, 11);
+                map.insert(5, 12);
+                map
+            },
+            cbuffer_map: HashMap::new(),
+            sampler_map: {
+                let mut map = HashMap::new();
+                map.insert(0, 0);
+                map
+            },
+        },
+    );
 }
 
 #[test]
@@ -140,12 +143,14 @@ fn include() {
         }
     }
 
-    run_input(Input {
-                  entry_point: "CSMAIN".to_string(),
-                  main_file: HLSL_MAIN.to_string(),
-                  file_loader: Box::new(TestFileLoader),
-                  kernel_name: "Main".to_string(),
-              },
-              CL,
-              BindMap::new())
+    run_input(
+        Input {
+            entry_point: "CSMAIN".to_string(),
+            main_file: HLSL_MAIN.to_string(),
+            file_loader: Box::new(TestFileLoader),
+            kernel_name: "Main".to_string(),
+        },
+        CL,
+        BindMap::new(),
+    )
 }

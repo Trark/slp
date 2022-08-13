@@ -1,9 +1,7 @@
-
-use std::error;
+use crate::hir_intrinsics::*;
+use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Formatter;
-use std::collections::HashMap;
-use hir_intrinsics::*;
 
 /// Basic scalar types
 #[derive(PartialEq, Clone)]
@@ -67,9 +65,9 @@ impl DataLayout {
     }
     pub fn to_scalar(&self) -> ScalarType {
         match *self {
-            DataLayout::Scalar(ref scalar) |
-            DataLayout::Vector(ref scalar, _) |
-            DataLayout::Matrix(ref scalar, _, _) => scalar.clone(),
+            DataLayout::Scalar(ref scalar)
+            | DataLayout::Vector(ref scalar, _)
+            | DataLayout::Matrix(ref scalar, _, _) => scalar.clone(),
         }
     }
     pub fn transform_scalar(self, to_scalar: ScalarType) -> DataLayout {
@@ -250,9 +248,9 @@ impl TypeLayout {
     }
     pub fn to_scalar(&self) -> Option<ScalarType> {
         match *self {
-            TypeLayout::Scalar(ref scalar) |
-            TypeLayout::Vector(ref scalar, _) |
-            TypeLayout::Matrix(ref scalar, _, _) => Some(scalar.clone()),
+            TypeLayout::Scalar(ref scalar)
+            | TypeLayout::Vector(ref scalar, _)
+            | TypeLayout::Matrix(ref scalar, _, _) => Some(scalar.clone()),
             _ => None,
         }
     }
@@ -371,41 +369,37 @@ impl TypeModifier {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.is_const == false && self.row_order == RowOrder::Column && self.precise == false &&
-        self.volatile == false
+        self.is_const == false
+            && self.row_order == RowOrder::Column
+            && self.precise == false
+            && self.volatile == false
     }
 
     pub fn const_only() -> TypeModifier {
-        TypeModifier { is_const: true, ..TypeModifier::default() }
+        TypeModifier {
+            is_const: true,
+            ..TypeModifier::default()
+        }
     }
 
     pub fn keep_precise(&self) -> TypeModifier {
-        TypeModifier { precise: self.precise, ..TypeModifier::default() }
+        TypeModifier {
+            precise: self.precise,
+            ..TypeModifier::default()
+        }
     }
 }
 
 impl fmt::Debug for TypeModifier {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
-        let p1 = if self.is_const {
-            "const "
-        } else {
-            ""
-        };
+        let p1 = if self.is_const { "const " } else { "" };
         let p2 = if self.row_order == RowOrder::Row {
             "row_major "
         } else {
             ""
         };
-        let p3 = if self.precise {
-            "precise "
-        } else {
-            ""
-        };
-        let p4 = if self.volatile {
-            "volatile "
-        } else {
-            ""
-        };
+        let p3 = if self.precise { "precise " } else { "" };
+        let p4 = if self.volatile { "volatile " } else { "" };
         write!(f, "{}{}{}{}", p1, p2, p3, p4)
     }
 }
@@ -633,7 +627,11 @@ impl<'a> ToExpressionType for &'a Type {
 
 /// The type of any global declaration
 #[derive(PartialEq, Debug, Clone)]
-pub struct GlobalType(pub Type, pub GlobalStorage, pub Option<InterpolationModifier>);
+pub struct GlobalType(
+    pub Type,
+    pub GlobalStorage,
+    pub Option<InterpolationModifier>,
+);
 
 impl From<Type> for GlobalType {
     fn from(ty: Type) -> GlobalType {
@@ -643,7 +641,11 @@ impl From<Type> for GlobalType {
 
 /// The type of any parameter declaration
 #[derive(PartialEq, Debug, Clone)]
-pub struct ParamType(pub Type, pub InputModifier, pub Option<InterpolationModifier>);
+pub struct ParamType(
+    pub Type,
+    pub InputModifier,
+    pub Option<InterpolationModifier>,
+);
 
 impl From<Type> for ParamType {
     fn from(ty: Type) -> ParamType {
@@ -653,7 +655,11 @@ impl From<Type> for ParamType {
 
 /// The type of any local variable declaration
 #[derive(PartialEq, Debug, Clone)]
-pub struct LocalType(pub Type, pub LocalStorage, pub Option<InterpolationModifier>);
+pub struct LocalType(
+    pub Type,
+    pub LocalStorage,
+    pub Option<InterpolationModifier>,
+);
 
 impl From<Type> for LocalType {
     fn from(ty: Type) -> LocalType {
@@ -744,7 +750,12 @@ pub enum Expression {
     Intrinsic0(Intrinsic0),
     Intrinsic1(Intrinsic1, Box<Expression>),
     Intrinsic2(Intrinsic2, Box<Expression>, Box<Expression>),
-    Intrinsic3(Intrinsic3, Box<Expression>, Box<Expression>, Box<Expression>),
+    Intrinsic3(
+        Intrinsic3,
+        Box<Expression>,
+        Box<Expression>,
+        Box<Expression>,
+    ),
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -801,8 +812,8 @@ pub struct StructDefinition {
     pub members: Vec<StructMember>,
 }
 
-pub use slp_lang_hst::PackSubOffset;
 pub use slp_lang_hst::PackOffset;
+pub use slp_lang_hst::PackSubOffset;
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct ConstantVariable {
@@ -949,33 +960,33 @@ pub enum TypeError {
     InvalidType(Type),
 }
 
-impl error::Error for TypeError {
-    fn description(&self) -> &str {
-        match *self {
-            TypeError::InvalidLocal => "invalid local variable",
-            TypeError::LocalScopeInvalid => "scope invalid",
-            TypeError::LocalDoesNotExist(_) => "local variable does not exist",
-            TypeError::GlobalDoesNotExist(_) => "global variable does not exist",
-            TypeError::ConstantBufferDoesNotExist(_) => "constant buffer does not exist",
-            TypeError::ConstantDoesNotExist(_, _) => "constant variable does not exist",
-            TypeError::StructDoesNotExist(_) => "struct does not exist",
-            TypeError::StructMemberDoesNotExist(_, _) => "struct member does not exist",
-            TypeError::FunctionDoesNotExist(_) => "function does not exist",
-            TypeError::InvalidTypeInEqualityOperation(_) => {
-                "invalid numeric type in equality operation"
-            }
-            TypeError::InvalidTypeForSwizzle(_) => "swizzle nodes must be used on vectors",
-            TypeError::MemberNodeMustBeUsedOnStruct(_, _) => "member used on non-struct type",
-            TypeError::ArrayIndexMustBeUsedOnArrayType(_) => "array index used on non-array type",
-
-            TypeError::InvalidType(_) => "invalid type in an intrinsic function",
-        }
-    }
-}
-
 impl fmt::Display for TypeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", error::Error::description(self))
+        match *self {
+            TypeError::InvalidLocal => write!(f, "invalid local variable"),
+            TypeError::LocalScopeInvalid => write!(f, "scope invalid"),
+            TypeError::LocalDoesNotExist(_) => write!(f, "local variable does not exist"),
+            TypeError::GlobalDoesNotExist(_) => write!(f, "global variable does not exist"),
+            TypeError::ConstantBufferDoesNotExist(_) => write!(f, "constant buffer does not exist"),
+            TypeError::ConstantDoesNotExist(_, _) => write!(f, "constant variable does not exist"),
+            TypeError::StructDoesNotExist(_) => write!(f, "struct does not exist"),
+            TypeError::StructMemberDoesNotExist(_, _) => write!(f, "struct member does not exist"),
+            TypeError::FunctionDoesNotExist(_) => write!(f, "function does not exist"),
+            TypeError::InvalidTypeInEqualityOperation(_) => {
+                write!(f, "invalid numeric type in equality operation")
+            }
+            TypeError::InvalidTypeForSwizzle(_) => {
+                write!(f, "swizzle nodes must be used on vectors")
+            }
+            TypeError::MemberNodeMustBeUsedOnStruct(_, _) => {
+                write!(f, "member used on non-struct type")
+            }
+            TypeError::ArrayIndexMustBeUsedOnArrayType(_) => {
+                write!(f, "array index used on non-array type")
+            }
+
+            TypeError::InvalidType(_) => write!(f, "invalid type in an intrinsic function"),
+        }
     }
 }
 
@@ -990,11 +1001,11 @@ pub trait TypeContext: AsTypeContext {
 }
 
 pub trait AsTypeContext {
-    fn as_type_context(&self) -> &TypeContext;
+    fn as_type_context(&self) -> &dyn TypeContext;
 }
 
 impl<T: TypeContext> AsTypeContext for T {
-    fn as_type_context(&self) -> &TypeContext {
+    fn as_type_context(&self) -> &dyn TypeContext {
         self
     }
 }
@@ -1035,7 +1046,10 @@ impl TypeState {
                     }
                 }
                 RootDefinition::GlobalVariable(ref gv) => {
-                    match context.globals.insert(gv.id.clone(), gv.global_type.0.clone()) {
+                    match context
+                        .globals
+                        .insert(gv.id.clone(), gv.global_type.0.clone())
+                    {
                         None => {}
                         Some(_) => return Err(()),
                     }
@@ -1054,7 +1068,10 @@ impl TypeState {
                     }
                 }
                 RootDefinition::Function(ref func) => {
-                    match context.functions.insert(func.id.clone(), func.returntype.clone()) {
+                    match context
+                        .functions
+                        .insert(func.id.clone(), func.returntype.clone())
+                    {
                         None => {}
                         Some(_) => return Err(()),
                     }
@@ -1105,24 +1122,26 @@ impl TypeContext for TypeState {
 
     fn get_constant(&self, id: &ConstantBufferId, name: &str) -> Result<ExpressionType, TypeError> {
         match self.constants.get(id) {
-            Some(ref cm) => {
-                match cm.get(name) {
-                    Some(ref ty) => Ok(ty.to_lvalue()),
-                    None => Err(TypeError::ConstantDoesNotExist(id.clone(), name.to_string())),
-                }
-            }
+            Some(ref cm) => match cm.get(name) {
+                Some(ref ty) => Ok(ty.to_lvalue()),
+                None => Err(TypeError::ConstantDoesNotExist(
+                    id.clone(),
+                    name.to_string(),
+                )),
+            },
             None => Err(TypeError::ConstantBufferDoesNotExist(id.clone())),
         }
     }
 
     fn get_struct_member(&self, id: &StructId, name: &str) -> Result<ExpressionType, TypeError> {
         match self.structs.get(&id) {
-            Some(ref cm) => {
-                match cm.get(name) {
-                    Some(ref ty) => Ok(ty.to_lvalue()),
-                    None => Err(TypeError::StructMemberDoesNotExist(id.clone(), name.to_string())),
-                }
-            }
+            Some(ref cm) => match cm.get(name) {
+                Some(ref ty) => Ok(ty.to_lvalue()),
+                None => Err(TypeError::StructMemberDoesNotExist(
+                    id.clone(),
+                    name.to_string(),
+                )),
+            },
             None => Err(TypeError::StructDoesNotExist(id.clone())),
         }
     }
@@ -1140,21 +1159,22 @@ pub struct TypeParser;
 impl TypeParser {
     pub fn get_literal_type(literal: &Literal) -> ExpressionType {
         (match *literal {
-                Literal::Bool(_) => Type::bool(),
-                Literal::UntypedInt(_) => Type::from_scalar(ScalarType::UntypedInt),
-                Literal::Int(_) => Type::int(),
-                Literal::UInt(_) => Type::uint(),
-                Literal::Long(_) => unimplemented!(),
-                Literal::Half(_) => Type::from_scalar(ScalarType::Half),
-                Literal::Float(_) => Type::float(),
-                Literal::Double(_) => Type::double(),
-            })
-            .to_rvalue()
+            Literal::Bool(_) => Type::bool(),
+            Literal::UntypedInt(_) => Type::from_scalar(ScalarType::UntypedInt),
+            Literal::Int(_) => Type::int(),
+            Literal::UInt(_) => Type::uint(),
+            Literal::Long(_) => unimplemented!(),
+            Literal::Half(_) => Type::from_scalar(ScalarType::Half),
+            Literal::Float(_) => Type::float(),
+            Literal::Double(_) => Type::double(),
+        })
+        .to_rvalue()
     }
 
-    pub fn get_expression_type(expression: &Expression,
-                               context: &TypeContext)
-                               -> Result<ExpressionType, TypeError> {
+    pub fn get_expression_type(
+        expression: &Expression,
+        context: &dyn TypeContext,
+    ) -> Result<ExpressionType, TypeError> {
         match *expression {
             Expression::Literal(ref lit) => Ok(TypeParser::get_literal_type(lit)),
             Expression::Variable(ref var_ref) => context.get_local(var_ref),
@@ -1163,14 +1183,16 @@ impl TypeParser {
             Expression::TernaryConditional(_, ref expr_left, ref expr_right) => {
                 // Ensure the layouts of each side are the same
                 // Value types + modifiers can be different
-                assert_eq!((try!(TypeParser::get_expression_type(expr_left, context)).0).0,
-                           (try!(TypeParser::get_expression_type(expr_right, context)).0).0);
-                let ety = try!(TypeParser::get_expression_type(expr_left, context));
+                assert_eq!(
+                    (TypeParser::get_expression_type(expr_left, context)?.0).0,
+                    (TypeParser::get_expression_type(expr_right, context)?.0).0
+                );
+                let ety = TypeParser::get_expression_type(expr_left, context)?;
                 Ok(ety.0.to_rvalue())
             }
             Expression::Swizzle(ref vec, ref swizzle) => {
                 let ExpressionType(Type(vec_tyl, vec_mod), vec_vt) =
-                    try!(TypeParser::get_expression_type(vec, context));
+                    TypeParser::get_expression_type(vec, context)?;
                 let tyl = match vec_tyl {
                     TypeLayout::Vector(ref scalar, _) => {
                         if swizzle.len() == 1 {
@@ -1184,7 +1206,7 @@ impl TypeParser {
                 Ok(ExpressionType(Type(tyl, vec_mod), vec_vt))
             }
             Expression::ArraySubscript(ref array, _) => {
-                let array_ty = try!(TypeParser::get_expression_type(&array, context));
+                let array_ty = TypeParser::get_expression_type(&array, context)?;
                 // Todo: Modifiers on object type template parameters
                 Ok(match (array_ty.0).0 {
                     TypeLayout::Array(ref element, _) => {
@@ -1206,12 +1228,14 @@ impl TypeParser {
                 })
             }
             Expression::Member(ref expr, ref name) => {
-                let expr_type = try!(TypeParser::get_expression_type(&expr, context));
+                let expr_type = TypeParser::get_expression_type(&expr, context)?;
                 let id = match (expr_type.0).0 {
                     TypeLayout::Struct(id) => id,
                     tyl => {
-                        return Err(TypeError::MemberNodeMustBeUsedOnStruct(tyl.clone(),
-                                                                           name.clone()))
+                        return Err(TypeError::MemberNodeMustBeUsedOnStruct(
+                            tyl.clone(),
+                            name.clone(),
+                        ))
                     }
                 };
                 context.get_struct_member(&id, name)

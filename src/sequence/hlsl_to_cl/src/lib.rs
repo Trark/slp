@@ -1,32 +1,16 @@
-
 //! Compiles source Hlsl to OpenCL C and exports bindmaps
 
-extern crate slp_shared;
-extern crate slp_lang_htk;
-extern crate slp_lang_hst;
-extern crate slp_lang_hir;
-extern crate slp_lang_cil;
-extern crate slp_lang_cst;
-extern crate slp_transform_preprocess;
-extern crate slp_transform_lexer;
-extern crate slp_transform_htk_to_hst;
-extern crate slp_transform_hst_to_hir;
-extern crate slp_transform_hir_to_cil;
-extern crate slp_transform_cil_to_cst;
-extern crate slp_transform_cst_printer;
-
-use std::error;
-use std::fmt;
-use slp_transform_preprocess::PreprocessError;
-use slp_transform_lexer::LexError;
-use slp_transform_htk_to_hst::ParseError;
-use slp_transform_hst_to_hir::TyperError;
-use slp_transform_hir_to_cil::TranspileError;
 use slp_transform_cil_to_cst::UntyperError;
 use slp_transform_cst_printer::Binary;
+use slp_transform_hir_to_cil::TranspileError;
+use slp_transform_hst_to_hir::TyperError;
+use slp_transform_htk_to_hst::ParseError;
+use slp_transform_lexer::LexError;
+use slp_transform_preprocess::PreprocessError;
+use std::fmt;
 
-pub use slp_shared::IncludeHandler;
 pub use slp_shared::BindMap;
+pub use slp_shared::IncludeHandler;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum CompileError {
@@ -41,7 +25,7 @@ pub enum CompileError {
 pub struct Input {
     pub entry_point: String,
     pub main_file: String,
-    pub file_loader: Box<IncludeHandler>,
+    pub file_loader: Box<dyn IncludeHandler>,
     pub kernel_name: String,
 }
 
@@ -54,23 +38,26 @@ pub struct Output {
 }
 
 pub fn hlsl_to_cl(mut input: Input) -> Result<Output, CompileError> {
+    let preprocessed =
+        slp_transform_preprocess::preprocess(&input.main_file, &mut *input.file_loader)?;
 
-    let preprocessed = try!(slp_transform_preprocess::preprocess(&input.main_file,
-                                                                 &mut *input.file_loader));
+    let tokens = slp_transform_lexer::lex(&preprocessed)?;
 
-    let tokens = try!(slp_transform_lexer::lex(&preprocessed));
+    let ast = slp_transform_htk_to_hst::parse(input.entry_point.to_string(), &tokens.stream)?;
 
-    let ast = try!(slp_transform_htk_to_hst::parse(input.entry_point.to_string(), &tokens.stream));
+    let ir = slp_transform_hst_to_hir::typeparse(&ast)?;
 
-    let ir = try!(slp_transform_hst_to_hir::typeparse(&ast));
+    let cil = slp_transform_hir_to_cil::transpile(&ir)?;
 
-    let cil = try!(slp_transform_hir_to_cil::transpile(&ir));
-
-    let cst = try!(slp_transform_cil_to_cst::untype_module(&cil, &input.kernel_name));
+    let cst = slp_transform_cil_to_cst::untype_module(&cil, &input.kernel_name)?;
 
     let cl_binary = slp_transform_cst_printer::Binary::from_cir(&cst);
 
-    let dimensions = (cst.kernel_dimensions.0, cst.kernel_dimensions.1, cst.kernel_dimensions.2);
+    let dimensions = (
+        cst.kernel_dimensions.0,
+        cst.kernel_dimensions.1,
+        cst.kernel_dimensions.2,
+    );
     Ok(Output {
         code: cl_binary,
         binds: cst.binds,
@@ -79,28 +66,28 @@ pub fn hlsl_to_cl(mut input: Input) -> Result<Output, CompileError> {
     })
 }
 
-impl error::Error for CompileError {
-    fn description(&self) -> &str {
-        match *self {
-            CompileError::PreprocessError(ref preprocess_error) => {
-                error::Error::description(preprocess_error)
-            }
-            CompileError::LexError(ref lexer_error) => error::Error::description(lexer_error),
-            CompileError::ParseError(ref parser_error) => error::Error::description(parser_error),
-            CompileError::TyperError(ref typer_error) => error::Error::description(typer_error),
-            CompileError::TranspileError(ref transpiler_error) => {
-                error::Error::description(transpiler_error)
-            }
-            CompileError::UntyperError(ref untyper_error) => {
-                error::Error::description(untyper_error)
-            }
-        }
-    }
-}
-
 impl fmt::Display for CompileError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", error::Error::description(self))
+        match *self {
+            CompileError::PreprocessError(ref preprocess_error) => {
+                write!(f, "{}", preprocess_error)
+            }
+            CompileError::LexError(ref lexer_error) => {
+                write!(f, "{}", lexer_error)
+            }
+            CompileError::ParseError(ref parser_error) => {
+                write!(f, "{}", parser_error)
+            }
+            CompileError::TyperError(ref typer_error) => {
+                write!(f, "{}", typer_error)
+            }
+            CompileError::TranspileError(ref transpiler_error) => {
+                write!(f, "{}", transpiler_error)
+            }
+            CompileError::UntyperError(ref untyper_error) => {
+                write!(f, "{}", untyper_error)
+            }
+        }
     }
 }
 

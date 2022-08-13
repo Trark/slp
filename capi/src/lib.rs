@@ -1,19 +1,15 @@
-
-extern crate slp;
-extern crate libc;
-
+use libc::c_char;
+use libc::c_void;
+use slp::sequence::hlsl_to_cl::hlsl_to_cl;
+use slp::sequence::hlsl_to_cl::Input;
+use slp::shared::IncludeHandler;
+use slp::shared::KernelParamSlot;
 use std::collections::HashMap;
 use std::ffi::CStr;
 use std::ffi::CString;
 use std::mem;
 use std::ptr;
 use std::thread;
-use slp::shared::IncludeHandler;
-use slp::shared::KernelParamSlot;
-use slp::sequence::hlsl_to_cl::Input;
-use slp::sequence::hlsl_to_cl::hlsl_to_cl;
-use libc::c_char;
-use libc::c_void;
 
 #[repr(C)]
 pub struct slp_hlsl_to_cl_input {
@@ -113,30 +109,36 @@ unsafe impl Send for CIncludeHandler {}
 
 #[no_mangle]
 pub unsafe extern "C" fn slp_hlsl_to_cl(input: slp_hlsl_to_cl_input) -> slp_hlsl_to_cl_output {
-
-    unsafe fn slp_hlsl_to_cl_impl(input: slp_hlsl_to_cl_input)
-                                  -> Result<slp_hlsl_to_cl_output, String> {
-
-        let entry_point = CStr::from_ptr(input.entry_point).to_string_lossy().into_owned();
-        let main_file = CStr::from_ptr(input.main_file).to_string_lossy().into_owned();
-        let kernel_name = CStr::from_ptr(input.kernel_name).to_string_lossy().into_owned();
+    unsafe fn slp_hlsl_to_cl_impl(
+        input: slp_hlsl_to_cl_input,
+    ) -> Result<slp_hlsl_to_cl_output, String> {
+        let entry_point = CStr::from_ptr(input.entry_point)
+            .to_string_lossy()
+            .into_owned();
+        let main_file = CStr::from_ptr(input.main_file)
+            .to_string_lossy()
+            .into_owned();
+        let kernel_name = CStr::from_ptr(input.kernel_name)
+            .to_string_lossy()
+            .into_owned();
 
         let include_handler = CIncludeHandler {
             include_handler: input.include_handler,
             user_data: input.user_data,
         };
 
-        let join_handle_res = thread::Builder::new().stack_size(8 * 1024 * 1024).spawn(move || {
+        let join_handle_res = thread::Builder::new()
+            .stack_size(8 * 1024 * 1024)
+            .spawn(move || {
+                let input = Input {
+                    entry_point: entry_point,
+                    file_loader: Box::new(include_handler),
+                    main_file: main_file,
+                    kernel_name: kernel_name,
+                };
 
-            let input = Input {
-                entry_point: entry_point,
-                file_loader: Box::new(include_handler),
-                main_file: main_file,
-                kernel_name: kernel_name,
-            };
-
-            hlsl_to_cl(input)
-        });
+                hlsl_to_cl(input)
+            });
 
         let join_handle = match join_handle_res {
             Ok(jh) => jh,
@@ -154,10 +156,10 @@ pub unsafe extern "C" fn slp_hlsl_to_cl(input: slp_hlsl_to_cl_input) -> slp_hlsl
 
         match output_res {
             Ok(output) => {
-                let source_cstring = CString::new(output.code.to_string())
-                                         .expect("missing null byte");
-                let kernel_name_cstring = CString::new(output.kernel_name)
-                                              .expect("missing null byte");
+                let source_cstring =
+                    CString::new(output.code.to_string()).expect("missing null byte");
+                let kernel_name_cstring =
+                    CString::new(output.kernel_name).expect("missing null byte");
 
                 Ok(slp_hlsl_to_cl_output {
                     error: ptr::null_mut(),
@@ -174,7 +176,6 @@ pub unsafe extern "C" fn slp_hlsl_to_cl(input: slp_hlsl_to_cl_input) -> slp_hlsl
             }
             Err(err) => Err(format!("{}", err)),
         }
-
     }
 
     match slp_hlsl_to_cl_impl(input) {

@@ -1,4 +1,3 @@
-
 use slp_shared::Located;
 
 /// Basic scalar types
@@ -279,7 +278,11 @@ impl From<StructuredType> for Type {
 
 /// The type of any global declaration
 #[derive(PartialEq, Debug, Clone)]
-pub struct GlobalType(pub Type, pub GlobalStorage, pub Option<InterpolationModifier>);
+pub struct GlobalType(
+    pub Type,
+    pub GlobalStorage,
+    pub Option<InterpolationModifier>,
+);
 
 impl From<Type> for GlobalType {
     fn from(ty: Type) -> GlobalType {
@@ -289,7 +292,11 @@ impl From<Type> for GlobalType {
 
 /// The type of any parameter declaration
 #[derive(PartialEq, Debug, Clone)]
-pub struct ParamType(pub Type, pub InputModifier, pub Option<InterpolationModifier>);
+pub struct ParamType(
+    pub Type,
+    pub InputModifier,
+    pub Option<InterpolationModifier>,
+);
 
 impl From<Type> for ParamType {
     fn from(ty: Type) -> ParamType {
@@ -299,7 +306,11 @@ impl From<Type> for ParamType {
 
 /// The type of any local variable declaration
 #[derive(PartialEq, Debug, Clone)]
-pub struct LocalType(pub Type, pub LocalStorage, pub Option<InterpolationModifier>);
+pub struct LocalType(
+    pub Type,
+    pub LocalStorage,
+    pub Option<InterpolationModifier>,
+);
 
 impl From<Type> for LocalType {
     fn from(ty: Type) -> LocalType {
@@ -366,9 +377,11 @@ pub enum Expression {
     Variable(String),
     UnaryOperation(UnaryOp, Box<Located<Expression>>),
     BinaryOperation(BinOp, Box<Located<Expression>>, Box<Located<Expression>>),
-    TernaryConditional(Box<Located<Expression>>,
-                       Box<Located<Expression>>,
-                       Box<Located<Expression>>),
+    TernaryConditional(
+        Box<Located<Expression>>,
+        Box<Located<Expression>>,
+        Box<Located<Expression>>,
+    ),
     ArraySubscript(Box<Located<Expression>>, Box<Located<Expression>>),
     Member(Box<Located<Expression>>, String),
     Call(Box<Located<Expression>>, Vec<Located<Expression>>),
@@ -409,20 +422,20 @@ impl VarDef {
         VarDef {
             local_type: local_type,
             defs: vec![LocalVariableName {
-                           name: name.to_string(),
-                           bind: VariableBind::Normal,
-                           init: None,
-                       }],
+                name: name.to_string(),
+                bind: VariableBind::Normal,
+                init: None,
+            }],
         }
     }
     pub fn one_with_expr(name: &str, local_type: LocalType, expr: Located<Expression>) -> VarDef {
         VarDef {
             local_type: local_type,
             defs: vec![LocalVariableName {
-                           name: name.to_string(),
-                           bind: VariableBind::Normal,
-                           init: Some(Initializer::Expression(expr)),
-                       }],
+                name: name.to_string(),
+                bind: VariableBind::Normal,
+                init: Some(Initializer::Expression(expr)),
+            }],
         }
     }
 }
@@ -442,7 +455,12 @@ pub enum Statement {
     Block(Vec<Statement>),
     If(Located<Expression>, Box<Statement>),
     IfElse(Located<Expression>, Box<Statement>, Box<Statement>),
-    For(InitStatement, Located<Expression>, Located<Expression>, Box<Statement>),
+    For(
+        InitStatement,
+        Located<Expression>,
+        Located<Expression>,
+        Box<Statement>,
+    ),
     While(Located<Expression>, Box<Statement>),
     Break,
     Continue,
@@ -536,7 +554,11 @@ pub enum Semantic {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum FunctionAttribute {
-    NumThreads(Located<Expression>, Located<Expression>, Located<Expression>),
+    NumThreads(
+        Located<Expression>,
+        Located<Expression>,
+        Located<Expression>,
+    ),
 }
 
 impl FunctionAttribute {

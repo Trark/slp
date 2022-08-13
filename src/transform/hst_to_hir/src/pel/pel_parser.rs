@@ -1,32 +1,33 @@
-
-use pel;
-use typer::TyperError;
-use typer::FunctionName;
-use typer::FunctionOverload;
-use typer::UnresolvedFunction;
-use typer::ErrorType;
-use typer::ToErrorType;
-use typer::parse_datalayout;
-use typer::parse_type;
-use typer::ExpressionContext;
-use typer::VariableExpression;
-use casting::ImplicitConversion;
-use casting::ConversionPriority;
-use intrinsics;
-use intrinsics::IntrinsicFactory;
-use slp_lang_hst as hst;
+use crate::casting::ConversionPriority;
+use crate::casting::ImplicitConversion;
+use crate::intrinsics;
+use crate::intrinsics::IntrinsicFactory;
+use crate::pel;
+use crate::typer::parse_datalayout;
+use crate::typer::parse_type;
+use crate::typer::ErrorType;
+use crate::typer::ExpressionContext;
+use crate::typer::FunctionName;
+use crate::typer::FunctionOverload;
+use crate::typer::ToErrorType;
+use crate::typer::TyperError;
+use crate::typer::UnresolvedFunction;
+use crate::typer::VariableExpression;
 use slp_lang_hir as hir;
 use slp_lang_hir::ExpressionType;
-use slp_lang_hir::ToExpressionType;
 use slp_lang_hir::Intrinsic;
+use slp_lang_hir::ToExpressionType;
+use slp_lang_hst as hst;
 
 pub type ClassType = hir::Type;
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct UnresolvedMethod(pub String,
-                            pub ClassType,
-                            pub Vec<FunctionOverload>,
-                            pub pel::Expression);
+pub struct UnresolvedMethod(
+    pub String,
+    pub ClassType,
+    pub Vec<FunctionOverload>,
+    pub pel::Expression,
+);
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum TypedExpression {
@@ -52,10 +53,11 @@ impl ToErrorType for TypedExpression {
     }
 }
 
-fn parse_variable(name: &String,
-                  context: &ExpressionContext)
-                  -> Result<TypedExpression, TyperError> {
-    Ok(match try!(context.find_variable(name)) {
+fn parse_variable(
+    name: &String,
+    context: &dyn ExpressionContext,
+) -> Result<TypedExpression, TyperError> {
+    Ok(match context.find_variable(name)? {
         VariableExpression::Local(var, ty) => {
             TypedExpression::Value(pel::Expression::Variable(var), ty.to_lvalue())
         }
@@ -69,21 +71,22 @@ fn parse_variable(name: &String,
     })
 }
 
-fn find_function_type(overloads: &Vec<FunctionOverload>,
-                      param_types: &[ExpressionType])
-                      -> Result<(FunctionOverload, Vec<ImplicitConversion>), TyperError> {
-    use casting::VectorRank;
-    fn find_overload_casts(overload: &FunctionOverload,
-                           param_types: &[ExpressionType])
-                           -> Result<Vec<ImplicitConversion>, ()> {
+fn find_function_type(
+    overloads: &Vec<FunctionOverload>,
+    param_types: &[ExpressionType],
+) -> Result<(FunctionOverload, Vec<ImplicitConversion>), TyperError> {
+    use crate::casting::VectorRank;
+    fn find_overload_casts(
+        overload: &FunctionOverload,
+        param_types: &[ExpressionType],
+    ) -> Result<Vec<ImplicitConversion>, ()> {
         let mut overload_casts = Vec::with_capacity(param_types.len());
         for (required_type, source_type) in overload.2.iter().zip(param_types.iter()) {
             let &hir::ParamType(ref ty, ref it, ref interp) = required_type;
 
             let ety = match *it {
                 hir::InputModifier::In => ty.to_rvalue(),
-                hir::InputModifier::Out |
-                hir::InputModifier::InOut => ty.to_lvalue(),
+                hir::InputModifier::Out | hir::InputModifier::InOut => ty.to_lvalue(),
             };
             match *interp {
                 Some(_) => return Err(()),
@@ -138,9 +141,9 @@ fn find_function_type(overloads: &Vec<FunctionOverload>,
     }
 
     if winning_numeric_casts.len() > 0 {
-
         fn count_by_rank(casts: &[ImplicitConversion], rank: &VectorRank) -> usize {
-            casts.iter()
+            casts
+                .iter()
                 .filter(|ref cast| cast.get_rank().get_vector_rank() == rank)
                 .count()
         }
@@ -153,7 +156,10 @@ fn find_function_type(overloads: &Vec<FunctionOverload>,
             (overload, casts, order)
         };
 
-        let casts = winning_numeric_casts.into_iter().map(map_order).collect::<Vec<_>>();;
+        let casts = winning_numeric_casts
+            .into_iter()
+            .map(map_order)
+            .collect::<Vec<_>>();
 
         let mut best_order = casts[0].2.clone();
         for &(_, _, ref order) in &casts {
@@ -162,7 +168,8 @@ fn find_function_type(overloads: &Vec<FunctionOverload>,
             }
         }
 
-        let casts = casts.into_iter()
+        let casts = casts
+            .into_iter()
             .filter(|&(_, _, ref order)| *order == best_order)
             .collect::<Vec<_>>();
 
@@ -172,47 +179,56 @@ fn find_function_type(overloads: &Vec<FunctionOverload>,
         }
     }
 
-    Err(TyperError::FunctionArgumentTypeMismatch(overloads.clone(), param_types.to_vec()))
+    Err(TyperError::FunctionArgumentTypeMismatch(
+        overloads.clone(),
+        param_types.to_vec(),
+    ))
 }
 
-fn apply_casts(casts: Vec<ImplicitConversion>,
-               values: Vec<pel::Expression>)
-               -> Vec<pel::Expression> {
+fn apply_casts(
+    casts: Vec<ImplicitConversion>,
+    values: Vec<pel::Expression>,
+) -> Vec<pel::Expression> {
     assert_eq!(casts.len(), values.len());
-    values.into_iter()
+    values
+        .into_iter()
         .enumerate()
         .map(|(index, value)| casts[index].apply_pel(value))
         .collect::<Vec<_>>()
 }
 
-fn write_function(unresolved: UnresolvedFunction,
-                  param_types: &[ExpressionType],
-                  param_values: Vec<pel::Expression>)
-                  -> Result<TypedExpression, TyperError> {
+fn write_function(
+    unresolved: UnresolvedFunction,
+    param_types: &[ExpressionType],
+    param_values: Vec<pel::Expression>,
+) -> Result<TypedExpression, TyperError> {
     // Find the matching function overload
     let (FunctionOverload(name, return_type_ty, _), casts) =
-        try!(find_function_type(&unresolved.1, param_types));
+        find_function_type(&unresolved.1, param_types)?;
     // Apply implicit casts
     let param_values = apply_casts(casts, param_values);
     let return_type = return_type_ty.to_rvalue();
 
     match name {
-        FunctionName::Intrinsic(factory) => {
-            Ok(TypedExpression::Value(factory.create_intrinsic(&param_values), return_type))
-        }
-        FunctionName::User(id) => {
-            Ok(TypedExpression::Value(pel::Expression::Call(id, param_values), return_type))
-        }
+        FunctionName::Intrinsic(factory) => Ok(TypedExpression::Value(
+            factory.create_intrinsic(&param_values),
+            return_type,
+        )),
+        FunctionName::User(id) => Ok(TypedExpression::Value(
+            pel::Expression::Call(id, param_values),
+            return_type,
+        )),
     }
 }
 
-fn write_method(unresolved: UnresolvedMethod,
-                param_types: &[ExpressionType],
-                param_values: Vec<pel::Expression>)
-                -> Result<TypedExpression, TyperError> {
+fn write_method(
+    unresolved: UnresolvedMethod,
+    param_types: &[ExpressionType],
+    param_values: Vec<pel::Expression>,
+) -> Result<TypedExpression, TyperError> {
     // Find the matching method overload
     let (FunctionOverload(name, return_type_ty, _), casts) =
-        try!(find_function_type(&unresolved.2, param_types));
+        find_function_type(&unresolved.2, param_types)?;
     // Apply implicit casts
     let mut param_values = apply_casts(casts, param_values);
     // Add struct as implied first argument
@@ -220,158 +236,188 @@ fn write_method(unresolved: UnresolvedMethod,
     let return_type = return_type_ty.to_rvalue();
 
     match name {
-        FunctionName::Intrinsic(factory) => {
-            Ok(TypedExpression::Value(factory.create_intrinsic(&param_values), return_type))
-        }
+        FunctionName::Intrinsic(factory) => Ok(TypedExpression::Value(
+            factory.create_intrinsic(&param_values),
+            return_type,
+        )),
         FunctionName::User(_) => panic!("User defined methods should not exist"),
     }
 }
 
 fn parse_literal(ast: &hst::Literal) -> Result<TypedExpression, TyperError> {
     match ast {
-        &hst::Literal::Bool(b) => {
-            Ok(TypedExpression::Value(pel::Expression::Literal(hir::Literal::Bool(b)),
-                                      hir::Type::bool().to_rvalue()))
-        }
-        &hst::Literal::UntypedInt(i) => {
-            Ok(TypedExpression::Value(pel::Expression::Literal(hir::Literal::UntypedInt(i)),
-                                      hir::Type::from_scalar(hir::ScalarType::UntypedInt)
-                                          .to_rvalue()))
-        }
-        &hst::Literal::Int(i) => {
-            Ok(TypedExpression::Value(pel::Expression::Literal(hir::Literal::Int(i)),
-                                      hir::Type::int().to_rvalue()))
-        }
-        &hst::Literal::UInt(i) => {
-            Ok(TypedExpression::Value(pel::Expression::Literal(hir::Literal::UInt(i)),
-                                      hir::Type::uint().to_rvalue()))
-        }
-        &hst::Literal::Long(i) => {
-            Ok(TypedExpression::Value(pel::Expression::Literal(hir::Literal::Long(i)),
-                                      hir::Type::from_scalar(hir::ScalarType::UntypedInt)
-                                          .to_rvalue()))
-        }
-        &hst::Literal::Half(f) => {
-            Ok(TypedExpression::Value(pel::Expression::Literal(hir::Literal::Half(f)),
-                                      hir::Type::float().to_rvalue()))
-        }
-        &hst::Literal::Float(f) => {
-            Ok(TypedExpression::Value(pel::Expression::Literal(hir::Literal::Float(f)),
-                                      hir::Type::float().to_rvalue()))
-        }
-        &hst::Literal::Double(f) => {
-            Ok(TypedExpression::Value(pel::Expression::Literal(hir::Literal::Double(f)),
-                                      hir::Type::double().to_rvalue()))
-        }
+        &hst::Literal::Bool(b) => Ok(TypedExpression::Value(
+            pel::Expression::Literal(hir::Literal::Bool(b)),
+            hir::Type::bool().to_rvalue(),
+        )),
+        &hst::Literal::UntypedInt(i) => Ok(TypedExpression::Value(
+            pel::Expression::Literal(hir::Literal::UntypedInt(i)),
+            hir::Type::from_scalar(hir::ScalarType::UntypedInt).to_rvalue(),
+        )),
+        &hst::Literal::Int(i) => Ok(TypedExpression::Value(
+            pel::Expression::Literal(hir::Literal::Int(i)),
+            hir::Type::int().to_rvalue(),
+        )),
+        &hst::Literal::UInt(i) => Ok(TypedExpression::Value(
+            pel::Expression::Literal(hir::Literal::UInt(i)),
+            hir::Type::uint().to_rvalue(),
+        )),
+        &hst::Literal::Long(i) => Ok(TypedExpression::Value(
+            pel::Expression::Literal(hir::Literal::Long(i)),
+            hir::Type::from_scalar(hir::ScalarType::UntypedInt).to_rvalue(),
+        )),
+        &hst::Literal::Half(f) => Ok(TypedExpression::Value(
+            pel::Expression::Literal(hir::Literal::Half(f)),
+            hir::Type::float().to_rvalue(),
+        )),
+        &hst::Literal::Float(f) => Ok(TypedExpression::Value(
+            pel::Expression::Literal(hir::Literal::Float(f)),
+            hir::Type::float().to_rvalue(),
+        )),
+        &hst::Literal::Double(f) => Ok(TypedExpression::Value(
+            pel::Expression::Literal(hir::Literal::Double(f)),
+            hir::Type::double().to_rvalue(),
+        )),
     }
 }
 
-fn parse_expr_unaryop(op: &hst::UnaryOp,
-                      expr: &hst::Expression,
-                      context: &ExpressionContext)
-                      -> Result<TypedExpression, TyperError> {
-    match try!(parse_expr(expr, context)) {
+fn parse_expr_unaryop(
+    op: &hst::UnaryOp,
+    expr: &hst::Expression,
+    context: &dyn ExpressionContext,
+) -> Result<TypedExpression, TyperError> {
+    match parse_expr(expr, context)? {
         TypedExpression::Value(expr_ir, expr_ty) => {
-            fn enforce_increment_type(ety: &ExpressionType,
-                                      op: &hst::UnaryOp)
-                                      -> Result<(), TyperError> {
+            fn enforce_increment_type(
+                ety: &ExpressionType,
+                op: &hst::UnaryOp,
+            ) -> Result<(), TyperError> {
                 match *ety {
-                    ExpressionType(_, hir::ValueType::Rvalue) => {
-                        Err(TyperError::UnaryOperationWrongTypes(op.clone(), ErrorType::Unknown))
-                    }
-                    ExpressionType(hir::Type(hir::TypeLayout::Scalar(hir::ScalarType::Bool),
-                                             _),
-                                   _) => {
-                        Err(TyperError::UnaryOperationWrongTypes(op.clone(), ErrorType::Unknown))
-                    }
-                    ExpressionType(hir::Type(hir::TypeLayout::Vector(hir::ScalarType::Bool,
-                                                                     _),
-                                             _),
-                                   _) => {
-                        Err(TyperError::UnaryOperationWrongTypes(op.clone(), ErrorType::Unknown))
-                    }
-                    ExpressionType(hir::Type(hir::TypeLayout::Matrix(hir::ScalarType::Bool,
-                                                                     _,
-                                                                     _),
-                                             _),
-                                   _) => {
-                        Err(TyperError::UnaryOperationWrongTypes(op.clone(), ErrorType::Unknown))
-                    }
+                    ExpressionType(_, hir::ValueType::Rvalue) => Err(
+                        TyperError::UnaryOperationWrongTypes(op.clone(), ErrorType::Unknown),
+                    ),
+                    ExpressionType(
+                        hir::Type(hir::TypeLayout::Scalar(hir::ScalarType::Bool), _),
+                        _,
+                    ) => Err(TyperError::UnaryOperationWrongTypes(
+                        op.clone(),
+                        ErrorType::Unknown,
+                    )),
+                    ExpressionType(
+                        hir::Type(hir::TypeLayout::Vector(hir::ScalarType::Bool, _), _),
+                        _,
+                    ) => Err(TyperError::UnaryOperationWrongTypes(
+                        op.clone(),
+                        ErrorType::Unknown,
+                    )),
+                    ExpressionType(
+                        hir::Type(hir::TypeLayout::Matrix(hir::ScalarType::Bool, _, _), _),
+                        _,
+                    ) => Err(TyperError::UnaryOperationWrongTypes(
+                        op.clone(),
+                        ErrorType::Unknown,
+                    )),
                     _ => Ok(()),
                 }
             }
             let (intrinsic, eir, ety) = match *op {
                 hst::UnaryOp::PrefixIncrement => {
-                    try!(enforce_increment_type(&expr_ty, op));
-                    (hir::Intrinsic1::PrefixIncrement(expr_ty.0.clone()), expr_ir, expr_ty)
+                    enforce_increment_type(&expr_ty, op)?;
+                    (
+                        hir::Intrinsic1::PrefixIncrement(expr_ty.0.clone()),
+                        expr_ir,
+                        expr_ty,
+                    )
                 }
                 hst::UnaryOp::PrefixDecrement => {
-                    try!(enforce_increment_type(&expr_ty, op));
-                    (hir::Intrinsic1::PrefixDecrement(expr_ty.0.clone()), expr_ir, expr_ty)
+                    enforce_increment_type(&expr_ty, op)?;
+                    (
+                        hir::Intrinsic1::PrefixDecrement(expr_ty.0.clone()),
+                        expr_ir,
+                        expr_ty,
+                    )
                 }
                 hst::UnaryOp::PostfixIncrement => {
-                    try!(enforce_increment_type(&expr_ty, op));
-                    (hir::Intrinsic1::PostfixIncrement(expr_ty.0.clone()), expr_ir, expr_ty)
+                    enforce_increment_type(&expr_ty, op)?;
+                    (
+                        hir::Intrinsic1::PostfixIncrement(expr_ty.0.clone()),
+                        expr_ir,
+                        expr_ty,
+                    )
                 }
                 hst::UnaryOp::PostfixDecrement => {
-                    try!(enforce_increment_type(&expr_ty, op));
-                    (hir::Intrinsic1::PostfixDecrement(expr_ty.0.clone()), expr_ir, expr_ty)
+                    enforce_increment_type(&expr_ty, op)?;
+                    (
+                        hir::Intrinsic1::PostfixDecrement(expr_ty.0.clone()),
+                        expr_ir,
+                        expr_ty,
+                    )
                 }
-                hst::UnaryOp::Plus => {
-                    (hir::Intrinsic1::Plus(expr_ty.0.clone()), expr_ir, expr_ty.0.to_rvalue())
-                }
-                hst::UnaryOp::Minus => {
-                    (hir::Intrinsic1::Minus(expr_ty.0.clone()), expr_ir, expr_ty.0.to_rvalue())
-                }
+                hst::UnaryOp::Plus => (
+                    hir::Intrinsic1::Plus(expr_ty.0.clone()),
+                    expr_ir,
+                    expr_ty.0.to_rvalue(),
+                ),
+                hst::UnaryOp::Minus => (
+                    hir::Intrinsic1::Minus(expr_ty.0.clone()),
+                    expr_ir,
+                    expr_ty.0.to_rvalue(),
+                ),
                 hst::UnaryOp::LogicalNot => {
                     let ty = match expr_ty.0 {
                         hir::Type(hir::TypeLayout::Scalar(_), _) => {
                             hir::Type::from_layout(hir::TypeLayout::Scalar(hir::ScalarType::Bool))
                         }
-                        hir::Type(hir::TypeLayout::Vector(_, x), _) => {
-                            hir::Type::from_layout(hir::TypeLayout::Vector(hir::ScalarType::Bool,
-                                                                           x))
-                        }
-                        hir::Type(hir::TypeLayout::Matrix(_, x, y), _) => {
-                            hir::Type::from_layout(hir::TypeLayout::Matrix(hir::ScalarType::Bool,
-                                                                           x,
-                                                                           y))
-                        }
+                        hir::Type(hir::TypeLayout::Vector(_, x), _) => hir::Type::from_layout(
+                            hir::TypeLayout::Vector(hir::ScalarType::Bool, x),
+                        ),
+                        hir::Type(hir::TypeLayout::Matrix(_, x, y), _) => hir::Type::from_layout(
+                            hir::TypeLayout::Matrix(hir::ScalarType::Bool, x, y),
+                        ),
                         _ => {
-                            return Err(TyperError::UnaryOperationWrongTypes(op.clone(),
-                                                                            ErrorType::Unknown))
+                            return Err(TyperError::UnaryOperationWrongTypes(
+                                op.clone(),
+                                ErrorType::Unknown,
+                            ))
                         }
                     };
                     let ety = ty.clone().to_rvalue();
                     (hir::Intrinsic1::LogicalNot(ty), expr_ir, ety)
                 }
-                hst::UnaryOp::BitwiseNot => {
-                    match (expr_ty.0).0 {
-                        hir::TypeLayout::Scalar(hir::ScalarType::Int) |
-                        hir::TypeLayout::Scalar(hir::ScalarType::UInt) => {
-                            (hir::Intrinsic1::BitwiseNot(expr_ty.0.clone()),
-                             expr_ir,
-                             expr_ty.0.to_rvalue())
-                        }
-                        _ => {
-                            return Err(TyperError::UnaryOperationWrongTypes(op.clone(),
-                                                                            ErrorType::Unknown))
-                        }
+                hst::UnaryOp::BitwiseNot => match (expr_ty.0).0 {
+                    hir::TypeLayout::Scalar(hir::ScalarType::Int)
+                    | hir::TypeLayout::Scalar(hir::ScalarType::UInt) => (
+                        hir::Intrinsic1::BitwiseNot(expr_ty.0.clone()),
+                        expr_ir,
+                        expr_ty.0.to_rvalue(),
+                    ),
+                    _ => {
+                        return Err(TyperError::UnaryOperationWrongTypes(
+                            op.clone(),
+                            ErrorType::Unknown,
+                        ))
                     }
-                }
+                },
             };
-            Ok(TypedExpression::Value(pel::Expression::Intrinsic1(intrinsic, Box::new(eir)), ety))
+            Ok(TypedExpression::Value(
+                pel::Expression::Intrinsic1(intrinsic, Box::new(eir)),
+                ety,
+            ))
         }
-        _ => Err(TyperError::UnaryOperationWrongTypes(op.clone(), ErrorType::Unknown)),
+        _ => Err(TyperError::UnaryOperationWrongTypes(
+            op.clone(),
+            ErrorType::Unknown,
+        )),
     }
 }
 
-fn most_sig_type_dim(lhs: &hir::TypeLayout,
-                     rhs: &hir::TypeLayout)
-                     -> Option<hir::NumericDimension> {
+fn most_sig_type_dim(
+    lhs: &hir::TypeLayout,
+    rhs: &hir::TypeLayout,
+) -> Option<hir::NumericDimension> {
     use slp_lang_hir::TypeLayout::*;
-    use std::cmp::min;
     use std::cmp::max;
+    use std::cmp::min;
     match (lhs, rhs) {
         (&Scalar(_), &Scalar(_)) => Some(hir::NumericDimension::Scalar),
         (&Scalar(_), &Vector(_, ref x)) => Some(hir::NumericDimension::Vector(*x)),
@@ -434,13 +480,13 @@ fn most_sig_scalar(left: &hir::ScalarType, right: &hir::ScalarType) -> hir::Scal
     }
 }
 
-fn resolve_arithmetic_types
-    (binop: &hst::BinOp,
-     left: &ExpressionType,
-     right: &ExpressionType)
-     -> Result<(ImplicitConversion, ImplicitConversion, hir::Intrinsic2), TyperError> {
-    use slp_lang_hir::Type;
+fn resolve_arithmetic_types(
+    binop: &hst::BinOp,
+    left: &ExpressionType,
+    right: &ExpressionType,
+) -> Result<(ImplicitConversion, ImplicitConversion, hir::Intrinsic2), TyperError> {
     use slp_lang_hir::ScalarType;
+    use slp_lang_hir::Type;
 
     fn common_real_type(left: &ScalarType, right: &ScalarType) -> Result<hir::ScalarType, ()> {
         Ok(most_sig_scalar(left, right))
@@ -448,24 +494,40 @@ fn resolve_arithmetic_types
 
     // Calculate the output type from the input type and operation
     fn output_type(left: Type, right: Type, op: &hst::BinOp) -> hir::Intrinsic2 {
-
         // Assert input validity
         {
-            let ls = left.0.to_scalar().expect("non-numeric type in binary operation (lhs)");
-            let rs = right.0.to_scalar().expect("non-numeric type in binary operation (rhs)");;
+            let ls = left
+                .0
+                .to_scalar()
+                .expect("non-numeric type in binary operation (lhs)");
+            let rs = right
+                .0
+                .to_scalar()
+                .expect("non-numeric type in binary operation (rhs)");
             match *op {
-                hst::BinOp::LeftShift | hst::BinOp::RightShift | hst::BinOp::BitwiseAnd |
-                hst::BinOp::BitwiseOr | hst::BinOp::BitwiseXor => {
-                    assert!(ls == ScalarType::Int || ls == ScalarType::UInt,
-                            "hir: non-integer source in bitwise op (lhs)");
-                    assert!(rs == ScalarType::Int || rs == ScalarType::UInt,
-                            "hir: non-integer source in bitwise op (rhs)");
+                hst::BinOp::LeftShift
+                | hst::BinOp::RightShift
+                | hst::BinOp::BitwiseAnd
+                | hst::BinOp::BitwiseOr
+                | hst::BinOp::BitwiseXor => {
+                    assert!(
+                        ls == ScalarType::Int || ls == ScalarType::UInt,
+                        "hir: non-integer source in bitwise op (lhs)"
+                    );
+                    assert!(
+                        rs == ScalarType::Int || rs == ScalarType::UInt,
+                        "hir: non-integer source in bitwise op (rhs)"
+                    );
                 }
                 hst::BinOp::BooleanAnd | hst::BinOp::BooleanOr => {
-                    assert!(ls == ScalarType::Bool,
-                            "hir: non-boolean source in boolean op (lhs)");
-                    assert!(rs == ScalarType::Bool,
-                            "hir: non-boolean source in boolean op (rhs)");
+                    assert!(
+                        ls == ScalarType::Bool,
+                        "hir: non-boolean source in boolean op (lhs)"
+                    );
+                    assert!(
+                        rs == ScalarType::Bool,
+                        "hir: non-boolean source in boolean op (rhs)"
+                    );
                 }
                 _ => {}
             }
@@ -507,41 +569,46 @@ fn resolve_arithmetic_types
         }
     }
 
-    fn do_noerror(op: &hst::BinOp,
-                  left: &ExpressionType,
-                  right: &ExpressionType)
-                  -> Result<(ImplicitConversion, ImplicitConversion, hir::Intrinsic2), ()> {
+    fn do_noerror(
+        op: &hst::BinOp,
+        left: &ExpressionType,
+        right: &ExpressionType,
+    ) -> Result<(ImplicitConversion, ImplicitConversion, hir::Intrinsic2), ()> {
         let &ExpressionType(hir::Type(ref left_l, ref modl), _) = left;
         let &ExpressionType(hir::Type(ref right_l, ref modr), _) = right;
         let (ltl, rtl) = match (left_l, right_l) {
             (&hir::TypeLayout::Scalar(ref ls), &hir::TypeLayout::Scalar(ref rs)) => {
-                let common_scalar = try!(common_real_type(ls, rs));
+                let common_scalar = common_real_type(ls, rs)?;
                 let common_left = hir::TypeLayout::from_scalar(common_scalar);
                 let common_right = common_left.clone();
                 (common_left, common_right)
             }
             (&hir::TypeLayout::Scalar(ref ls), &hir::TypeLayout::Vector(ref rs, ref x2)) => {
-                let common_scalar = try!(common_real_type(ls, rs));
+                let common_scalar = common_real_type(ls, rs)?;
                 let common_left = hir::TypeLayout::from_scalar(common_scalar.clone());
                 let common_right = hir::TypeLayout::from_vector(common_scalar, *x2);
                 (common_left, common_right)
             }
             (&hir::TypeLayout::Vector(ref ls, ref x1), &hir::TypeLayout::Scalar(ref rs)) => {
-                let common_scalar = try!(common_real_type(ls, rs));
+                let common_scalar = common_real_type(ls, rs)?;
                 let common_left = hir::TypeLayout::from_vector(common_scalar.clone(), *x1);
                 let common_right = hir::TypeLayout::from_scalar(common_scalar);
                 (common_left, common_right)
             }
-            (&hir::TypeLayout::Vector(ref ls, ref x1),
-             &hir::TypeLayout::Vector(ref rs, ref x2)) if x1 == x2 || *x1 == 1 || *x2 == 1 => {
-                let common_scalar = try!(common_real_type(ls, rs));
+            (
+                &hir::TypeLayout::Vector(ref ls, ref x1),
+                &hir::TypeLayout::Vector(ref rs, ref x2),
+            ) if x1 == x2 || *x1 == 1 || *x2 == 1 => {
+                let common_scalar = common_real_type(ls, rs)?;
                 let common_left = hir::TypeLayout::from_vector(common_scalar.clone(), *x1);
                 let common_right = hir::TypeLayout::from_vector(common_scalar, *x2);
                 (common_left, common_right)
             }
-            (&hir::TypeLayout::Matrix(ref ls, ref x1, ref y1),
-             &hir::TypeLayout::Matrix(ref rs, ref x2, ref y2)) if x1 == x2 && y1 == y2 => {
-                let common_scalar = try!(common_real_type(ls, rs));
+            (
+                &hir::TypeLayout::Matrix(ref ls, ref x1, ref y1),
+                &hir::TypeLayout::Matrix(ref rs, ref x2, ref y2),
+            ) if x1 == x2 && y1 == y2 => {
+                let common_scalar = common_real_type(ls, rs)?;
                 let common_left = hir::TypeLayout::from_matrix(common_scalar, *x2, *y2);
                 let common_right = common_left.clone();
                 (common_left, common_right)
@@ -558,32 +625,37 @@ fn resolve_arithmetic_types
         let candidate_right = Type(rtl.clone(), out_mod.clone());
         let output_type = output_type(candidate_left, candidate_right, op);
         let elt = ExpressionType(hir::Type(ltl, out_mod.clone()), hir::ValueType::Rvalue);
-        let lc = try!(ImplicitConversion::find(left, &elt));
+        let lc = ImplicitConversion::find(left, &elt)?;
         let ert = ExpressionType(hir::Type(rtl, out_mod), hir::ValueType::Rvalue);
-        let rc = try!(ImplicitConversion::find(right, &ert));
+        let rc = ImplicitConversion::find(right, &ert)?;
         Ok((lc, rc, output_type))
     }
 
     match do_noerror(binop, left, right) {
         Ok(res) => Ok(res),
-        Err(_) => {
-            Err(TyperError::BinaryOperationWrongTypes(binop.clone(),
-                                                      left.to_error_type(),
-                                                      right.to_error_type()))
-        }
+        Err(_) => Err(TyperError::BinaryOperationWrongTypes(
+            binop.clone(),
+            left.to_error_type(),
+            right.to_error_type(),
+        )),
     }
 }
 
-fn parse_expr_binop(op: &hst::BinOp,
-                    lhs: &hst::Expression,
-                    rhs: &hst::Expression,
-                    context: &ExpressionContext)
-                    -> Result<TypedExpression, TyperError> {
-    let lhs_texp = try!(parse_expr(lhs, context));
-    let rhs_texp = try!(parse_expr(rhs, context));
+fn parse_expr_binop(
+    op: &hst::BinOp,
+    lhs: &hst::Expression,
+    rhs: &hst::Expression,
+    context: &dyn ExpressionContext,
+) -> Result<TypedExpression, TyperError> {
+    let lhs_texp = parse_expr(lhs, context)?;
+    let rhs_texp = parse_expr(rhs, context)?;
     let lhs_pt = lhs_texp.to_error_type();
     let rhs_pt = rhs_texp.to_error_type();
-    let err_bad_type = Err(TyperError::BinaryOperationWrongTypes(op.clone(), lhs_pt, rhs_pt));
+    let err_bad_type = Err(TyperError::BinaryOperationWrongTypes(
+        op.clone(),
+        lhs_pt,
+        rhs_pt,
+    ));
     let (lhs_ir, lhs_type) = match lhs_texp {
         TypedExpression::Value(expr_ir, expr_ty) => (expr_ir, expr_ty),
         _ => return err_bad_type,
@@ -593,24 +665,34 @@ fn parse_expr_binop(op: &hst::BinOp,
         _ => return err_bad_type,
     };
     match *op {
-        hst::BinOp::Add | hst::BinOp::Subtract | hst::BinOp::Multiply | hst::BinOp::Divide |
-        hst::BinOp::Modulus | hst::BinOp::LessThan | hst::BinOp::LessEqual |
-        hst::BinOp::GreaterThan | hst::BinOp::GreaterEqual | hst::BinOp::Equality |
-        hst::BinOp::Inequality | hst::BinOp::LeftShift | hst::BinOp::RightShift => {
+        hst::BinOp::Add
+        | hst::BinOp::Subtract
+        | hst::BinOp::Multiply
+        | hst::BinOp::Divide
+        | hst::BinOp::Modulus
+        | hst::BinOp::LessThan
+        | hst::BinOp::LessEqual
+        | hst::BinOp::GreaterThan
+        | hst::BinOp::GreaterEqual
+        | hst::BinOp::Equality
+        | hst::BinOp::Inequality
+        | hst::BinOp::LeftShift
+        | hst::BinOp::RightShift => {
             if *op == hst::BinOp::LeftShift || *op == hst::BinOp::RightShift {
                 fn is_integer(ety: &ExpressionType) -> bool {
                     let sty = match (ety.0).0.to_scalar() {
                         Some(sty) => sty,
                         None => return false,
                     };
-                    sty == hir::ScalarType::Int || sty == hir::ScalarType::UInt ||
-                    sty == hir::ScalarType::UntypedInt
+                    sty == hir::ScalarType::Int
+                        || sty == hir::ScalarType::UInt
+                        || sty == hir::ScalarType::UntypedInt
                 }
                 if !is_integer(&lhs_type) || !is_integer(&rhs_type) {
                     return err_bad_type;
                 }
             }
-            let types = try!(resolve_arithmetic_types(op, &lhs_type, &rhs_type));
+            let types = resolve_arithmetic_types(op, &lhs_type, &rhs_type)?;
             let (lhs_cast, rhs_cast, output_intrinsic) = types;
             let lhs_final = Box::new(lhs_cast.apply_pel(lhs_ir));
             let rhs_final = Box::new(rhs_cast.apply_pel(rhs_ir));
@@ -618,8 +700,11 @@ fn parse_expr_binop(op: &hst::BinOp,
             let node = pel::Expression::Intrinsic2(output_intrinsic, lhs_final, rhs_final);
             Ok(TypedExpression::Value(node, output_type))
         }
-        hst::BinOp::BitwiseAnd | hst::BinOp::BitwiseOr | hst::BinOp::BitwiseXor |
-        hst::BinOp::BooleanAnd | hst::BinOp::BooleanOr => {
+        hst::BinOp::BitwiseAnd
+        | hst::BinOp::BitwiseOr
+        | hst::BinOp::BitwiseXor
+        | hst::BinOp::BooleanAnd
+        | hst::BinOp::BooleanOr => {
             let lhs_tyl = &(lhs_type.0).0;
             let rhs_tyl = &(rhs_type.0).0;
             let lhs_mod = &(lhs_type.0).1;
@@ -627,10 +712,12 @@ fn parse_expr_binop(op: &hst::BinOp,
             let scalar = if *op == hst::BinOp::BooleanAnd || *op == hst::BinOp::BooleanOr {
                 hir::ScalarType::Bool
             } else {
-                let lhs_scalar = try!(lhs_tyl.to_scalar()
-                    .ok_or(TyperError::BinaryOperationNonNumericType));
-                let rhs_scalar = try!(rhs_tyl.to_scalar()
-                    .ok_or(TyperError::BinaryOperationNonNumericType));
+                let lhs_scalar = lhs_tyl
+                    .to_scalar()
+                    .ok_or(TyperError::BinaryOperationNonNumericType)?;
+                let rhs_scalar = rhs_tyl
+                    .to_scalar()
+                    .ok_or(TyperError::BinaryOperationNonNumericType)?;
                 match (lhs_scalar, rhs_scalar) {
                     (hir::ScalarType::Int, hir::ScalarType::Int) => hir::ScalarType::Int,
                     (hir::ScalarType::Int, hir::ScalarType::UInt) => hir::ScalarType::UInt,
@@ -683,12 +770,12 @@ fn parse_expr_binop(op: &hst::BinOp,
             let node = pel::Expression::Intrinsic2(i, Box::new(lhs_final), Box::new(rhs_final));
             Ok(TypedExpression::Value(node, output_type))
         }
-        hst::BinOp::Assignment |
-        hst::BinOp::SumAssignment |
-        hst::BinOp::DifferenceAssignment |
-        hst::BinOp::ProductAssignment |
-        hst::BinOp::QuotientAssignment |
-        hst::BinOp::RemainderAssignment => {
+        hst::BinOp::Assignment
+        | hst::BinOp::SumAssignment
+        | hst::BinOp::DifferenceAssignment
+        | hst::BinOp::ProductAssignment
+        | hst::BinOp::QuotientAssignment
+        | hst::BinOp::RemainderAssignment => {
             let required_rtype = match lhs_type.1 {
                 hir::ValueType::Lvalue => {
                     ExpressionType(lhs_type.0.clone(), hir::ValueType::Rvalue)
@@ -701,11 +788,11 @@ fn parse_expr_binop(op: &hst::BinOp,
                     let ty = required_rtype.0.clone();
                     let i = match *op {
                         hst::BinOp::Assignment => hir::Intrinsic2::Assignment(ty),
-                        hst::BinOp::SumAssignment |
-                        hst::BinOp::DifferenceAssignment |
-                        hst::BinOp::ProductAssignment |
-                        hst::BinOp::QuotientAssignment |
-                        hst::BinOp::RemainderAssignment => {
+                        hst::BinOp::SumAssignment
+                        | hst::BinOp::DifferenceAssignment
+                        | hst::BinOp::ProductAssignment
+                        | hst::BinOp::QuotientAssignment
+                        | hst::BinOp::RemainderAssignment => {
                             // Find data type for assignment
                             let dtyl = match ty.0.into() {
                                 Some(dtyl) => dtyl,
@@ -744,20 +831,23 @@ fn parse_expr_binop(op: &hst::BinOp,
     }
 }
 
-fn parse_expr_ternary(cond: &hst::Expression,
-                      lhs: &hst::Expression,
-                      rhs: &hst::Expression,
-                      context: &ExpressionContext)
-                      -> Result<TypedExpression, TyperError> {
+fn parse_expr_ternary(
+    cond: &hst::Expression,
+    lhs: &hst::Expression,
+    rhs: &hst::Expression,
+    context: &dyn ExpressionContext,
+) -> Result<TypedExpression, TyperError> {
     // Generate sub expressions
-    let (cond, cond_ety) = try!(parse_expr_value_only(cond, context));
-    let (lhs, lhs_ety) = try!(parse_expr_value_only(lhs, context));
-    let (rhs, rhs_ety) = try!(parse_expr_value_only(rhs, context));
+    let (cond, cond_ety) = parse_expr_value_only(cond, context)?;
+    let (lhs, lhs_ety) = parse_expr_value_only(lhs, context)?;
+    let (rhs, rhs_ety) = parse_expr_value_only(rhs, context)?;
 
     let ExpressionType(lhs_ty, _) = lhs_ety.clone();
     let ExpressionType(rhs_ty, _) = rhs_ety.clone();
-    let wrong_types_err = Err(TyperError::TernaryArmsMustHaveSameType(lhs_ty.to_error_type(),
-                                                                      rhs_ty.to_error_type()));
+    let wrong_types_err = Err(TyperError::TernaryArmsMustHaveSameType(
+        lhs_ty.to_error_type(),
+        rhs_ty.to_error_type(),
+    ));
     let hir::Type(lhs_tyl, lhs_mod) = lhs_ty;
     let hir::Type(rhs_tyl, rhs_mod) = rhs_ty;
 
@@ -826,7 +916,9 @@ fn parse_expr_ternary(cond: &hst::Expression,
     let cond_cast = match ImplicitConversion::find(&cond_ety, &hir::Type::bool().to_rvalue()) {
         Ok(cast) => cast,
         Err(()) => {
-            return Err(TyperError::TernaryConditionRequiresBoolean(cond_ety.to_error_type()))
+            return Err(TyperError::TernaryConditionRequiresBoolean(
+                cond_ety.to_error_type(),
+            ))
         }
     };
     let cond_casted = Box::new(cond_cast.apply_pel(cond));
@@ -835,9 +927,10 @@ fn parse_expr_ternary(cond: &hst::Expression,
     Ok(TypedExpression::Value(node, final_type))
 }
 
-fn parse_expr_unchecked(ast: &hst::Expression,
-                        context: &ExpressionContext)
-                        -> Result<TypedExpression, TyperError> {
+fn parse_expr_unchecked(
+    ast: &hst::Expression,
+    context: &dyn ExpressionContext,
+) -> Result<TypedExpression, TyperError> {
     match ast {
         &hst::Expression::Literal(ref lit) => parse_literal(lit),
         &hst::Expression::Variable(ref s) => parse_variable(s, context),
@@ -849,8 +942,8 @@ fn parse_expr_unchecked(ast: &hst::Expression,
             parse_expr_ternary(cond, lhs, rhs, context)
         }
         &hst::Expression::ArraySubscript(ref array, ref subscript) => {
-            let array_texp = try!(parse_expr(array, context));
-            let subscript_texp = try!(parse_expr(subscript, context));
+            let array_texp = parse_expr(array, context)?;
+            let subscript_texp = parse_expr(subscript, context)?;
             let (array_ir, array_ty) = match array_texp {
                 TypedExpression::Value(array_ir, array_ty) => (array_ir, array_ty),
                 _ => return Err(TyperError::ArrayIndexingNonArrayType),
@@ -860,12 +953,12 @@ fn parse_expr_unchecked(ast: &hst::Expression,
                 _ => return Err(TyperError::ArrayIndexingNonArrayType),
             };
             let ExpressionType(hir::Type(array_tyl, _), _) = array_ty;
-            let node = try!(match array_tyl {
-                hir::TypeLayout::Array(_, _) |
-                hir::TypeLayout::Object(hir::ObjectType::Buffer(_)) |
-                hir::TypeLayout::Object(hir::ObjectType::RWBuffer(_)) |
-                hir::TypeLayout::Object(hir::ObjectType::StructuredBuffer(_)) |
-                hir::TypeLayout::Object(hir::ObjectType::RWStructuredBuffer(_)) => {
+            let node = match array_tyl {
+                hir::TypeLayout::Array(_, _)
+                | hir::TypeLayout::Object(hir::ObjectType::Buffer(_))
+                | hir::TypeLayout::Object(hir::ObjectType::RWBuffer(_))
+                | hir::TypeLayout::Object(hir::ObjectType::StructuredBuffer(_))
+                | hir::TypeLayout::Object(hir::ObjectType::RWStructuredBuffer(_)) => {
                     let index = hir::Type::int().to_rvalue();
                     let cast_to_int_result = ImplicitConversion::find(&subscript_ty, &index);
                     let subscript_final = match cast_to_int_result {
@@ -902,16 +995,15 @@ fn parse_expr_unchecked(ast: &hst::Expression,
                     Ok(sub_node)
                 }
                 _ => Err(TyperError::ArrayIndexingNonArrayType),
-            });
-            let ety = match pel::TypeParser::get_expression_type(&node,
-                                                                 context.as_type_context()) {
+            }?;
+            let ety = match pel::TypeParser::get_expression_type(&node, context.as_type_context()) {
                 Ok(ety) => ety,
                 Err(_) => panic!("internal error: type unknown"),
             };
             Ok(TypedExpression::Value(node, ety))
         }
         &hst::Expression::Member(ref composite, ref member) => {
-            let composite_texp = try!(parse_expr(composite, context));
+            let composite_texp = parse_expr(composite, context)?;
             let composite_pt = composite_texp.to_error_type();
             let (composite_ir, composite_ty) = match composite_texp {
                 TypedExpression::Value(composite_ir, composite_type) => {
@@ -921,16 +1013,14 @@ fn parse_expr_unchecked(ast: &hst::Expression,
             };
             let ExpressionType(hir::Type(composite_tyl, composite_mod), vt) = composite_ty;
             match &composite_tyl {
-                &hir::TypeLayout::Struct(ref id) => {
-                    match context.find_struct_member(id, member) {
-                        Ok(ty) => {
-                            let composite = Box::new(composite_ir);
-                            let member = pel::Expression::Member(composite, member.clone());
-                            Ok(TypedExpression::Value(member, ty.to_lvalue()))
-                        }
-                        Err(err) => Err(err),
+                &hir::TypeLayout::Struct(ref id) => match context.find_struct_member(id, member) {
+                    Ok(ty) => {
+                        let composite = Box::new(composite_ir);
+                        let member = pel::Expression::Member(composite, member.clone());
+                        Ok(TypedExpression::Value(member, ty.to_lvalue()))
                     }
-                }
+                    Err(err) => Err(err),
+                },
                 &hir::TypeLayout::Scalar(_) => {
                     if member == "x" || member == "r" {
                         let composite_ty = hir::Type(composite_tyl.clone(), composite_mod);
@@ -951,7 +1041,10 @@ fn parse_expr_unchecked(ast: &hst::Expression,
                             'z' | 'b' if *x >= 3 => hir::SwizzleSlot::Z,
                             'w' | 'a' if *x >= 4 => hir::SwizzleSlot::W,
                             _ => {
-                                return Err(TyperError::InvalidSwizzle(composite_pt, member.clone()))
+                                return Err(TyperError::InvalidSwizzle(
+                                    composite_pt,
+                                    member.clone(),
+                                ))
                             }
                         });
                     }
@@ -972,7 +1065,8 @@ fn parse_expr_unchecked(ast: &hst::Expression,
                 &hir::TypeLayout::Object(ref object_type) => {
                     match intrinsics::get_method(object_type, &member) {
                         Ok(intrinsics::MethodDefinition(object_type, name, method_overloads)) => {
-                            let overloads = method_overloads.iter()
+                            let overloads = method_overloads
+                                .iter()
                                 .map(|&(ref param_types, ref factory)| {
                                     let return_type = match *factory {
                                         IntrinsicFactory::Intrinsic0(ref i) => i.get_return_type(),
@@ -980,19 +1074,19 @@ fn parse_expr_unchecked(ast: &hst::Expression,
                                         IntrinsicFactory::Intrinsic2(ref i) => i.get_return_type(),
                                         IntrinsicFactory::Intrinsic3(ref i) => i.get_return_type(),
                                     };
-                                    FunctionOverload(FunctionName::Intrinsic(factory.clone()),
-                                                     return_type.0,
-                                                     param_types.clone())
+                                    FunctionOverload(
+                                        FunctionName::Intrinsic(factory.clone()),
+                                        return_type.0,
+                                        param_types.clone(),
+                                    )
                                 })
                                 .collect::<Vec<_>>();
-                            Ok(
-                                TypedExpression::Method(UnresolvedMethod(
-                                    name,
-                                    hir::Type::from_object(object_type),
-                                    overloads,
-                                    composite_ir
-                                ))
-                            )
+                            Ok(TypedExpression::Method(UnresolvedMethod(
+                                name,
+                                hir::Type::from_object(object_type),
+                                overloads,
+                                composite_ir,
+                            )))
                         }
                         Err(()) => Err(TyperError::UnknownTypeMember(composite_pt, member.clone())),
                     }
@@ -1002,17 +1096,19 @@ fn parse_expr_unchecked(ast: &hst::Expression,
             }
         }
         &hst::Expression::Call(ref func, ref params) => {
-            let func_texp = try!(parse_expr(func, context));
+            let func_texp = parse_expr(func, context)?;
             let mut params_ir: Vec<pel::Expression> = vec![];
             let mut params_types: Vec<ExpressionType> = vec![];
             for param in params {
-                let expr_texp = try!(parse_expr(param, context));
+                let expr_texp = parse_expr(param, context)?;
                 let (expr_ir, expr_ty) = match expr_texp {
                     TypedExpression::Value(expr_ir, expr_ty) => (expr_ir, expr_ty),
-                    texp => return Err(TyperError::FunctionPassedToAnotherFunction(
-                        func_texp.to_error_type(),
-                        texp.to_error_type()
-                    )),
+                    texp => {
+                        return Err(TyperError::FunctionPassedToAnotherFunction(
+                            func_texp.to_error_type(),
+                            texp.to_error_type(),
+                        ))
+                    }
                 };
                 params_ir.push(expr_ir);
                 params_types.push(expr_ty);
@@ -1028,12 +1124,12 @@ fn parse_expr_unchecked(ast: &hst::Expression,
             }
         }
         &hst::Expression::NumericConstructor(ref dtyl, ref params) => {
-            let datalayout = try!(parse_datalayout(dtyl));
+            let datalayout = parse_datalayout(dtyl)?;
             let target_scalar = datalayout.to_scalar();
             let mut slots: Vec<pel::ConstructorSlot> = vec![];
             let mut total_arity = 0;
             for param in params {
-                let expr_texp = try!(parse_expr(param, context));
+                let expr_texp = parse_expr(param, context)?;
                 let (expr_base, ety) = match expr_texp {
                     TypedExpression::Value(expr_ir, expr_ty) => (expr_ir, expr_ty),
                     _ => return Err(TyperError::FunctionNotCalled),
@@ -1070,45 +1166,53 @@ fn parse_expr_unchecked(ast: &hst::Expression,
             }
         }
         &hst::Expression::Cast(ref ty, ref expr) => {
-            let expr_texp = try!(parse_expr(expr, context));
+            let expr_texp = parse_expr(expr, context)?;
             let expr_pt = expr_texp.to_error_type();
             match expr_texp {
                 TypedExpression::Value(expr_ir, _) => {
-                    let ir_type = try!(parse_type(ty, context.as_struct_id_finder()));
-                    Ok(TypedExpression::Value(pel::Expression::Cast(ir_type.clone(),
-                                                                    Box::new(expr_ir)),
-                                              ir_type.to_rvalue()))
+                    let ir_type = parse_type(ty, context.as_struct_id_finder())?;
+                    Ok(TypedExpression::Value(
+                        pel::Expression::Cast(ir_type.clone(), Box::new(expr_ir)),
+                        ir_type.to_rvalue(),
+                    ))
                 }
-                _ => Err(TyperError::InvalidCast(expr_pt, ErrorType::Untyped(ty.clone()))),
+                _ => Err(TyperError::InvalidCast(
+                    expr_pt,
+                    ErrorType::Untyped(ty.clone()),
+                )),
             }
         }
     }
 }
 
-fn parse_expr(expr: &hst::Expression,
-              context: &ExpressionContext)
-              -> Result<TypedExpression, TyperError> {
-    let texp = try!(parse_expr_unchecked(expr, context));
+fn parse_expr(
+    expr: &hst::Expression,
+    context: &dyn ExpressionContext,
+) -> Result<TypedExpression, TyperError> {
+    let texp = parse_expr_unchecked(expr, context)?;
     match texp {
         #[cfg(debug_assertions)]
         TypedExpression::Value(ref expr, ref ty_expected) => {
             let ty_res = pel::TypeParser::get_expression_type(&expr, context.as_type_context());
             let ty = ty_res.expect("type unknown");
-            assert!(ty == *ty_expected,
-                    "{:?} == {:?}: {:?}",
-                    ty,
-                    *ty_expected,
-                    expr);
+            assert!(
+                ty == *ty_expected,
+                "{:?} == {:?}: {:?}",
+                ty,
+                *ty_expected,
+                expr
+            );
         }
         _ => {}
     };
     Ok(texp)
 }
 
-pub fn parse_expr_value_only(expr: &hst::Expression,
-                             context: &ExpressionContext)
-                             -> Result<(pel::Expression, ExpressionType), TyperError> {
-    let expr_ir = try!(parse_expr(expr, context));
+pub fn parse_expr_value_only(
+    expr: &hst::Expression,
+    context: &dyn ExpressionContext,
+) -> Result<(pel::Expression, ExpressionType), TyperError> {
+    let expr_ir = parse_expr(expr, context)?;
     match expr_ir {
         TypedExpression::Value(expr, ety) => Ok((expr, ety)),
         TypedExpression::Function(_) => Err(TyperError::FunctionNotCalled),

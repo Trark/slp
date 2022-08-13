@@ -1,4 +1,3 @@
-
 use super::cst::*;
 
 /// OpenCL function fragments
@@ -15,24 +14,27 @@ impl Fragment {
         match *self {
             Fragment::VectorCast(ref from, ref to, ref dim_from, ref dim_to) => {
                 let dim_to_u32 = dim_to.as_u32();
-                assert!(dim_to_u32 <= dim_from.as_u32(),
-                        "{} <= {}",
-                        dim_to_u32,
-                        dim_from.as_u32());
+                assert!(
+                    dim_to_u32 <= dim_from.as_u32(),
+                    "{} <= {}",
+                    dim_to_u32,
+                    dim_from.as_u32()
+                );
                 let from_param = "from".to_string();
                 let to_local = "to".to_string();
                 let mut body = vec![Statement::Var(VarDef {
-                                        name: to_local.clone(),
-                                        typename: Type::Vector(to.clone(), dim_to.clone()),
-                                        init: None,
-                                    })];
+                    name: to_local.clone(),
+                    typename: Type::Vector(to.clone(), dim_to.clone()),
+                    init: None,
+                })];
                 for i in 0..dim_to_u32 {
                     let index = i as u64;
                     let v1 = Expression::Variable(to_local.clone());
                     let l1 = Expression::Literal(Literal::Int(index));
                     let v2 = Expression::Variable(from_param.clone());
                     let l2 = Expression::Literal(Literal::Int(index));
-                    body.push(Statement::Expression(Expression::BinaryOperation(BinOp::Assignment,
+                    body.push(Statement::Expression(Expression::BinaryOperation(
+                        BinOp::Assignment,
                         Box::new(Expression::ArraySubscript(Box::new(v1), Box::new(l1))),
                         Box::new(Expression::ArraySubscript(Box::new(v2), Box::new(l2))),
                     )));
@@ -42,9 +44,9 @@ impl Fragment {
                     name: name.to_string(),
                     returntype: Type::Vector(to.clone(), dim_to.clone()),
                     params: vec![FunctionParam {
-                                     name: from_param,
-                                     typename: Type::Vector(from.clone(), dim_from.clone()),
-                                 }],
+                        name: from_param,
+                        typename: Type::Vector(from.clone(), dim_from.clone()),
+                    }],
                     body: body,
                 }
             }
@@ -52,16 +54,17 @@ impl Fragment {
                 let from_param = "from".to_string();
                 let to_local = "to".to_string();
                 let mut body = vec![Statement::Var(VarDef {
-                                        name: to_local.clone(),
-                                        typename: Type::Vector(to.clone(), dim_to.clone()),
-                                        init: None,
-                                    })];
+                    name: to_local.clone(),
+                    typename: Type::Vector(to.clone(), dim_to.clone()),
+                    init: None,
+                })];
                 for i in 0..(dim_to.as_u32()) {
                     let index = i as u64;
-                    body.push(Statement::Expression(Expression::BinaryOperation(BinOp::Assignment,
+                    body.push(Statement::Expression(Expression::BinaryOperation(
+                        BinOp::Assignment,
                         Box::new(Expression::ArraySubscript(
                             Box::new(Expression::Variable(to_local.clone())),
-                            Box::new(Expression::Literal(Literal::Int(index)))
+                            Box::new(Expression::Literal(Literal::Int(index))),
                         )),
                         Box::new(Expression::Variable(from_param.clone())),
                     )));
@@ -71,9 +74,9 @@ impl Fragment {
                     name: name.to_string(),
                     returntype: Type::Vector(to.clone(), dim_to.clone()),
                     params: vec![FunctionParam {
-                                     name: from_param,
-                                     typename: Type::Scalar(from.clone()),
-                                 }],
+                        name: from_param,
+                        typename: Type::Scalar(from.clone()),
+                    }],
                     body: body,
                 }
             }
@@ -113,11 +116,10 @@ impl Fragment {
                 let to_str = Fragment::get_type_candidate_name(to);
                 let dim_from_str = Fragment::get_dimension_candidate_name(dim_from);
                 let dim_to_str = Fragment::get_dimension_candidate_name(dim_to);
-                format!("cast_{}{}_to_{}{}",
-                        from_str,
-                        dim_from_str,
-                        to_str,
-                        dim_to_str)
+                format!(
+                    "cast_{}{}_to_{}{}",
+                    from_str, dim_from_str, to_str, dim_to_str
+                )
             }
             Fragment::ScalarToVectorCast(ref from, ref to, ref dim_to) => {
                 let from_str = Fragment::get_type_candidate_name(from);

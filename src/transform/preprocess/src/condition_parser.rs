@@ -1,5 +1,4 @@
-
-use preprocess::PreprocessError;
+use crate::preprocess::PreprocessError;
 
 pub fn parse(condition: &str) -> Result<bool, PreprocessError> {
     Ok(match condition {
@@ -7,7 +6,11 @@ pub fn parse(condition: &str) -> Result<bool, PreprocessError> {
         "1" => true,
         "!0" => true,
         "!1" => false,
-        _ => return Err(PreprocessError::FailedToParseIfCondition(condition.to_string())),
+        _ => {
+            return Err(PreprocessError::FailedToParseIfCondition(
+                condition.to_string(),
+            ))
+        }
     })
 }
 

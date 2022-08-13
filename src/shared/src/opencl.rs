@@ -1,4 +1,3 @@
-
 #[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone)]
 pub enum Extension {
     KhrFp16,

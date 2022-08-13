@@ -1,4 +1,3 @@
-
 use std::collections::HashMap;
 
 /// A file used as an input
@@ -73,7 +72,7 @@ impl<T> std::ops::Deref for Located<T> {
 
 /// Trait for loading files from #include directives
 pub trait IncludeHandler {
-    fn load(&mut self, &str) -> Result<String, ()>;
+    fn load(&mut self, file_name: &str) -> Result<String, ()>;
 }
 
 /// A file loader that fails to load any files

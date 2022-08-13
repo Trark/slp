@@ -1,6 +1,5 @@
-
-use std::collections::HashSet;
 use slp_shared::BindMap;
+use std::collections::HashSet;
 
 pub type Identifier = String;
 
@@ -148,7 +147,12 @@ pub enum Literal {
 #[derive(PartialEq, Debug, Clone)]
 pub enum Constructor {
     UInt3(Box<Expression>, Box<Expression>, Box<Expression>),
-    Float4(Box<Expression>, Box<Expression>, Box<Expression>, Box<Expression>),
+    Float4(
+        Box<Expression>,
+        Box<Expression>,
+        Box<Expression>,
+        Box<Expression>,
+    ),
 }
 
 #[derive(PartialEq, Debug, Clone)]

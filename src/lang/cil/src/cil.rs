@@ -1,15 +1,14 @@
-
+use slp_lang_cst::fragments::Fragment;
+use slp_shared::BindMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use slp_shared::BindMap;
-use slp_lang_cst::fragments::Fragment;
 
 pub type Identifier = String;
 
 pub use slp_lang_cst::AccessModifier;
+pub use slp_lang_cst::NumericDimension;
 pub use slp_lang_cst::Scalar;
 pub use slp_lang_cst::VectorDimension;
-pub use slp_lang_cst::NumericDimension;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Type {
@@ -46,8 +45,8 @@ pub enum Type {
 
 pub use slp_lang_cst::AddressSpace;
 pub use slp_lang_cst::BinOp;
-pub use slp_lang_cst::UnaryOp;
 pub use slp_lang_cst::Literal;
+pub use slp_lang_cst::UnaryOp;
 
 #[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Clone, Copy)]
 pub struct FunctionId(pub u32);

@@ -1,13 +1,12 @@
-use std::error;
-use std::fmt;
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
-use std::collections::HashSet;
-use slp_shared::BindMap;
 use slp_lang_cil as dst;
 use slp_lang_cst::fragments::Fragment;
 use slp_lang_hir as src;
 use slp_lang_hir::globals_analysis;
+use slp_shared::BindMap;
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::fmt;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum TranspileError {
@@ -36,33 +35,41 @@ pub enum TranspileError {
     TakingAddressOfVectorElement,
 }
 
-impl error::Error for TranspileError {
-    fn description(&self) -> &str {
-        match *self {
-            TranspileError::Unknown => "unknown transpiler error",
-            TranspileError::Internal(_) => "unknown transpiler error",
-            TranspileError::InternalTypeError(_) => "internal type error",
-            TranspileError::TypeIsNotAllowedAsGlobal(_) => "global variable has unsupported type",
-            TranspileError::CouldNotGetEquivalentType(_) => "could not find equivalent clc type",
-            TranspileError::GlobalFoundThatIsntInKernelParams(_) => "non-parameter global found",
-            TranspileError::UnknownFunctionId(_) => "unknown function id",
-            TranspileError::UnknownStructId(_) => "unknown struct id",
-            TranspileError::UnknownConstantBufferId(_) => "unknown cbuffer id",
-            TranspileError::InvalidVariableRef => "invalid variable ref",
-            TranspileError::UnknownVariableId => "unknown variable id",
-            TranspileError::BoolVectorsNotSupported => "bool vectors not supported",
-            TranspileError::HalfVariablesNotSupported => "half variables are not supported",
-            TranspileError::IntsMustBeTyped => "internal error: untyped int ended up in tree",
-            TranspileError::Intrinsic1Unimplemented(_) |
-            TranspileError::Intrinsic2Unimplemented(_) => "intrinsic function is not implemented",
-            TranspileError::TakingAddressOfVectorElement => "can't take address of vector element",
-        }
-    }
-}
-
 impl fmt::Display for TranspileError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", error::Error::description(self))
+        match *self {
+            TranspileError::Unknown => write!(f, "unknown transpiler error"),
+            TranspileError::Internal(_) => write!(f, "unknown transpiler error"),
+            TranspileError::InternalTypeError(_) => write!(f, "internal type error"),
+            TranspileError::TypeIsNotAllowedAsGlobal(_) => {
+                write!(f, "global variable has unsupported type")
+            }
+            TranspileError::CouldNotGetEquivalentType(_) => {
+                write!(f, "could not find equivalent clc type")
+            }
+            TranspileError::GlobalFoundThatIsntInKernelParams(_) => {
+                write!(f, "non-parameter global found")
+            }
+            TranspileError::UnknownFunctionId(_) => write!(f, "unknown function id"),
+            TranspileError::UnknownStructId(_) => write!(f, "unknown struct id"),
+            TranspileError::UnknownConstantBufferId(_) => write!(f, "unknown cbuffer id"),
+            TranspileError::InvalidVariableRef => write!(f, "invalid variable ref"),
+            TranspileError::UnknownVariableId => write!(f, "unknown variable id"),
+            TranspileError::BoolVectorsNotSupported => write!(f, "bool vectors not supported"),
+            TranspileError::HalfVariablesNotSupported => {
+                write!(f, "half variables are not supported")
+            }
+            TranspileError::IntsMustBeTyped => {
+                write!(f, "internal error: untyped int ended up in tree")
+            }
+            TranspileError::Intrinsic1Unimplemented(_)
+            | TranspileError::Intrinsic2Unimplemented(_) => {
+                write!(f, "intrinsic function is not implemented")
+            }
+            TranspileError::TakingAddressOfVectorElement => {
+                write!(f, "can't take address of vector element")
+            }
+        }
     }
 }
 
@@ -71,8 +78,6 @@ impl From<src::TypeError> for TranspileError {
         TranspileError::InternalTypeError(err)
     }
 }
-
-type KernelParams = Vec<dst::KernelParam>;
 
 /// Tells us if a parameter is converted as is or as a
 /// pointer to a value
@@ -112,9 +117,10 @@ struct GlobalIdAllocator {
 }
 
 impl GlobalIdAllocator {
-    fn from_globals(globals: &src::GlobalDeclarations,
-                    lifted: &HashSet<src::GlobalId>)
-                    -> Result<GlobalIdAllocator, TranspileError> {
+    fn from_globals(
+        globals: &src::GlobalDeclarations,
+        lifted: &HashSet<src::GlobalId>,
+    ) -> Result<GlobalIdAllocator, TranspileError> {
         let mut context = GlobalIdAllocator {
             global_id_map: HashMap::new(),
             function_id_map: HashMap::new(),
@@ -134,7 +140,10 @@ impl GlobalIdAllocator {
             keys.sort();
             for var_id in keys {
                 if !lifted.contains(var_id) {
-                    let var_name = globals.globals.get(var_id).expect("global variables from keys");
+                    let var_name = globals
+                        .globals
+                        .get(var_id)
+                        .expect("global variables from keys");
                     let dst_id = context.insert_identifier_global(var_id.clone());
                     context.global_name_map.insert(dst_id, var_name.clone());
                 }
@@ -152,7 +161,6 @@ impl GlobalIdAllocator {
             }
         }
 
-
         // Insert structs
         {
             let mut keys = globals.structs.keys().collect::<Vec<&src::StructId>>();
@@ -166,13 +174,18 @@ impl GlobalIdAllocator {
 
         // Insert cbuffers
         {
-            let mut keys = globals.constants.keys().collect::<Vec<&src::ConstantBufferId>>();
+            let mut keys = globals
+                .constants
+                .keys()
+                .collect::<Vec<&src::ConstantBufferId>>();
             keys.sort();
             for id in keys {
                 let cbuffer_name = globals.constants.get(id).expect("cbuffers from keys");
                 let dst_id =
                     context.insert_identifier_struct(StructSource::ConstantBuffer(id.clone()));
-                context.struct_name_map.insert(dst_id, (cbuffer_name.clone() + "_t"));
+                context
+                    .struct_name_map
+                    .insert(dst_id, cbuffer_name.clone() + "_t");
             }
         }
 
@@ -209,7 +222,8 @@ impl GlobalIdAllocator {
                 let identifier = self.last_function_id.clone();
                 self.last_function_id = dst::FunctionId(self.last_function_id.0 + 1);
                 vacant.insert(identifier);
-                self.function_name_map.insert(identifier, fragment.get_candidate_name());
+                self.function_name_map
+                    .insert(identifier, fragment.get_candidate_name());
                 identifier
             }
         }
@@ -257,11 +271,11 @@ type FragmentMap = HashMap<Fragment, dst::FunctionId>;
 type DestructResult = (VecRD, dst::GlobalDeclarations, FragmentMap);
 
 impl Context {
-    fn from_globals(table: &src::GlobalTable,
-                    globals: &src::GlobalDeclarations,
-                    root_defs: &[src::RootDefinition])
-                    -> Result<(Context, BindMap), TranspileError> {
-
+    fn from_globals(
+        table: &src::GlobalTable,
+        globals: &src::GlobalDeclarations,
+        root_defs: &[src::RootDefinition],
+    ) -> Result<(Context, BindMap), TranspileError> {
         let mut lifted: HashSet<src::GlobalId> = HashSet::new();
         for rootdef in root_defs {
             match *rootdef {
@@ -275,7 +289,7 @@ impl Context {
         }
 
         let mut context = Context {
-            global_ids: try!(GlobalIdAllocator::from_globals(globals, &lifted)),
+            global_ids: GlobalIdAllocator::from_globals(globals, &lifted)?,
             lifted_global_names: HashMap::new(),
             lifted_cbuffer_names: HashMap::new(),
             function_decl_map: HashMap::new(),
@@ -303,22 +317,27 @@ impl Context {
                     if is_global_lifted(gv) {
                         lifted_globals.insert(gv.id);
                         global_type_map.insert(gv.id, gv.global_type.clone());
-                        let cl_ty =
-                            try!(get_cl_global_type(&gv.id, &gv.global_type, &usage, &context));
+                        let cl_ty = get_cl_global_type(&gv.id, &gv.global_type, &usage, &context)?;
                         context.global_type_map.insert(gv.id.clone(), cl_ty);
-                        context.lifted_global_names.insert(gv.id.clone(),
-                                                           globals.globals
-                                                               .get(&gv.id)
-                                                               .expect("global does not exist")
-                                                               .clone());
+                        context.lifted_global_names.insert(
+                            gv.id.clone(),
+                            globals
+                                .globals
+                                .get(&gv.id)
+                                .expect("global does not exist")
+                                .clone(),
+                        );
                     }
                 }
                 src::RootDefinition::ConstantBuffer(ref cb) => {
-                    context.lifted_cbuffer_names.insert(cb.id.clone(),
-                                                        globals.constants
-                                                            .get(&cb.id)
-                                                            .expect("cbuffer does not exist")
-                                                            .clone());
+                    context.lifted_cbuffer_names.insert(
+                        cb.id.clone(),
+                        globals
+                            .constants
+                            .get(&cb.id)
+                            .expect("cbuffer does not exist")
+                            .clone(),
+                    );
                 }
                 _ => {}
             }
@@ -332,7 +351,9 @@ impl Context {
             c_keys.sort();
             for cbuffer_key in c_keys {
                 let cbuffer_id = table.constants.get(cbuffer_key).expect("bad cbuffer key");
-                context.kernel_arguments.push(GlobalArgument::ConstantBuffer(cbuffer_id.clone()));
+                context
+                    .kernel_arguments
+                    .push(GlobalArgument::ConstantBuffer(cbuffer_id.clone()));
                 binds.cbuffer_map.insert(*cbuffer_key, current);
                 current = current + 1;
             }
@@ -340,25 +361,35 @@ impl Context {
             s_keys.sort();
             for global_entry_key in s_keys {
                 let global_entry = table.samplers.get(global_entry_key).expect("bad s key");
-                context.kernel_arguments.push(GlobalArgument::Global(global_entry.id.clone()));
+                context
+                    .kernel_arguments
+                    .push(GlobalArgument::Global(global_entry.id.clone()));
                 binds.sampler_map.insert(*global_entry_key, current);
                 current = current + 1;
             }
             let mut r_keys = table.r_resources.keys().collect::<Vec<&u32>>();
             r_keys.sort();
             for global_entry_key in r_keys {
-                let global_entry = table.r_resources.get(global_entry_key).expect("bad r key key");
-                context.kernel_arguments.push(GlobalArgument::Global(global_entry.id.clone()));
+                let global_entry = table
+                    .r_resources
+                    .get(global_entry_key)
+                    .expect("bad r key key");
+                context
+                    .kernel_arguments
+                    .push(GlobalArgument::Global(global_entry.id.clone()));
                 binds.read_map.insert(*global_entry_key, current);
                 current = current + 1;
             }
             let mut rw_keys = table.rw_resources.keys().collect::<Vec<&u32>>();
             rw_keys.sort();
             for global_entry_key in rw_keys {
-                let global_entry = table.rw_resources
+                let global_entry = table
+                    .rw_resources
                     .get(global_entry_key)
                     .expect("bad rw key key");
-                context.kernel_arguments.push(GlobalArgument::Global(global_entry.id.clone()));
+                context
+                    .kernel_arguments
+                    .push(GlobalArgument::Global(global_entry.id.clone()));
                 binds.write_map.insert(*global_entry_key, current);
                 current = current + 1;
             }
@@ -369,19 +400,22 @@ impl Context {
                 &src::RootDefinition::Function(ref func) => {
                     let param_types = func.params.iter().fold(vec![], |mut param_types, param| {
                         match param.param_type.1 {
-                            src::InputModifier::InOut |
-                            src::InputModifier::Out => param_types.push(ParamType::Pointer),
+                            src::InputModifier::InOut | src::InputModifier::Out => {
+                                param_types.push(ParamType::Pointer)
+                            }
                             src::InputModifier::In => param_types.push(ParamType::Normal),
                         };
                         param_types
                     });
-                    let function_global_usage = usage.functions
+                    let function_global_usage = usage
+                        .functions
                         .get(&func.id)
                         .unwrap_or_else(|| panic!("analysis missing function"));
 
                     let mut global_args: Vec<GlobalArgument> = vec![];
 
-                    let mut c_keys = function_global_usage.cbuffers
+                    let mut c_keys = function_global_usage
+                        .cbuffers
                         .iter()
                         .collect::<Vec<&src::ConstantBufferId>>();
                     c_keys.sort();
@@ -389,7 +423,8 @@ impl Context {
                         global_args.push(GlobalArgument::ConstantBuffer(id.clone()));
                     }
 
-                    let mut g_keys = function_global_usage.globals
+                    let mut g_keys = function_global_usage
+                        .globals
                         .iter()
                         .collect::<Vec<&src::GlobalId>>();
                     g_keys.sort();
@@ -414,10 +449,11 @@ impl Context {
         Ok((context, binds))
     }
 
-    fn get_function(&self,
-                    id: &src::FunctionId)
-                    -> Result<(dst::FunctionId, FunctionDecl), TranspileError> {
-        let function_id = try!(self.get_function_name(id));
+    fn get_function(
+        &self,
+        id: &src::FunctionId,
+    ) -> Result<(dst::FunctionId, FunctionDecl), TranspileError> {
+        let function_id = self.get_function_name(id)?;
         match self.function_decl_map.get(id) {
             Some(ref decl) => Ok((function_id, (*decl).clone())),
             None => panic!("Function not defined"), // Name exists but decl doesn't
@@ -436,23 +472,22 @@ impl Context {
     }
 
     /// Get the expression to access an in scope variable
-    fn get_variable_ref(&self,
-                        var_ref: &src::VariableRef)
-                        -> Result<dst::Expression, TranspileError> {
+    fn get_variable_ref(
+        &self,
+        var_ref: &src::VariableRef,
+    ) -> Result<dst::Expression, TranspileError> {
         let scopes_up = (var_ref.1).0 as usize;
         if scopes_up >= self.variable_scopes.len() {
             return Err(TranspileError::UnknownVariableId);
         } else {
             let scope = self.variable_scopes.len() - scopes_up - 1;
             match self.variable_scopes[scope].get(&var_ref.0) {
-                Some(&VariableDecl(ref s, ref pt)) => {
-                    Ok(match *pt {
-                        ParamType::Normal => dst::Expression::Local(s.clone()),
-                        ParamType::Pointer => {
-                            dst::Expression::Deref(Box::new(dst::Expression::Local(s.clone())))
-                        }
-                    })
-                }
+                Some(&VariableDecl(ref s, ref pt)) => Ok(match *pt {
+                    ParamType::Normal => dst::Expression::Local(s.clone()),
+                    ParamType::Pointer => {
+                        dst::Expression::Deref(Box::new(dst::Expression::Local(s.clone())))
+                    }
+                }),
                 None => Err(TranspileError::UnknownVariableId),
             }
         }
@@ -469,13 +504,15 @@ impl Context {
 
     fn get_global_lifted_id(&self, id: &src::GlobalId) -> Result<dst::LocalId, TranspileError> {
         match self.lifted_arguments {
-            Some(ref map) => {
-                match map.get(&GlobalArgument::Global(id.clone())) {
-                    Some(local_id) => Ok(local_id.clone()),
-                    None => Err(TranspileError::Internal("no such lifted variable".to_string())),
-                }
-            }
-            None => Err(TranspileError::Internal("not inside a function".to_string())),
+            Some(ref map) => match map.get(&GlobalArgument::Global(id.clone())) {
+                Some(local_id) => Ok(local_id.clone()),
+                None => Err(TranspileError::Internal(
+                    "no such lifted variable".to_string(),
+                )),
+            },
+            None => Err(TranspileError::Internal(
+                "not inside a function".to_string(),
+            )),
         }
     }
 
@@ -499,47 +536,54 @@ impl Context {
 
     /// Get the name of a struct
     fn get_struct_name(&self, id: &src::StructId) -> Result<dst::StructId, TranspileError> {
-        match self.global_ids.struct_id_map.get(&StructSource::Struct(*id)) {
+        match self
+            .global_ids
+            .struct_id_map
+            .get(&StructSource::Struct(*id))
+        {
             Some(v) => Ok(v.clone()),
             None => Err(TranspileError::UnknownStructId(id.clone())),
         }
     }
 
     /// Get the name of the struct used for a cbuffer
-    fn get_cbuffer_struct_name(&self,
-                               id: &src::ConstantBufferId)
-                               -> Result<dst::StructId, TranspileError> {
-        match self.global_ids.struct_id_map.get(&StructSource::ConstantBuffer(*id)) {
+    fn get_cbuffer_struct_name(
+        &self,
+        id: &src::ConstantBufferId,
+    ) -> Result<dst::StructId, TranspileError> {
+        match self
+            .global_ids
+            .struct_id_map
+            .get(&StructSource::ConstantBuffer(*id))
+        {
             Some(v) => Ok(v.clone()),
             None => Err(TranspileError::UnknownConstantBufferId(id.clone())),
         }
     }
 
     /// Get the name of the cbuffer instance
-    fn get_cbuffer_instance_id(&self,
-                               id: &src::ConstantBufferId)
-                               -> Result<dst::LocalId, TranspileError> {
+    fn get_cbuffer_instance_id(
+        &self,
+        id: &src::ConstantBufferId,
+    ) -> Result<dst::LocalId, TranspileError> {
         match self.lifted_arguments {
-            Some(ref args) => {
-                match args.get(&GlobalArgument::ConstantBuffer(*id)) {
-                    Some(ref v) => Ok(*v.clone()),
-                    None => Err(TranspileError::UnknownConstantBufferId(id.clone())),
-                }
-            }
+            Some(ref args) => match args.get(&GlobalArgument::ConstantBuffer(*id)) {
+                Some(ref v) => Ok(*v.clone()),
+                None => Err(TranspileError::UnknownConstantBufferId(id.clone())),
+            },
             None => Err(TranspileError::Internal("not in scope".to_string())),
         }
     }
 
     /// Get the expression to find the given constant
-    fn get_constant(&self,
-                    id: &src::ConstantBufferId,
-                    name: String)
-                    -> Result<dst::Expression, TranspileError> {
+    fn get_constant(
+        &self,
+        id: &src::ConstantBufferId,
+        name: String,
+    ) -> Result<dst::Expression, TranspileError> {
         Ok(dst::Expression::MemberDeref(
-            Box::new(dst::Expression::Local(
-                try!(self.get_cbuffer_instance_id(id))
-            )),
-            name
+            Box::new(dst::Expression::Local(self.get_cbuffer_instance_id(id)?)),
+            name,
         ))
     }
 
@@ -557,11 +601,14 @@ impl Context {
         self.push_scope_with_pointer_overrides(scope_block, &[])
     }
 
-    fn push_scope_for_function(&mut self,
-                               scope_block: &src::ScopeBlock,
-                               pointers: &[src::VariableId],
-                               id: &src::FunctionId) {
-        let additional_arguments = self.function_decl_map
+    fn push_scope_for_function(
+        &mut self,
+        scope_block: &src::ScopeBlock,
+        pointers: &[src::VariableId],
+        id: &src::FunctionId,
+    ) {
+        let additional_arguments = self
+            .function_decl_map
             .get(id)
             .expect("function does not exist")
             .additional_arguments
@@ -574,10 +621,12 @@ impl Context {
         self.push_scope_with_additional_args(scope_block, &[], &additional_arguments)
     }
 
-    fn push_scope_with_additional_args(&mut self,
-                                       scope_block: &src::ScopeBlock,
-                                       pointers: &[src::VariableId],
-                                       additional_arguments: &[GlobalArgument]) {
+    fn push_scope_with_additional_args(
+        &mut self,
+        scope_block: &src::ScopeBlock,
+        pointers: &[src::VariableId],
+        additional_arguments: &[GlobalArgument],
+    ) {
         assert_eq!(self.lifted_arguments, None);
         assert_eq!(self.next_local_id, None);
         assert_eq!(self.local_names, None);
@@ -590,18 +639,16 @@ impl Context {
             match self.local_names {
                 Some(ref mut names) => {
                     let name = match *arg {
-                        GlobalArgument::Global(ref id) => {
-                            self.lifted_global_names
-                                .get(id)
-                                .expect("global name doesn't exist")
-                                .clone()
-                        }
-                        GlobalArgument::ConstantBuffer(ref id) => {
-                            self.lifted_cbuffer_names
-                                .get(id)
-                                .expect("cbuffer name doesn't exist")
-                                .clone()
-                        }
+                        GlobalArgument::Global(ref id) => self
+                            .lifted_global_names
+                            .get(id)
+                            .expect("global name doesn't exist")
+                            .clone(),
+                        GlobalArgument::ConstantBuffer(ref id) => self
+                            .lifted_cbuffer_names
+                            .get(id)
+                            .expect("cbuffer name doesn't exist")
+                            .clone(),
                     };
                     names.insert(identifier, name.to_string())
                 }
@@ -612,23 +659,36 @@ impl Context {
         self.push_scope_with_pointer_overrides(scope_block, pointers);
     }
 
-    fn push_scope_with_pointer_overrides(&mut self,
-                                         scope_block: &src::ScopeBlock,
-                                         pointers: &[src::VariableId]) {
+    fn push_scope_with_pointer_overrides(
+        &mut self,
+        scope_block: &src::ScopeBlock,
+        pointers: &[src::VariableId],
+    ) {
         self.variable_scopes.push(HashMap::new());
-        let mut keys = scope_block.1.variables.keys().collect::<Vec<&src::VariableId>>();
+        let mut keys = scope_block
+            .1
+            .variables
+            .keys()
+            .collect::<Vec<&src::VariableId>>();
         keys.sort();
         for var_id in keys {
             let &(ref var_name, _) = scope_block.1.variables.get(var_id).expect("bad key");
             let identifier = self.make_identifier();
-            let map = self.variable_scopes.last_mut().expect("no scopes after pushing scope");
-            map.insert(var_id.clone(),
-                       VariableDecl(identifier,
-                                    if pointers.iter().any(|pp| pp == var_id) {
-                                        ParamType::Pointer
-                                    } else {
-                                        ParamType::Normal
-                                    }));
+            let map = self
+                .variable_scopes
+                .last_mut()
+                .expect("no scopes after pushing scope");
+            map.insert(
+                var_id.clone(),
+                VariableDecl(
+                    identifier,
+                    if pointers.iter().any(|pp| pp == var_id) {
+                        ParamType::Pointer
+                    } else {
+                        ParamType::Normal
+                    },
+                ),
+            );
             match self.local_names {
                 Some(ref mut names) => names.insert(identifier, var_name.clone()),
                 None => panic!("not inside function"),
@@ -646,7 +706,9 @@ impl Context {
     fn pop_scope_for_function(&mut self) -> dst::LocalDeclarations {
         assert_eq!(self.variable_scopes.len(), 1);
         let decls = match self.local_names {
-            Some(ref locals) => dst::LocalDeclarations { locals: locals.clone() },
+            Some(ref locals) => dst::LocalDeclarations {
+                locals: locals.clone(),
+            },
             None => panic!("not inside function"),
         };
         self.lifted_arguments = None;
@@ -683,28 +745,33 @@ fn is_global_lifted(gv: &src::GlobalVariable) -> bool {
     !static_const && !groupshared
 }
 
-fn get_cl_global_type(id: &src::GlobalId,
-                      ty: &src::GlobalType,
-                      usage: &globals_analysis::GlobalUsage,
-                      context: &Context)
-                      -> Result<dst::Type, TranspileError> {
+fn get_cl_global_type(
+    id: &src::GlobalId,
+    ty: &src::GlobalType,
+    usage: &globals_analysis::GlobalUsage,
+    context: &Context,
+) -> Result<dst::Type, TranspileError> {
     let tyl = &(ty.0).0;
     Ok(match *tyl {
-        src::TypeLayout::Object(src::ObjectType::Buffer(ref data_type)) => {
-            dst::Type::Pointer(dst::AddressSpace::Global,
-                               Box::new(try!(transpile_datatype(data_type, &context))))
-        }
+        src::TypeLayout::Object(src::ObjectType::Buffer(ref data_type)) => dst::Type::Pointer(
+            dst::AddressSpace::Global,
+            Box::new(transpile_datatype(data_type, &context)?),
+        ),
         src::TypeLayout::Object(src::ObjectType::StructuredBuffer(ref structured_type)) => {
-            dst::Type::Pointer(dst::AddressSpace::Global,
-                               Box::new(try!(transpile_structuredtype(structured_type, &context))))
+            dst::Type::Pointer(
+                dst::AddressSpace::Global,
+                Box::new(transpile_structuredtype(structured_type, &context)?),
+            )
         }
-        src::TypeLayout::Object(src::ObjectType::RWBuffer(ref data_type)) => {
-            dst::Type::Pointer(dst::AddressSpace::Global,
-                               Box::new(try!(transpile_datatype(data_type, &context))))
-        }
+        src::TypeLayout::Object(src::ObjectType::RWBuffer(ref data_type)) => dst::Type::Pointer(
+            dst::AddressSpace::Global,
+            Box::new(transpile_datatype(data_type, &context)?),
+        ),
         src::TypeLayout::Object(src::ObjectType::RWStructuredBuffer(ref structured_type)) => {
-            dst::Type::Pointer(dst::AddressSpace::Global,
-                               Box::new(try!(transpile_structuredtype(structured_type, &context))))
+            dst::Type::Pointer(
+                dst::AddressSpace::Global,
+                Box::new(transpile_structuredtype(structured_type, &context)?),
+            )
         }
         src::TypeLayout::Object(src::ObjectType::Texture2D(_)) => {
             let access = dst::AccessModifier::ReadOnly;
@@ -721,24 +788,27 @@ fn get_cl_global_type(id: &src::GlobalId,
             };
             dst::Type::Image2D(access)
         }
-        src::TypeLayout::Object(src::ObjectType::ByteAddressBuffer) => {
-            dst::Type::Pointer(dst::AddressSpace::Global,
-                               Box::new(dst::Type::Scalar(dst::Scalar::UChar)))
-        }
-        src::TypeLayout::Object(src::ObjectType::RWByteAddressBuffer) => {
-            dst::Type::Pointer(dst::AddressSpace::Global,
-                               Box::new(dst::Type::Scalar(dst::Scalar::UChar)))
-        }
+        src::TypeLayout::Object(src::ObjectType::ByteAddressBuffer) => dst::Type::Pointer(
+            dst::AddressSpace::Global,
+            Box::new(dst::Type::Scalar(dst::Scalar::UChar)),
+        ),
+        src::TypeLayout::Object(src::ObjectType::RWByteAddressBuffer) => dst::Type::Pointer(
+            dst::AddressSpace::Global,
+            Box::new(dst::Type::Scalar(dst::Scalar::UChar)),
+        ),
         src::TypeLayout::SamplerState => dst::Type::Sampler,
         _ => return Err(TranspileError::TypeIsNotAllowedAsGlobal(ty.clone())),
     })
 }
 
-fn get_cl_cbuffer_type(id: &src::ConstantBufferId,
-                       context: &Context)
-                       -> Result<dst::Type, TranspileError> {
-    Ok(dst::Type::Pointer(dst::AddressSpace::Constant,
-                          Box::new(dst::Type::Struct(try!(context.get_cbuffer_struct_name(id))))))
+fn get_cl_cbuffer_type(
+    id: &src::ConstantBufferId,
+    context: &Context,
+) -> Result<dst::Type, TranspileError> {
+    Ok(dst::Type::Pointer(
+        dst::AddressSpace::Constant,
+        Box::new(dst::Type::Struct(context.get_cbuffer_struct_name(id)?)),
+    ))
 }
 
 fn transpile_scalartype(scalartype: &src::ScalarType) -> Result<dst::Scalar, TranspileError> {
@@ -753,48 +823,51 @@ fn transpile_scalartype(scalartype: &src::ScalarType) -> Result<dst::Scalar, Tra
     }
 }
 
-fn transpile_datatype(datatype: &src::DataType,
-                      context: &Context)
-                      -> Result<dst::Type, TranspileError> {
+fn transpile_datatype(
+    datatype: &src::DataType,
+    context: &Context,
+) -> Result<dst::Type, TranspileError> {
     transpile_type(&src::Type::from(datatype.clone()), context)
 }
 
-fn transpile_structuredtype(structured_type: &src::StructuredType,
-                            context: &Context)
-                            -> Result<dst::Type, TranspileError> {
+fn transpile_structuredtype(
+    structured_type: &src::StructuredType,
+    context: &Context,
+) -> Result<dst::Type, TranspileError> {
     transpile_type(&src::Type::from(structured_type.clone()), context)
 }
 
-fn transpile_typelayout(ty: &src::TypeLayout,
-                        context: &Context)
-                        -> Result<dst::Type, TranspileError> {
+fn transpile_typelayout(
+    ty: &src::TypeLayout,
+    context: &Context,
+) -> Result<dst::Type, TranspileError> {
     match ty {
         &src::TypeLayout::Void => Ok(dst::Type::Void),
         &src::TypeLayout::Scalar(src::ScalarType::Bool) => Ok(dst::Type::Bool),
         &src::TypeLayout::Scalar(ref scalar) => {
-            Ok(dst::Type::Scalar(try!(transpile_scalartype(scalar))))
+            Ok(dst::Type::Scalar(transpile_scalartype(scalar)?))
         }
         &src::TypeLayout::Vector(ref scalar, 1) => {
-            Ok(dst::Type::Scalar(try!(transpile_scalartype(scalar))))
+            Ok(dst::Type::Scalar(transpile_scalartype(scalar)?))
         }
-        &src::TypeLayout::Vector(ref scalar, 2) => {
-            Ok(dst::Type::Vector(try!(transpile_scalartype(scalar)),
-                                 dst::VectorDimension::Two))
-        }
-        &src::TypeLayout::Vector(ref scalar, 3) => {
-            Ok(dst::Type::Vector(try!(transpile_scalartype(scalar)),
-                                 dst::VectorDimension::Three))
-        }
-        &src::TypeLayout::Vector(ref scalar, 4) => {
-            Ok(dst::Type::Vector(try!(transpile_scalartype(scalar)),
-                                 dst::VectorDimension::Four))
-        }
+        &src::TypeLayout::Vector(ref scalar, 2) => Ok(dst::Type::Vector(
+            transpile_scalartype(scalar)?,
+            dst::VectorDimension::Two,
+        )),
+        &src::TypeLayout::Vector(ref scalar, 3) => Ok(dst::Type::Vector(
+            transpile_scalartype(scalar)?,
+            dst::VectorDimension::Three,
+        )),
+        &src::TypeLayout::Vector(ref scalar, 4) => Ok(dst::Type::Vector(
+            transpile_scalartype(scalar)?,
+            dst::VectorDimension::Four,
+        )),
         &src::TypeLayout::Struct(ref id) => {
-            let struct_name = try!(context.get_struct_name(id));
+            let struct_name = context.get_struct_name(id)?;
             Ok(dst::Type::Struct(struct_name))
         }
         &src::TypeLayout::Array(ref element, ref dim) => {
-            let inner_ty = try!(transpile_typelayout(element, context));
+            let inner_ty = transpile_typelayout(element, context)?;
             Ok(dst::Type::Array(Box::new(inner_ty), *dim))
         }
         _ => return Err(TranspileError::CouldNotGetEquivalentType(ty.clone())),
@@ -806,9 +879,10 @@ fn transpile_type(hlsltype: &src::Type, context: &Context) -> Result<dst::Type, 
     transpile_typelayout(ty, context)
 }
 
-fn transpile_localtype(local_type: &src::LocalType,
-                       context: &Context)
-                       -> Result<dst::Type, TranspileError> {
+fn transpile_localtype(
+    local_type: &src::LocalType,
+    context: &Context,
+) -> Result<dst::Type, TranspileError> {
     let &src::LocalType(ref ty, ref ls, ref modifiers) = local_type;
     match *modifiers {
         Some(_) => return Err(TranspileError::Unknown),
@@ -833,12 +907,12 @@ fn transpile_literal(lit: &src::Literal) -> Result<dst::Literal, TranspileError>
     }
 }
 
-fn get_image_func(base_func: &'static str,
-                  dtyl: &src::DataLayout)
-                  -> Result<(String, dst::Type), TranspileError> {
+fn get_image_func(
+    base_func: &'static str,
+    dtyl: &src::DataLayout,
+) -> Result<(String, dst::Type), TranspileError> {
     let (ext, ty) = match *dtyl {
-        src::DataLayout::Scalar(ref scalar) |
-        src::DataLayout::Vector(ref scalar, _) => {
+        src::DataLayout::Scalar(ref scalar) | src::DataLayout::Vector(ref scalar, _) => {
             let dim = dst::VectorDimension::Four;
             match *scalar {
                 src::ScalarType::Int => ("i", dst::Type::Vector(dst::Scalar::Int, dim)),
@@ -856,50 +930,66 @@ fn write_unary(op: dst::UnaryOp, expr: dst::Expression) -> Result<dst::Expressio
     Ok(dst::Expression::UnaryOperation(op, Box::new(expr)))
 }
 
-fn write_func(name: &'static str,
-              args: &[dst::Expression])
-              -> Result<dst::Expression, TranspileError> {
-    let args_vec = args.into_iter()
+fn write_func(
+    name: &'static str,
+    args: &[dst::Expression],
+) -> Result<dst::Expression, TranspileError> {
+    let args_vec = args
+        .into_iter()
         .map(|e| e.clone())
         .collect::<Vec<dst::Expression>>();
-    Ok(dst::Expression::UntypedIntrinsic(name.to_string(), args_vec))
+    Ok(dst::Expression::UntypedIntrinsic(
+        name.to_string(),
+        args_vec,
+    ))
 }
 
-fn transpile_intrinsic0(intrinsic: &src::Intrinsic0,
-                        _: &mut Context)
-                        -> Result<dst::Expression, TranspileError> {
+fn transpile_intrinsic0(
+    intrinsic: &src::Intrinsic0,
+    _: &mut Context,
+) -> Result<dst::Expression, TranspileError> {
     use slp_lang_hir::Intrinsic0 as I;
     match *intrinsic {
         I::AllMemoryBarrier | I::AllMemoryBarrierWithGroupSync => {
             Ok(dst::Expression::UntypedIntrinsic(
                 "barrier".to_string(),
-                vec![dst::Expression::BinaryOperation(dst::BinOp::BitwiseOr,
-                    Box::new(dst::Expression::UntypedLiteral("CLK_LOCAL_MEM_FENCE".to_string())),
-                    Box::new(dst::Expression::UntypedLiteral("CLK_GLOBAL_MEM_FENCE".to_string()))
-                )]
+                vec![dst::Expression::BinaryOperation(
+                    dst::BinOp::BitwiseOr,
+                    Box::new(dst::Expression::UntypedLiteral(
+                        "CLK_LOCAL_MEM_FENCE".to_string(),
+                    )),
+                    Box::new(dst::Expression::UntypedLiteral(
+                        "CLK_GLOBAL_MEM_FENCE".to_string(),
+                    )),
+                )],
             ))
         }
         I::DeviceMemoryBarrier | I::DeviceMemoryBarrierWithGroupSync => {
             Ok(dst::Expression::UntypedIntrinsic(
                 "barrier".to_string(),
-                vec![dst::Expression::UntypedLiteral("CLK_GLOBAL_MEM_FENCE".to_string())]
+                vec![dst::Expression::UntypedLiteral(
+                    "CLK_GLOBAL_MEM_FENCE".to_string(),
+                )],
             ))
         }
         I::GroupMemoryBarrier | I::GroupMemoryBarrierWithGroupSync => {
             Ok(dst::Expression::UntypedIntrinsic(
                 "barrier".to_string(),
-                vec![dst::Expression::UntypedLiteral("CLK_LOCAL_MEM_FENCE".to_string())]
+                vec![dst::Expression::UntypedLiteral(
+                    "CLK_LOCAL_MEM_FENCE".to_string(),
+                )],
             ))
         }
     }
 }
 
-fn transpile_intrinsic1(intrinsic: &src::Intrinsic1,
-                        src_expr_1: &src::Expression,
-                        context: &mut Context)
-                        -> Result<dst::Expression, TranspileError> {
+fn transpile_intrinsic1(
+    intrinsic: &src::Intrinsic1,
+    src_expr_1: &src::Expression,
+    context: &mut Context,
+) -> Result<dst::Expression, TranspileError> {
     use slp_lang_hir::Intrinsic1 as I;
-    let e1 = try!(transpile_expression(src_expr_1, context));
+    let e1 = transpile_expression(src_expr_1, context)?;
     match *intrinsic {
         I::PrefixIncrement(_) => write_unary(dst::UnaryOp::PrefixIncrement, e1),
         I::PrefixDecrement(_) => write_unary(dst::UnaryOp::PrefixDecrement, e1),
@@ -910,36 +1000,44 @@ fn transpile_intrinsic1(intrinsic: &src::Intrinsic1,
         I::LogicalNot(_) => write_unary(dst::UnaryOp::LogicalNot, e1),
         I::BitwiseNot(_) => write_unary(dst::UnaryOp::BitwiseNot, e1),
         I::AbsI => {
-            let res_uint = try!(write_func("abs", &[e1]));
-            write_cast(dst::Type::Scalar(dst::Scalar::UInt),
-                       dst::Type::Scalar(dst::Scalar::Int),
-                       res_uint,
-                       false,
-                       context)
+            let res_uint = write_func("abs", &[e1])?;
+            write_cast(
+                dst::Type::Scalar(dst::Scalar::UInt),
+                dst::Type::Scalar(dst::Scalar::Int),
+                res_uint,
+                false,
+                context,
+            )
         }
         I::AbsI2 => {
-            let res_uint = try!(write_func("abs", &[e1]));
-            write_cast(dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Two),
-                       dst::Type::Vector(dst::Scalar::Int, dst::VectorDimension::Two),
-                       res_uint,
-                       false,
-                       context)
+            let res_uint = write_func("abs", &[e1])?;
+            write_cast(
+                dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Two),
+                dst::Type::Vector(dst::Scalar::Int, dst::VectorDimension::Two),
+                res_uint,
+                false,
+                context,
+            )
         }
         I::AbsI3 => {
-            let res_uint = try!(write_func("abs", &[e1]));
-            write_cast(dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Three),
-                       dst::Type::Vector(dst::Scalar::Int, dst::VectorDimension::Three),
-                       res_uint,
-                       false,
-                       context)
+            let res_uint = write_func("abs", &[e1])?;
+            write_cast(
+                dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Three),
+                dst::Type::Vector(dst::Scalar::Int, dst::VectorDimension::Three),
+                res_uint,
+                false,
+                context,
+            )
         }
         I::AbsI4 => {
-            let res_uint = try!(write_func("abs", &[e1]));
-            write_cast(dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Four),
-                       dst::Type::Vector(dst::Scalar::Int, dst::VectorDimension::Four),
-                       res_uint,
-                       false,
-                       context)
+            let res_uint = write_func("abs", &[e1])?;
+            write_cast(
+                dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Four),
+                dst::Type::Vector(dst::Scalar::Int, dst::VectorDimension::Four),
+                res_uint,
+                false,
+                context,
+            )
         }
         I::AbsF | I::AbsF2 | I::AbsF3 | I::AbsF4 => write_func("fabs", &[e1]),
         I::Acos | I::Acos2 | I::Acos3 | I::Acos4 => write_func("acos", &[e1]),
@@ -976,41 +1074,51 @@ fn transpile_intrinsic1(intrinsic: &src::Intrinsic1,
         I::Exp | I::Exp2 | I::Exp3 | I::Exp4 => write_func("exp", &[e1]),
         I::F16ToF32 => {
             context.required_extensions.insert(dst::Extension::KhrFp16);
-            let input_16u = try!(write_cast(dst::Type::Scalar(dst::Scalar::UInt),
-                                            dst::Type::Scalar(dst::Scalar::UShort),
-                                            e1,
-                                            false,
-                                            context));
-            let as_half = try!(write_func("as_half", &[input_16u]));
-            write_cast(dst::Type::Scalar(dst::Scalar::Half),
-                       dst::Type::Scalar(dst::Scalar::Float),
-                       as_half,
-                       false,
-                       context)
+            let input_16u = write_cast(
+                dst::Type::Scalar(dst::Scalar::UInt),
+                dst::Type::Scalar(dst::Scalar::UShort),
+                e1,
+                false,
+                context,
+            )?;
+            let as_half = write_func("as_half", &[input_16u])?;
+            write_cast(
+                dst::Type::Scalar(dst::Scalar::Half),
+                dst::Type::Scalar(dst::Scalar::Float),
+                as_half,
+                false,
+                context,
+            )
         }
         I::F32ToF16 => {
             context.required_extensions.insert(dst::Extension::KhrFp16);
-            let as_half = try!(write_cast(dst::Type::Scalar(dst::Scalar::Float),
-                                          dst::Type::Scalar(dst::Scalar::Half),
-                                          e1,
-                                          false,
-                                          context));
-            let as_ushort = try!(write_func("as_ushort", &[as_half]));
-            write_cast(dst::Type::Scalar(dst::Scalar::UShort),
-                       dst::Type::Scalar(dst::Scalar::UInt),
-                       as_ushort,
-                       false,
-                       context)
+            let as_half = write_cast(
+                dst::Type::Scalar(dst::Scalar::Float),
+                dst::Type::Scalar(dst::Scalar::Half),
+                e1,
+                false,
+                context,
+            )?;
+            let as_ushort = write_func("as_ushort", &[as_half])?;
+            write_cast(
+                dst::Type::Scalar(dst::Scalar::UShort),
+                dst::Type::Scalar(dst::Scalar::UInt),
+                as_ushort,
+                false,
+                context,
+            )
         }
         I::Floor | I::Floor2 | I::Floor3 | I::Floor4 => write_func("floor", &[e1]),
         I::IsNaN => {
             // OpenCL isnan returns 1 for true or 0 for false
             // Cast to bool to get boolean result
-            write_cast(dst::Type::Scalar(dst::Scalar::Int),
-                       dst::Type::Bool,
-                       try!(write_func("isnan", &[e1])),
-                       false,
-                       context)
+            write_cast(
+                dst::Type::Scalar(dst::Scalar::Int),
+                dst::Type::Bool,
+                write_func("isnan", &[e1])?,
+                false,
+                context,
+            )
         }
         I::IsNaN2 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
         I::IsNaN3 => Err(TranspileError::Intrinsic1Unimplemented(intrinsic.clone())),
@@ -1031,54 +1139,60 @@ fn transpile_intrinsic1(intrinsic: &src::Intrinsic1,
         // HLSL sign returns int, OpenCL sign returns float (with different results for negative
         // and positive zero)
         // Cast to int to get the same behavior
-        I::SignF => {
-            write_cast(dst::Type::Scalar(dst::Scalar::Float),
-                       dst::Type::Scalar(dst::Scalar::Int),
-                       try!(write_func("sign", &[e1])),
-                       false,
-                       context)
-        }
-        I::SignF2 => {
-            write_cast(dst::Type::Vector(dst::Scalar::Float, dst::VectorDimension::Two),
-                       dst::Type::Vector(dst::Scalar::Int, dst::VectorDimension::Two),
-                       try!(write_func("sign", &[e1])),
-                       false,
-                       context)
-        }
-        I::SignF3 => {
-            write_cast(dst::Type::Vector(dst::Scalar::Float, dst::VectorDimension::Three),
-                       dst::Type::Vector(dst::Scalar::Int, dst::VectorDimension::Three),
-                       try!(write_func("sign", &[e1])),
-                       false,
-                       context)
-        }
-        I::SignF4 => {
-            write_cast(dst::Type::Vector(dst::Scalar::Float, dst::VectorDimension::Four),
-                       dst::Type::Vector(dst::Scalar::Int, dst::VectorDimension::Four),
-                       try!(write_func("sign", &[e1])),
-                       false,
-                       context)
-        }
+        I::SignF => write_cast(
+            dst::Type::Scalar(dst::Scalar::Float),
+            dst::Type::Scalar(dst::Scalar::Int),
+            write_func("sign", &[e1])?,
+            false,
+            context,
+        ),
+        I::SignF2 => write_cast(
+            dst::Type::Vector(dst::Scalar::Float, dst::VectorDimension::Two),
+            dst::Type::Vector(dst::Scalar::Int, dst::VectorDimension::Two),
+            write_func("sign", &[e1])?,
+            false,
+            context,
+        ),
+        I::SignF3 => write_cast(
+            dst::Type::Vector(dst::Scalar::Float, dst::VectorDimension::Three),
+            dst::Type::Vector(dst::Scalar::Int, dst::VectorDimension::Three),
+            write_func("sign", &[e1])?,
+            false,
+            context,
+        ),
+        I::SignF4 => write_cast(
+            dst::Type::Vector(dst::Scalar::Float, dst::VectorDimension::Four),
+            dst::Type::Vector(dst::Scalar::Int, dst::VectorDimension::Four),
+            write_func("sign", &[e1])?,
+            false,
+            context,
+        ),
         I::Sin | I::Sin2 | I::Sin3 | I::Sin4 => write_func("sin", &[e1]),
         I::Sqrt | I::Sqrt2 | I::Sqrt3 | I::Sqrt4 => write_func("sqrt", &[e1]),
     }
 }
 
-fn write_binop(binop: dst::BinOp,
-               lhs: dst::Expression,
-               rhs: dst::Expression)
-               -> Result<dst::Expression, TranspileError> {
-    Ok(dst::Expression::BinaryOperation(binop, Box::new(lhs), Box::new(rhs)))
+fn write_binop(
+    binop: dst::BinOp,
+    lhs: dst::Expression,
+    rhs: dst::Expression,
+) -> Result<dst::Expression, TranspileError> {
+    Ok(dst::Expression::BinaryOperation(
+        binop,
+        Box::new(lhs),
+        Box::new(rhs),
+    ))
 }
 
-fn transpile_intrinsic2(intrinsic: &src::Intrinsic2,
-                        src_expr_1: &src::Expression,
-                        src_expr_2: &src::Expression,
-                        context: &mut Context)
-                        -> Result<dst::Expression, TranspileError> {
+fn transpile_intrinsic2(
+    intrinsic: &src::Intrinsic2,
+    src_expr_1: &src::Expression,
+    src_expr_2: &src::Expression,
+    context: &mut Context,
+) -> Result<dst::Expression, TranspileError> {
     use slp_lang_hir::Intrinsic2 as I;
-    let e1 = try!(transpile_expression(src_expr_1, context));
-    let e2 = try!(transpile_expression(src_expr_2, context));
+    let e1 = transpile_expression(src_expr_1, context)?;
+    let e2 = transpile_expression(src_expr_2, context)?;
     match *intrinsic {
         I::Add(_) => write_binop(dst::BinOp::Add, e1, e2),
         I::Subtract(_) => write_binop(dst::BinOp::Subtract, e1, e2),
@@ -1122,16 +1236,14 @@ fn transpile_intrinsic2(intrinsic: &src::Intrinsic2,
         }
         I::AsDouble => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
         I::Cross => write_func("cross", &[e1, e2]),
-        I::Distance1 |
-        I::Distance2 |
-        I::Distance3 |
-        I::Distance4 => {
+        I::Distance1 | I::Distance2 | I::Distance3 | I::Distance4 => {
             Ok(dst::Expression::UntypedIntrinsic(
                 "length".to_string(),
-                vec![dst::Expression::BinaryOperation(dst::BinOp::Subtract,
+                vec![dst::Expression::BinaryOperation(
+                    dst::BinOp::Subtract,
                     Box::new(e1),
-                    Box::new(e2)
-                )]
+                    Box::new(e2),
+                )],
             ))
         }
         I::DotI1 => Err(TranspileError::Intrinsic2Unimplemented(intrinsic.clone())),
@@ -1145,40 +1257,37 @@ fn transpile_intrinsic2(intrinsic: &src::Intrinsic2,
         I::MaxF | I::MaxF2 | I::MaxF3 | I::MaxF4 => write_func("fmax", &[e1, e2]),
         I::Pow | I::Pow2 | I::Pow3 | I::Pow4 => write_func("pow", &[e1, e2]),
         I::Step | I::Step2 | I::Step3 | I::Step4 => write_func("step", &[e1, e2]),
-        I::BufferLoad(_) |
-        I::RWBufferLoad(_) |
-        I::StructuredBufferLoad(_) |
-        I::RWStructuredBufferLoad(_) => {
+        I::BufferLoad(_)
+        | I::RWBufferLoad(_)
+        | I::StructuredBufferLoad(_)
+        | I::RWStructuredBufferLoad(_) => {
             Ok(dst::Expression::ArraySubscript(Box::new(e1), Box::new(e2)))
         }
-        I::Texture2DLoad(ref data_type) |
-        I::RWTexture2DLoad(ref data_type) => {
-            let (func_name, read_type) = try!(get_image_func("read_image", &data_type.0));
-            let cast_type = try!(transpile_datatype(data_type, context));
+        I::Texture2DLoad(ref data_type) | I::RWTexture2DLoad(ref data_type) => {
+            let (func_name, read_type) = get_image_func("read_image", &data_type.0)?;
+            let cast_type = transpile_datatype(data_type, context)?;
             let expr = dst::Expression::UntypedIntrinsic(func_name.to_string(), vec![e1, e2]);
             write_cast(read_type, cast_type, expr, false, context)
         }
-        I::ByteAddressBufferLoad |
-        I::RWByteAddressBufferLoad |
-        I::ByteAddressBufferLoad2 |
-        I::RWByteAddressBufferLoad2 |
-        I::ByteAddressBufferLoad3 |
-        I::RWByteAddressBufferLoad3 |
-        I::ByteAddressBufferLoad4 |
-        I::RWByteAddressBufferLoad4 => {
+        I::ByteAddressBufferLoad
+        | I::RWByteAddressBufferLoad
+        | I::ByteAddressBufferLoad2
+        | I::RWByteAddressBufferLoad2
+        | I::ByteAddressBufferLoad3
+        | I::RWByteAddressBufferLoad3
+        | I::ByteAddressBufferLoad4
+        | I::RWByteAddressBufferLoad4 => {
             let ty = Box::new(match *intrinsic {
-                I::ByteAddressBufferLoad |
-                I::RWByteAddressBufferLoad => dst::Type::Scalar(dst::Scalar::UInt),
-                I::ByteAddressBufferLoad2 |
-                I::RWByteAddressBufferLoad2 => {
+                I::ByteAddressBufferLoad | I::RWByteAddressBufferLoad => {
+                    dst::Type::Scalar(dst::Scalar::UInt)
+                }
+                I::ByteAddressBufferLoad2 | I::RWByteAddressBufferLoad2 => {
                     dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Two)
                 }
-                I::ByteAddressBufferLoad3 |
-                I::RWByteAddressBufferLoad3 => {
+                I::ByteAddressBufferLoad3 | I::RWByteAddressBufferLoad3 => {
                     dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Three)
                 }
-                I::ByteAddressBufferLoad4 |
-                I::RWByteAddressBufferLoad4 => {
+                I::ByteAddressBufferLoad4 | I::RWByteAddressBufferLoad4 => {
                     dst::Type::Vector(dst::Scalar::UInt, dst::VectorDimension::Four)
                 }
                 _ => unreachable!(),
@@ -1188,23 +1297,24 @@ fn transpile_intrinsic2(intrinsic: &src::Intrinsic2,
                 Box::new(dst::Expression::BinaryOperation(
                     dst::BinOp::Add,
                     Box::new(e1),
-                    Box::new(e2)
-                ))
+                    Box::new(e2),
+                )),
             ))))
         }
     }
 }
 
-fn transpile_intrinsic3(intrinsic: &src::Intrinsic3,
-                        src_expr_1: &src::Expression,
-                        src_expr_2: &src::Expression,
-                        src_expr_3: &src::Expression,
-                        context: &mut Context)
-                        -> Result<dst::Expression, TranspileError> {
+fn transpile_intrinsic3(
+    intrinsic: &src::Intrinsic3,
+    src_expr_1: &src::Expression,
+    src_expr_2: &src::Expression,
+    src_expr_3: &src::Expression,
+    context: &mut Context,
+) -> Result<dst::Expression, TranspileError> {
     use slp_lang_hir::Intrinsic3 as I;
-    let e1 = try!(transpile_expression(src_expr_1, context));
-    let e2 = try!(transpile_expression(src_expr_2, context));
-    let e3 = try!(transpile_expression(src_expr_3, context));
+    let e1 = transpile_expression(src_expr_1, context)?;
+    let e2 = transpile_expression(src_expr_2, context)?;
+    let e3 = transpile_expression(src_expr_3, context)?;
     match *intrinsic {
         I::ClampI => write_func("clamp", &[e1, e2, e3]),
         I::ClampI2 => write_func("clamp", &[e1, e2, e3]),
@@ -1216,8 +1326,8 @@ fn transpile_intrinsic3(intrinsic: &src::Intrinsic3,
         I::ClampF4 => write_func("clamp", &[e1, e2, e3]),
         I::Lerp | I::Lerp2 | I::Lerp3 | I::Lerp4 => write_func("mix", &[e1, e2, e3]),
         I::Sincos | I::Sincos2 | I::Sincos3 | I::Sincos4 => {
-            let cos_val = try!(address_of(e3));
-            let f = Box::new(try!(write_func("sincos", &[e1, cos_val])));
+            let cos_val = address_of(e3)?;
+            let f = Box::new(write_func("sincos", &[e1, cos_val])?);
             let binop = dst::Expression::BinaryOperation(dst::BinOp::Assignment, Box::new(e2), f);
             Ok(dst::Expression::Cast(dst::Type::Void, Box::new(binop)))
         }
@@ -1225,8 +1335,8 @@ fn transpile_intrinsic3(intrinsic: &src::Intrinsic3,
             write_func("smoothstep", &[e1, e2, e3])
         }
         I::Texture2DSample(ref data_type) => {
-            let (func_name, read_type) = try!(get_image_func("read_image", &data_type.0));
-            let cast_type = try!(transpile_datatype(data_type, context));
+            let (func_name, read_type) = get_image_func("read_image", &data_type.0)?;
+            let cast_type = transpile_datatype(data_type, context)?;
             let expr = dst::Expression::UntypedIntrinsic(func_name.to_string(), vec![e1, e2, e3]);
             write_cast(read_type, cast_type, expr, false, context)
         }
@@ -1239,17 +1349,17 @@ fn transpile_intrinsic3(intrinsic: &src::Intrinsic3,
             let rhs = e3;
 
             // Find the right cl function to call
-            let (func_name, read_type) = try!(get_image_func("write_image", &data_type.0));
+            let (func_name, read_type) = get_image_func("write_image", &data_type.0)?;
 
-            let cast_type = try!(transpile_datatype(data_type, context));
+            let cast_type = transpile_datatype(data_type, context)?;
             let args = vec![tex_dst, index_dst, rhs];
             let expr = dst::Expression::UntypedIntrinsic(func_name.to_string(), args);
             write_cast(read_type, cast_type, expr, false, context)
         }
-        I::RWByteAddressBufferStore |
-        I::RWByteAddressBufferStore2 |
-        I::RWByteAddressBufferStore3 |
-        I::RWByteAddressBufferStore4 => {
+        I::RWByteAddressBufferStore
+        | I::RWByteAddressBufferStore2
+        | I::RWByteAddressBufferStore3
+        | I::RWByteAddressBufferStore4 => {
             let st = dst::Scalar::UInt;
             let ty = Box::new(match *intrinsic {
                 I::RWByteAddressBufferStore => dst::Type::Scalar(st),
@@ -1264,9 +1374,9 @@ fn transpile_intrinsic3(intrinsic: &src::Intrinsic3,
                 dst::BinOp::Assignment,
                 Box::new(dst::Expression::Deref(Box::new(dst::Expression::Cast(
                     dst::Type::Pointer(dst::AddressSpace::Global, ty),
-                    Box::new(binop)
+                    Box::new(binop),
                 )))),
-                Box::new(e3)
+                Box::new(e3),
             ))
         }
     }
@@ -1280,20 +1390,26 @@ fn address_of(e: dst::Expression) -> Result<dst::Expression, TranspileError> {
     Ok(dst::Expression::AddressOf(Box::new(e)))
 }
 
-fn write_lifted_func_with_types(lifted_args: Vec<dst::Expression>,
-                                local_args: Vec<(&src::Expression, dst::Expression, ParamType)>,
-                                func_id: dst::FunctionId,
-                                ret_ty: dst::Type,
-                                context: &mut Context)
-                                -> Result<dst::Expression, TranspileError> {
-
+fn write_lifted_func_with_types(
+    lifted_args: Vec<dst::Expression>,
+    local_args: Vec<(&src::Expression, dst::Expression, ParamType)>,
+    func_id: dst::FunctionId,
+    ret_ty: dst::Type,
+    context: &mut Context,
+) -> Result<dst::Expression, TranspileError> {
     enum LiftType {
         // Input expression + type
         Normal(dst::Expression, dst::Type),
         // Input expression + type for out params that don't need swizzle
         Pointer(dst::Expression, dst::Type),
         // Input expression + deswizzled type + input type + required type + swizzle
-        Swizzle(dst::Expression, dst::Type, dst::Type, dst::Type, Vec<dst::SwizzleSlot>),
+        Swizzle(
+            dst::Expression,
+            dst::Type,
+            dst::Type,
+            dst::Type,
+            Vec<dst::SwizzleSlot>,
+        ),
     }
 
     let mut lifted_types: Vec<LiftType> = Vec::with_capacity(lifted_args.len() + local_args.len());
@@ -1310,13 +1426,15 @@ fn write_lifted_func_with_types(lifted_args: Vec<dst::Expression>,
                     Ok(ty) => ty,
                     Err(err) => return Err(TranspileError::InternalTypeError(err)),
                 };
-                let dst_ty = try!(transpile_type(&src_ty.0, context));
+                let dst_ty = transpile_type(&src_ty.0, context)?;
                 LiftType::Normal(expr_dst, dst_ty)
             }
             ParamType::Pointer => {
                 match (expr_src, expr_dst) {
-                    (&src::Expression::Swizzle(ref inner_src, _),
-                     dst::Expression::Swizzle(ref inner, ref sw)) => {
+                    (
+                        &src::Expression::Swizzle(ref inner_src, _),
+                        dst::Expression::Swizzle(ref inner, ref sw),
+                    ) => {
                         let inner_dst = *inner.clone();
                         let swizzle = sw.clone();
 
@@ -1324,21 +1442,25 @@ fn write_lifted_func_with_types(lifted_args: Vec<dst::Expression>,
                             Ok(ty) => ty,
                             Err(err) => return Err(TranspileError::InternalTypeError(err)),
                         };
-                        let required_ty_dst = try!(transpile_type(&required_ty_src.0, context));
+                        let required_ty_dst = transpile_type(&required_ty_src.0, context)?;
                         let deswizzled_ty_src = match get(inner_src, &context.type_context) {
                             Ok(ty) => ty,
                             Err(err) => return Err(TranspileError::InternalTypeError(err)),
                         };
-                        let deswizzled_ty_dst = try!(transpile_type(&deswizzled_ty_src.0, context));
+                        let deswizzled_ty_dst = transpile_type(&deswizzled_ty_src.0, context)?;
 
                         // Only works for private variables (similar to current out param code)
-                        let ty = dst::Type::Pointer(dst::AddressSpace::Private,
-                                                    Box::new(deswizzled_ty_dst.clone()));
-                        LiftType::Swizzle(inner_dst,
-                                          deswizzled_ty_dst,
-                                          ty,
-                                          required_ty_dst,
-                                          swizzle)
+                        let ty = dst::Type::Pointer(
+                            dst::AddressSpace::Private,
+                            Box::new(deswizzled_ty_dst.clone()),
+                        );
+                        LiftType::Swizzle(
+                            inner_dst,
+                            deswizzled_ty_dst,
+                            ty,
+                            required_ty_dst,
+                            swizzle,
+                        )
                     }
                     (&src::Expression::Swizzle(_, _), _) => {
                         return Err(TranspileError::TakingAddressOfVectorElement);
@@ -1351,7 +1473,7 @@ fn write_lifted_func_with_types(lifted_args: Vec<dst::Expression>,
                             Ok(ty) => ty,
                             Err(err) => return Err(TranspileError::InternalTypeError(err)),
                         };
-                        let ty_dst = Box::new(try!(transpile_type(&ty_src.0, context)));
+                        let ty_dst = Box::new(transpile_type(&ty_src.0, context)?);
 
                         // Again only works for private variables
                         let ty = dst::Type::Pointer(dst::AddressSpace::Private, ty_dst.clone());
@@ -1447,9 +1569,11 @@ fn write_lifted_func_with_types(lifted_args: Vec<dst::Expression>,
                 let var_ref = dst::Expression::AddressOf(Box::new(var.clone()));
                 args.push(var_ref);
 
-                let wb = dst::Expression::BinaryOperation(dst::BinOp::Assignment,
-                                                          Box::new(swizzle),
-                                                          Box::new(var));
+                let wb = dst::Expression::BinaryOperation(
+                    dst::BinOp::Assignment,
+                    Box::new(swizzle),
+                    Box::new(var),
+                );
                 let st = dst::Statement::Expression(wb);
                 statements_after.push(st);
             }
@@ -1486,14 +1610,15 @@ fn write_lifted_func_with_types(lifted_args: Vec<dst::Expression>,
         local_declarations: dst::LocalDeclarations { locals: locals },
     };
 
-    context.root_definitions.push(dst::RootDefinition::Function(fd));
+    context
+        .root_definitions
+        .push(dst::RootDefinition::Function(fd));
 
     let mut outer_args = Vec::with_capacity(lifted_types.len());
     for lt in lifted_types {
         let arg = match lt {
             LiftType::Normal(e, _) => e,
-            LiftType::Pointer(e, _) |
-            LiftType::Swizzle(e, _, _, _, _) => try!(address_of(e)),
+            LiftType::Pointer(e, _) | LiftType::Swizzle(e, _, _, _, _) => address_of(e)?,
         };
         outer_args.push(arg);
     }
@@ -1501,20 +1626,21 @@ fn write_lifted_func_with_types(lifted_args: Vec<dst::Expression>,
     Ok(dst::Expression::Call(id, outer_args))
 }
 
-fn write_inplace_func_with_types(lifted_args: Vec<dst::Expression>,
-                                 local_args: Vec<(&src::Expression, dst::Expression, ParamType)>,
-                                 func: dst::FunctionId)
-                                 -> Result<dst::Expression, TranspileError> {
+fn write_inplace_func_with_types(
+    lifted_args: Vec<dst::Expression>,
+    local_args: Vec<(&src::Expression, dst::Expression, ParamType)>,
+    func: dst::FunctionId,
+) -> Result<dst::Expression, TranspileError> {
     let fold_fn = |vec_opt: Result<Vec<dst::Expression>, TranspileError>, (_, expr, pt)| {
-        let mut vec = try!(vec_opt);
+        let mut vec = vec_opt?;
         vec.push(match pt {
             ParamType::Normal => expr,
-            ParamType::Pointer => try!(address_of(expr)),
+            ParamType::Pointer => address_of(expr)?,
         });
         Ok(vec)
     };
     let fold_initial = Ok(Vec::with_capacity(local_args.len()));
-    let mut local_args = try!(local_args.into_iter().fold(fold_initial, fold_fn));
+    let mut local_args = local_args.into_iter().fold(fold_initial, fold_fn)?;
     let mut final_arguments = Vec::with_capacity(lifted_args.len() + local_args.len());
     for expr in lifted_args {
         final_arguments.push(expr);
@@ -1524,24 +1650,23 @@ fn write_inplace_func_with_types(lifted_args: Vec<dst::Expression>,
     Ok(dst::Expression::Call(func, final_arguments))
 }
 
-fn write_func_with_types(lifted_args: Vec<dst::Expression>,
-                         local_args: Vec<(&src::Expression, dst::Expression, ParamType)>,
-                         func: dst::FunctionId,
-                         ret_ty: dst::Type,
-                         context: &mut Context)
-                         -> Result<dst::Expression, TranspileError> {
+fn write_func_with_types(
+    lifted_args: Vec<dst::Expression>,
+    local_args: Vec<(&src::Expression, dst::Expression, ParamType)>,
+    func: dst::FunctionId,
+    ret_ty: dst::Type,
+    context: &mut Context,
+) -> Result<dst::Expression, TranspileError> {
     let mut use_inplace = true;
     for &(_, ref expr, ref pt) in &local_args {
         match *pt {
             ParamType::Normal => {}
-            ParamType::Pointer => {
-                match *expr {
-                    dst::Expression::Swizzle(_, _) => {
-                        use_inplace = false;
-                    }
-                    _ => {}
+            ParamType::Pointer => match *expr {
+                dst::Expression::Swizzle(_, _) => {
+                    use_inplace = false;
                 }
-            }
+                _ => {}
+            },
         }
     }
     if use_inplace {
@@ -1551,12 +1676,13 @@ fn write_func_with_types(lifted_args: Vec<dst::Expression>,
     }
 }
 
-fn write_cast(source_cl_type: dst::Type,
-              dest_cl_type: dst::Type,
-              cl_expr: dst::Expression,
-              always_cast: bool,
-              context: &mut Context)
-              -> Result<dst::Expression, TranspileError> {
+fn write_cast(
+    source_cl_type: dst::Type,
+    dest_cl_type: dst::Type,
+    cl_expr: dst::Expression,
+    always_cast: bool,
+    context: &mut Context,
+) -> Result<dst::Expression, TranspileError> {
     if dest_cl_type == source_cl_type && !always_cast {
         // If the cast would cast to the same time, ignore it
         return Ok(cl_expr);
@@ -1565,17 +1691,17 @@ fn write_cast(source_cl_type: dst::Type,
         dst::Type::Bool => {
             match source_cl_type {
                 // Vector to bool cast
-                dst::Type::Vector(_, _) => {
-                    dst::Expression::Cast(dest_cl_type.clone(), Box::new(
-                        dst::Expression::Swizzle(
-                            Box::new(cl_expr),
-                            vec![dst::SwizzleSlot::X]
-                        )
-                    ))
-                }
+                dst::Type::Vector(_, _) => dst::Expression::Cast(
+                    dest_cl_type.clone(),
+                    Box::new(dst::Expression::Swizzle(
+                        Box::new(cl_expr),
+                        vec![dst::SwizzleSlot::X],
+                    )),
+                ),
                 // Scalar to bool cast
-                dst::Type::Bool |
-                dst::Type::Scalar(_) => dst::Expression::Cast(dest_cl_type, Box::new(cl_expr)),
+                dst::Type::Bool | dst::Type::Scalar(_) => {
+                    dst::Expression::Cast(dest_cl_type, Box::new(cl_expr))
+                }
                 _ => {
                     let err = "source of bool cast is not a numeric type";
                     return Err(TranspileError::Internal(err.to_string()));
@@ -1585,42 +1711,52 @@ fn write_cast(source_cl_type: dst::Type,
         dst::Type::Scalar(ref to_scalar_type) => {
             match source_cl_type {
                 // Vector to same type scalar cast, swizzle
-                dst::Type::Vector(ref from_scalar_type, _) if *from_scalar_type ==
-                                                              *to_scalar_type => {
+                dst::Type::Vector(ref from_scalar_type, _)
+                    if *from_scalar_type == *to_scalar_type =>
+                {
                     dst::Expression::Swizzle(Box::new(cl_expr), vec![dst::SwizzleSlot::X])
                 }
                 // Vector to scalar cast, swizzle + cast
-                dst::Type::Vector(_, _) => {
-                    dst::Expression::Cast(dest_cl_type.clone(), Box::new(dst::Expression::Swizzle(
+                dst::Type::Vector(_, _) => dst::Expression::Cast(
+                    dest_cl_type.clone(),
+                    Box::new(dst::Expression::Swizzle(
                         Box::new(cl_expr),
-                        vec![dst::SwizzleSlot::X])
-                    ))
-                }
+                        vec![dst::SwizzleSlot::X],
+                    )),
+                ),
                 // Scalar to scalar cast
-                dst::Type::Bool |
-                dst::Type::Scalar(_) => {
+                dst::Type::Bool | dst::Type::Scalar(_) => {
                     dst::Expression::Cast(dest_cl_type.clone(), Box::new(cl_expr))
                 }
                 _ => {
-                    return Err(TranspileError::Internal("source of scalar cast is not a numeric \
+                    return Err(TranspileError::Internal(
+                        "source of scalar cast is not a numeric \
                                                          type"
-                        .to_string()))
+                            .to_string(),
+                    ))
                 }
             }
         }
         dst::Type::Vector(ref scalar, ref to_dim) => {
             match source_cl_type {
                 // Vector to same type vector cast, swizzle
-                dst::Type::Vector(ref from_scalar_type, ref from_dim) if *from_scalar_type ==
-                                                                         *scalar => {
-                    assert!(to_dim.as_u32() <= from_dim.as_u32(),
-                            "{:?} <= {:?}",
-                            to_dim,
-                            from_dim);
+                dst::Type::Vector(ref from_scalar_type, ref from_dim)
+                    if *from_scalar_type == *scalar =>
+                {
+                    assert!(
+                        to_dim.as_u32() <= from_dim.as_u32(),
+                        "{:?} <= {:?}",
+                        to_dim,
+                        from_dim
+                    );
                     let swizzle = match *to_dim {
                         dst::VectorDimension::Two => vec![dst::SwizzleSlot::X, dst::SwizzleSlot::Y],
                         dst::VectorDimension::Three => {
-                            vec![dst::SwizzleSlot::X, dst::SwizzleSlot::Y, dst::SwizzleSlot::Z]
+                            vec![
+                                dst::SwizzleSlot::X,
+                                dst::SwizzleSlot::Y,
+                                dst::SwizzleSlot::Z,
+                            ]
                         }
                         dst::VectorDimension::Four => {
                             panic!("4 element vectors can not be downcast from anything")
@@ -1631,106 +1767,112 @@ fn write_cast(source_cl_type: dst::Type,
                 }
                 // Vector to different type vector cast, make a function to do the work
                 dst::Type::Vector(from_scalar_type, from_dim) => {
-                    let cast_func_id = context.fetch_fragment(Fragment::VectorCast(from_scalar_type,
-                                                             scalar.clone(),
-                                                             from_dim,
-                                                             to_dim.clone()));
+                    let cast_func_id = context.fetch_fragment(Fragment::VectorCast(
+                        from_scalar_type,
+                        scalar.clone(),
+                        from_dim,
+                        to_dim.clone(),
+                    ));
                     dst::Expression::Call(cast_func_id, vec![cl_expr])
                 }
                 // Scalar to vector cast, make a function to do the work
                 dst::Type::Scalar(from_scalar_type) => {
-                    let cast_func_id =
-                        context.fetch_fragment(Fragment::ScalarToVectorCast(from_scalar_type,
-                                                                            scalar.clone(),
-                                                                            to_dim.clone()));
+                    let cast_func_id = context.fetch_fragment(Fragment::ScalarToVectorCast(
+                        from_scalar_type,
+                        scalar.clone(),
+                        to_dim.clone(),
+                    ));
                     dst::Expression::Call(cast_func_id, vec![cl_expr])
                 }
                 dst::Type::Bool => unimplemented!(),
                 _ => {
-                    return Err(TranspileError::Internal("source of vector cast is not a numeric \
+                    return Err(TranspileError::Internal(
+                        "source of vector cast is not a numeric \
                                                          type"
-                        .to_string()))
+                            .to_string(),
+                    ))
                 }
             }
         }
         _ => {
-            return Err(TranspileError::Internal(format!("don't know how to cast to this type \
+            return Err(TranspileError::Internal(format!(
+                "don't know how to cast to this type \
                                                          ({:?})",
-                                                        dest_cl_type)))
+                dest_cl_type
+            )))
         }
     })
 }
 
 fn write_swizzle(val: dst::Expression, swizzle: &Vec<src::SwizzleSlot>) -> dst::Expression {
-    let transpile_swizzle_slot = |swizzle_slot: &src::SwizzleSlot| {
-        match *swizzle_slot {
-            src::SwizzleSlot::X => dst::SwizzleSlot::X,
-            src::SwizzleSlot::Y => dst::SwizzleSlot::Y,
-            src::SwizzleSlot::Z => dst::SwizzleSlot::Z,
-            src::SwizzleSlot::W => dst::SwizzleSlot::W,
-        }
+    let transpile_swizzle_slot = |swizzle_slot: &src::SwizzleSlot| match *swizzle_slot {
+        src::SwizzleSlot::X => dst::SwizzleSlot::X,
+        src::SwizzleSlot::Y => dst::SwizzleSlot::Y,
+        src::SwizzleSlot::Z => dst::SwizzleSlot::Z,
+        src::SwizzleSlot::W => dst::SwizzleSlot::W,
     };
-    let swizzle_dst = swizzle.iter().map(transpile_swizzle_slot).collect::<Vec<_>>();
+    let swizzle_dst = swizzle
+        .iter()
+        .map(transpile_swizzle_slot)
+        .collect::<Vec<_>>();
     dst::Expression::Swizzle(Box::new(val), swizzle_dst)
 }
 
-fn transpile_expression(expression: &src::Expression,
-                        context: &mut Context)
-                        -> Result<dst::Expression, TranspileError> {
+fn transpile_expression(
+    expression: &src::Expression,
+    context: &mut Context,
+) -> Result<dst::Expression, TranspileError> {
     match expression {
-        &src::Expression::Literal(ref lit) => {
-            Ok(dst::Expression::Literal(try!(transpile_literal(lit))))
-        }
+        &src::Expression::Literal(ref lit) => Ok(dst::Expression::Literal(transpile_literal(lit)?)),
         &src::Expression::Variable(ref var_ref) => context.get_variable_ref(var_ref),
         &src::Expression::Global(ref id) => context.get_global_var(id),
         &src::Expression::ConstantVariable(ref id, ref name) => {
             context.get_constant(id, name.clone())
         }
         &src::Expression::TernaryConditional(ref cond, ref lhs, ref rhs) => {
-            let cl_cond = Box::new(try!(transpile_expression(cond, context)));
-            let cl_lhs = Box::new(try!(transpile_expression(lhs, context)));
-            let cl_rhs = Box::new(try!(transpile_expression(rhs, context)));
+            let cl_cond = Box::new(transpile_expression(cond, context)?);
+            let cl_lhs = Box::new(transpile_expression(lhs, context)?);
+            let cl_rhs = Box::new(transpile_expression(rhs, context)?);
             Ok(dst::Expression::TernaryConditional(cl_cond, cl_lhs, cl_rhs))
         }
         &src::Expression::Swizzle(ref vec, ref swizzle) => {
-            Ok(write_swizzle(try!(transpile_expression(vec, context)), swizzle))
+            Ok(write_swizzle(transpile_expression(vec, context)?, swizzle))
         }
         &src::Expression::ArraySubscript(ref expr, ref sub) => {
-            let cl_expr = Box::new(try!(transpile_expression(expr, context)));
-            let cl_sub = Box::new(try!(transpile_expression(sub, context)));
+            let cl_expr = Box::new(transpile_expression(expr, context)?);
+            let cl_sub = Box::new(transpile_expression(sub, context)?);
             Ok(dst::Expression::ArraySubscript(cl_expr, cl_sub))
         }
         &src::Expression::Member(ref expr, ref member_name) => {
-            let cl_expr = Box::new(try!(transpile_expression(expr, context)));
+            let cl_expr = Box::new(transpile_expression(expr, context)?);
             Ok(dst::Expression::Member(cl_expr, member_name.clone()))
         }
         &src::Expression::Call(ref func_id, ref params) => {
-            let (func_expr, decl) = try!(context.get_function(func_id));
+            let (func_expr, decl) = context.get_function(func_id)?;
             assert_eq!(params.len(), decl.param_types.len());
             let mut lifted_args = vec![];
             for global in &decl.additional_arguments {
                 let arg = dst::Expression::Local(match *global {
-                    GlobalArgument::Global(ref id) => try!(context.get_global_lifted_id(id)),
+                    GlobalArgument::Global(ref id) => context.get_global_lifted_id(id)?,
                     GlobalArgument::ConstantBuffer(ref id) => {
-                        try!(context.get_cbuffer_instance_id(id))
+                        context.get_cbuffer_instance_id(id)?
                     }
                 });
                 lifted_args.push(arg);
             }
             let mut local_args = Vec::with_capacity(params.len());
             for (param, pt) in params.iter().zip(decl.param_types) {
-                let param_expr = try!(transpile_expression(param, context));
+                let param_expr = transpile_expression(param, context)?;
                 local_args.push((param, param_expr, pt));
             }
 
             let ty_res = src::TypeParser::get_expression_type(expression, &context.type_context);
             let ret_ty_src = ty_res.expect("internal error: call return type parse failed");
-            let ret_ty_dst = try!(transpile_type(&ret_ty_src.0, context));
+            let ret_ty_dst = transpile_type(&ret_ty_src.0, context)?;
 
             write_func_with_types(lifted_args, local_args, func_expr, ret_ty_dst, context)
         }
         &src::Expression::NumericConstructor(ref dtyl, ref slots) => {
-
             // Generate target constructor type
             let tty = src::TypeLayout::from_data(dtyl.clone());
             let sty = dtyl.to_scalar();
@@ -1739,8 +1881,8 @@ fn transpile_expression(expression: &src::Expression,
                 src::ScalarType::Bool => return Err(TranspileError::BoolVectorsNotSupported),
                 _ => {}
             };
-            let dst_scalar = try!(transpile_scalartype(&sty));
-            let dst_dim = match try!(transpile_typelayout(&tty, context)) {
+            let dst_scalar = transpile_scalartype(&sty)?;
+            let dst_dim = match transpile_typelayout(&tty, context)? {
                 dst::Type::Scalar(ref scalar) => {
                     assert_eq!(dst_scalar, *scalar);
                     dst::NumericDimension::Scalar
@@ -1755,17 +1897,19 @@ fn transpile_expression(expression: &src::Expression,
             // Transpile arguments
             let mut arguments: Vec<dst::Expression> = vec![];
             for cons in slots {
-                let dst_expr = try!(transpile_expression(&cons.expr, context));
+                let dst_expr = transpile_expression(&cons.expr, context)?;
                 arguments.push(dst_expr);
             }
 
-            Ok(dst::Expression::NumericConstructor(dst_scalar, dst_dim, arguments))
+            Ok(dst::Expression::NumericConstructor(
+                dst_scalar, dst_dim, arguments,
+            ))
         }
         &src::Expression::Cast(ref cast_type, ref expr) => {
-            let dest_cl_type = try!(transpile_type(cast_type, context));
-            let cl_expr = try!(transpile_expression(expr, context));
+            let dest_cl_type = transpile_type(cast_type, context)?;
+            let cl_expr = transpile_expression(expr, context)?;
             let source_ir_type =
-                try!(src::TypeParser::get_expression_type(expr, &context.type_context)).0;
+                src::TypeParser::get_expression_type(expr, &context.type_context)?.0;
             let (source_cl_type, untyped) = match transpile_type(&source_ir_type, context) {
                 Ok(ty) => (ty, false),
                 Err(TranspileError::IntsMustBeTyped) => {
@@ -1787,84 +1931,93 @@ fn transpile_expression(expression: &src::Expression,
     }
 }
 
-fn transpile_initializer(init: &src::Initializer,
-                         context: &mut Context)
-                         -> Result<dst::Initializer, TranspileError> {
+fn transpile_initializer(
+    init: &src::Initializer,
+    context: &mut Context,
+) -> Result<dst::Initializer, TranspileError> {
     Ok(match *init {
         src::Initializer::Expression(ref expr) => {
-            dst::Initializer::Expression(try!(transpile_expression(expr, context)))
+            dst::Initializer::Expression(transpile_expression(expr, context)?)
         }
         src::Initializer::Aggregate(ref inits) => {
             let mut elements = Vec::with_capacity(inits.len());
             for init in inits {
-                elements.push(try!(transpile_initializer(init, context)));
+                elements.push(transpile_initializer(init, context)?);
             }
             dst::Initializer::Aggregate(elements)
         }
     })
 }
 
-fn transpile_initializer_opt(init_opt: &Option<src::Initializer>,
-                             context: &mut Context)
-                             -> Result<Option<dst::Initializer>, TranspileError> {
+fn transpile_initializer_opt(
+    init_opt: &Option<src::Initializer>,
+    context: &mut Context,
+) -> Result<Option<dst::Initializer>, TranspileError> {
     Ok(match *init_opt {
-        Some(ref init) => Some(try!(transpile_initializer(init, context))),
+        Some(ref init) => Some(transpile_initializer(init, context)?),
         None => None,
     })
 }
 
-fn transpile_vardef(vardef: &src::VarDef,
-                    context: &mut Context)
-                    -> Result<dst::VarDef, TranspileError> {
+fn transpile_vardef(
+    vardef: &src::VarDef,
+    context: &mut Context,
+) -> Result<dst::VarDef, TranspileError> {
     Ok(dst::VarDef {
-        id: try!(context.get_variable_id(&vardef.id)),
-        typename: try!(transpile_localtype(&vardef.local_type, context)),
-        init: try!(transpile_initializer_opt(&vardef.init, context)),
+        id: context.get_variable_id(&vardef.id)?,
+        typename: transpile_localtype(&vardef.local_type, context)?,
+        init: transpile_initializer_opt(&vardef.init, context)?,
     })
 }
 
-fn transpile_statement(statement: &src::Statement,
-                       context: &mut Context)
-                       -> Result<Vec<dst::Statement>, TranspileError> {
+fn transpile_statement(
+    statement: &src::Statement,
+    context: &mut Context,
+) -> Result<Vec<dst::Statement>, TranspileError> {
     match statement {
-        &src::Statement::Expression(ref expr) => {
-            Ok(vec![dst::Statement::Expression(try!(transpile_expression(expr, context)))])
-        }
+        &src::Statement::Expression(ref expr) => Ok(vec![dst::Statement::Expression(
+            transpile_expression(expr, context)?,
+        )]),
         &src::Statement::Var(ref vd) => {
-            Ok(vec![dst::Statement::Var(try!(transpile_vardef(vd, context)))])
+            Ok(vec![dst::Statement::Var(transpile_vardef(vd, context)?)])
         }
         &src::Statement::Block(ref scope_block) => {
             let &src::ScopeBlock(ref statements, _) = scope_block;
             context.push_scope(scope_block);
-            let cl_statements = try!(transpile_statements(statements, context));
+            let cl_statements = transpile_statements(statements, context)?;
             context.pop_scope();
             Ok(vec![dst::Statement::Block(cl_statements)])
         }
         &src::Statement::If(ref cond, ref scope_block) => {
             let &src::ScopeBlock(ref statements, _) = scope_block;
             context.push_scope(scope_block);
-            let cl_cond = try!(transpile_expression(cond, context));
-            let cl_statements = try!(transpile_statements(statements, context));
+            let cl_cond = transpile_expression(cond, context)?;
+            let cl_statements = transpile_statements(statements, context)?;
             context.pop_scope();
-            Ok(vec![dst::Statement::If(cl_cond, Box::new(dst::Statement::Block(cl_statements)))])
+            Ok(vec![dst::Statement::If(
+                cl_cond,
+                Box::new(dst::Statement::Block(cl_statements)),
+            )])
         }
         &src::Statement::IfElse(ref cond, ref true_block, ref false_block) => {
             let &src::ScopeBlock(ref true_statements, _) = true_block;
             let &src::ScopeBlock(ref false_statements, _) = false_block;
             // Condition
-            let cl_cond = try!(transpile_expression(cond, context));
+            let cl_cond = transpile_expression(cond, context)?;
             // True part
             context.push_scope(true_block);
-            let cl_true_statements = try!(transpile_statements(true_statements, context));
+            let cl_true_statements = transpile_statements(true_statements, context)?;
             context.pop_scope();
             // False part
             context.push_scope(false_block);
-            let cl_false_statements = try!(transpile_statements(false_statements, context));
+            let cl_false_statements = transpile_statements(false_statements, context)?;
             context.pop_scope();
             // Combine
-            Ok(vec![dst::Statement::IfElse(cl_cond,
-                                           Box::new(dst::Statement::Block(cl_true_statements)),
-                                           Box::new(dst::Statement::Block(cl_false_statements)))])
+            Ok(vec![dst::Statement::IfElse(
+                cl_cond,
+                Box::new(dst::Statement::Block(cl_true_statements)),
+                Box::new(dst::Statement::Block(cl_false_statements)),
+            )])
         }
         &src::Statement::For(ref init, ref cond, ref update, ref scope_block) => {
             let &src::ScopeBlock(ref statements, _) = scope_block;
@@ -1873,29 +2026,34 @@ fn transpile_statement(statement: &src::Statement,
             let (cl_init, defs) = match *init {
                 src::ForInit::Empty => (dst::InitStatement::Empty, vec![]),
                 src::ForInit::Expression(ref expr) => {
-                    let expr_ir = try!(transpile_expression(expr, context));
+                    let expr_ir = transpile_expression(expr, context)?;
                     (dst::InitStatement::Expression(expr_ir), vec![])
                 }
                 src::ForInit::Definitions(ref vds) => {
                     assert!(vds.len() > 0);
                     let mut vardefs = vec![];
                     for vd in vds {
-                        vardefs.push(try!(transpile_vardef(vd, context)));
+                        vardefs.push(transpile_vardef(vd, context)?);
                     }
-                    let last_vardef = vardefs.pop().expect("zero variable definitions in for init");
+                    let last_vardef = vardefs
+                        .pop()
+                        .expect("zero variable definitions in for init");
                     (dst::InitStatement::Declaration(last_vardef), vardefs)
                 }
             };
 
-            let cl_cond = try!(transpile_expression(cond, context));
-            let cl_update = try!(transpile_expression(update, context));
-            let cl_statements = try!(transpile_statements(statements, context));
+            let cl_cond = transpile_expression(cond, context)?;
+            let cl_update = transpile_expression(update, context)?;
+            let cl_statements = transpile_statements(statements, context)?;
             context.pop_scope();
-            let cl_for = dst::Statement::For(cl_init,
-                                             cl_cond,
-                                             cl_update,
-                                             Box::new(dst::Statement::Block(cl_statements)));
-            let mut block_contents = defs.into_iter()
+            let cl_for = dst::Statement::For(
+                cl_init,
+                cl_cond,
+                cl_update,
+                Box::new(dst::Statement::Block(cl_statements)),
+            );
+            let mut block_contents = defs
+                .into_iter()
                 .map(|d| dst::Statement::Var(d))
                 .collect::<Vec<_>>();
             block_contents.push(cl_for);
@@ -1904,42 +2062,48 @@ fn transpile_statement(statement: &src::Statement,
         &src::Statement::While(ref cond, ref scope_block) => {
             let &src::ScopeBlock(ref statements, _) = scope_block;
             context.push_scope(scope_block);
-            let cl_cond = try!(transpile_expression(cond, context));
-            let cl_statements = try!(transpile_statements(statements, context));
+            let cl_cond = transpile_expression(cond, context)?;
+            let cl_statements = transpile_statements(statements, context)?;
             context.pop_scope();
-            Ok(vec![dst::Statement::While(cl_cond, Box::new(dst::Statement::Block(cl_statements)))])
+            Ok(vec![dst::Statement::While(
+                cl_cond,
+                Box::new(dst::Statement::Block(cl_statements)),
+            )])
         }
         &src::Statement::Break => Ok(vec![dst::Statement::Break]),
         &src::Statement::Continue => Ok(vec![dst::Statement::Continue]),
-        &src::Statement::Return(ref expr) => {
-            Ok(vec![dst::Statement::Return(try!(transpile_expression(expr, context)))])
-        }
+        &src::Statement::Return(ref expr) => Ok(vec![dst::Statement::Return(
+            transpile_expression(expr, context)?,
+        )]),
     }
 }
 
-fn transpile_statements(statements: &[src::Statement],
-                        context: &mut Context)
-                        -> Result<Vec<dst::Statement>, TranspileError> {
+fn transpile_statements(
+    statements: &[src::Statement],
+    context: &mut Context,
+) -> Result<Vec<dst::Statement>, TranspileError> {
     let mut cl_statements = vec![];
     for statement in statements {
-        cl_statements.append(&mut try!(transpile_statement(statement, context)));
+        cl_statements.append(&mut transpile_statement(statement, context)?);
     }
     Ok(cl_statements)
 }
 
-fn transpile_param(param: &src::FunctionParam,
-                   context: &mut Context)
-                   -> Result<dst::FunctionParam, TranspileError> {
+fn transpile_param(
+    param: &src::FunctionParam,
+    context: &mut Context,
+) -> Result<dst::FunctionParam, TranspileError> {
     let &src::ParamType(ref ty_ast, ref it, ref interp) = &param.param_type;
     let ty = match *it {
-        src::InputModifier::In => try!(transpile_type(ty_ast, context)),
-        src::InputModifier::Out |
-        src::InputModifier::InOut => {
+        src::InputModifier::In => transpile_type(ty_ast, context)?,
+        src::InputModifier::Out | src::InputModifier::InOut => {
             // Only allow out params to work on Private address space
             // as we don't support generating multiple function for each
             // address space (and can't use __generic as it's 2.0)
-            dst::Type::Pointer(dst::AddressSpace::Private,
-                               Box::new(try!(transpile_type(ty_ast, context))))
+            dst::Type::Pointer(
+                dst::AddressSpace::Private,
+                Box::new(transpile_type(ty_ast, context)?),
+            )
         }
     };
     match *interp {
@@ -1947,26 +2111,28 @@ fn transpile_param(param: &src::FunctionParam,
         None => {}
     };
     Ok(dst::FunctionParam {
-        id: try!(context.get_variable_id(&param.id)),
+        id: context.get_variable_id(&param.id)?,
         typename: ty,
     })
 }
 
-fn transpile_params(params: &[src::FunctionParam],
-                    context: &mut Context)
-                    -> Result<Vec<dst::FunctionParam>, TranspileError> {
+fn transpile_params(
+    params: &[src::FunctionParam],
+    context: &mut Context,
+) -> Result<Vec<dst::FunctionParam>, TranspileError> {
     let mut cl_params = vec![];
     for param in params {
-        cl_params.push(try!(transpile_param(param, context)));
+        cl_params.push(transpile_param(param, context)?);
     }
     Ok(cl_params)
 }
 
-fn transpile_kernel_input_semantic(param: &src::KernelParam,
-                                   group_dim: &dst::Dimension,
-                                   context: &mut Context)
-                                   -> Result<dst::Statement, TranspileError> {
-    let typename = try!(transpile_type(&param.1.get_type(), context));
+fn transpile_kernel_input_semantic(
+    param: &src::KernelParam,
+    group_dim: &dst::Dimension,
+    context: &mut Context,
+) -> Result<dst::Statement, TranspileError> {
+    let typename = transpile_type(&param.1.get_type(), context)?;
     fn lit(i: u64) -> Box<dst::Expression> {
         Box::new(dst::Expression::Literal(dst::Literal::UInt(i)))
     }
@@ -1980,9 +2146,15 @@ fn transpile_kernel_input_semantic(param: &src::KernelParam,
             dst::Expression::NumericConstructor(sty, dim, vec![x, y, z])
         }
         src::KernelSemantic::GroupId => {
-            let x_g = Box::new(dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(lit(0))));
-            let y_g = Box::new(dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(lit(1))));
-            let z_g = Box::new(dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(lit(2))));
+            let x_g = Box::new(dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(
+                lit(0),
+            )));
+            let y_g = Box::new(dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(
+                lit(1),
+            )));
+            let z_g = Box::new(dst::Expression::Intrinsic(dst::Intrinsic::GetGlobalId(
+                lit(2),
+            )));
             let x = dst::Expression::BinaryOperation(dst::BinOp::Divide, x_g, lit(group_dim.0));
             let y = dst::Expression::BinaryOperation(dst::BinOp::Divide, y_g, lit(group_dim.1));
             let z = dst::Expression::BinaryOperation(dst::BinOp::Divide, z_g, lit(group_dim.2));
@@ -2011,95 +2183,101 @@ fn transpile_kernel_input_semantic(param: &src::KernelParam,
         }
     };
     Ok(dst::Statement::Var(dst::VarDef {
-        id: try!(context.get_variable_id(&param.0)),
+        id: context.get_variable_id(&param.0)?,
         typename: typename,
         init: Some(dst::Initializer::Expression(assign)),
     }))
 }
 
-fn transpile_kernel_input_semantics(params: &[src::KernelParam],
-                                    group_dim: &dst::Dimension,
-                                    context: &mut Context)
-                                    -> Result<Vec<dst::Statement>, TranspileError> {
+fn transpile_kernel_input_semantics(
+    params: &[src::KernelParam],
+    group_dim: &dst::Dimension,
+    context: &mut Context,
+) -> Result<Vec<dst::Statement>, TranspileError> {
     let mut cl_params = vec![];
     for param in params {
-        cl_params.push(try!(transpile_kernel_input_semantic(param, group_dim, context)));
+        cl_params.push(transpile_kernel_input_semantic(param, group_dim, context)?);
     }
     Ok(cl_params)
 }
 
-fn transpile_structdefinition(structdefinition: &src::StructDefinition,
-                              context: &mut Context)
-                              -> Result<dst::RootDefinition, TranspileError> {
+fn transpile_structdefinition(
+    structdefinition: &src::StructDefinition,
+    context: &mut Context,
+) -> Result<dst::RootDefinition, TranspileError> {
     Ok(dst::RootDefinition::Struct(dst::StructDefinition {
-        id: try!(context.get_struct_name(&structdefinition.id)),
-        members: try!(structdefinition.members
-            .iter()
-            .fold(Ok(vec![]),
-                  |result: Result<Vec<dst::StructMember>, TranspileError>, member| {
-                let mut vec = try!(result);
+        id: context.get_struct_name(&structdefinition.id)?,
+        members: structdefinition.members.iter().fold(
+            Ok(vec![]),
+            |result: Result<Vec<dst::StructMember>, TranspileError>, member| {
+                let mut vec = result?;
                 let dst_member = dst::StructMember {
                     name: member.name.clone(),
-                    typename: try!(transpile_type(&member.typename, context)),
+                    typename: transpile_type(&member.typename, context)?,
                 };
                 vec.push(dst_member);
                 Ok(vec)
-            })),
+            },
+        )?,
     }))
 }
 
-fn transpile_cbuffer(cb: &src::ConstantBuffer,
-                     context: &mut Context)
-                     -> Result<dst::RootDefinition, TranspileError> {
+fn transpile_cbuffer(
+    cb: &src::ConstantBuffer,
+    context: &mut Context,
+) -> Result<dst::RootDefinition, TranspileError> {
     let mut members = vec![];
     for member in &cb.members {
         let var_name = member.name.clone();
-        let var_type = try!(transpile_type(&member.typename, context));
+        let var_type = transpile_type(&member.typename, context)?;
         members.push(dst::StructMember {
             name: var_name,
             typename: var_type,
         });
     }
     Ok(dst::RootDefinition::Struct(dst::StructDefinition {
-        id: try!(context.get_cbuffer_struct_name(&cb.id)),
+        id: context.get_cbuffer_struct_name(&cb.id)?,
         members: members,
     }))
 }
 
-fn transpile_globalvariable(gv: &src::GlobalVariable,
-                            context: &mut Context)
-                            -> Result<Option<dst::RootDefinition>, TranspileError> {
+fn transpile_globalvariable(
+    gv: &src::GlobalVariable,
+    context: &mut Context,
+) -> Result<Option<dst::RootDefinition>, TranspileError> {
     let &src::GlobalType(src::Type(ref ty, ref modifiers), _, _) = &gv.global_type;
     let lifted = is_global_lifted(gv);
     if lifted {
         return Ok(None);
     } else {
-        let global_id = try!(context.get_global_static_id(&gv.id));
-        let cl_type = try!(transpile_type(&src::Type(ty.clone(), modifiers.clone()), &context));
-        let cl_init = try!(transpile_initializer_opt(&gv.init, context));
+        let global_id = context.get_global_static_id(&gv.id)?;
+        let cl_type = transpile_type(&src::Type(ty.clone(), modifiers.clone()), &context)?;
+        let cl_init = transpile_initializer_opt(&gv.init, context)?;
         let address_space = match gv.global_type.1 {
             src::GlobalStorage::Extern => panic!("extern not lifted"),
             src::GlobalStorage::Static => dst::AddressSpace::Constant,
             src::GlobalStorage::GroupShared => dst::AddressSpace::Local,
         };
-        Ok(Some(dst::RootDefinition::GlobalVariable(dst::GlobalVariable {
-            id: global_id,
-            ty: cl_type,
-            address_space: address_space,
-            init: cl_init,
-        })))
+        Ok(Some(dst::RootDefinition::GlobalVariable(
+            dst::GlobalVariable {
+                id: global_id,
+                ty: cl_type,
+                address_space: address_space,
+                init: cl_init,
+            },
+        )))
     }
 }
 
-fn transpile_functiondefinition(func: &src::FunctionDefinition,
-                                context: &mut Context)
-                                -> Result<dst::RootDefinition, TranspileError> {
+fn transpile_functiondefinition(
+    func: &src::FunctionDefinition,
+    context: &mut Context,
+) -> Result<dst::RootDefinition, TranspileError> {
     // Find the parameters that need to be turned into pointers
     // so the context can deref them
     let out_params = func.params.iter().fold(vec![], |mut out_params, param| {
         match param.param_type.1 {
-            src::InputModifier::InOut |
-            src::InputModifier::Out => {
+            src::InputModifier::InOut | src::InputModifier::Out => {
                 out_params.push(param.id);
             }
             src::InputModifier::In => {}
@@ -2107,30 +2285,26 @@ fn transpile_functiondefinition(func: &src::FunctionDefinition,
         out_params
     });
     context.push_scope_for_function(&func.scope_block, &out_params, &func.id);
-    let (_, decl) = try!(context.get_function(&func.id));
+    let (_, decl) = context.get_function(&func.id)?;
     let mut params = vec![];
     for global in &decl.additional_arguments {
         params.push(match *global {
-            GlobalArgument::Global(ref id) => {
-                dst::FunctionParam {
-                    id: try!(context.get_global_lifted_id(id)),
-                    typename: context.global_type_map.get(id).unwrap().clone(),
-                }
-            }
-            GlobalArgument::ConstantBuffer(ref id) => {
-                dst::FunctionParam {
-                    id: try!(context.get_cbuffer_instance_id(id)),
-                    typename: try!(get_cl_cbuffer_type(id, context)),
-                }
-            }
+            GlobalArgument::Global(ref id) => dst::FunctionParam {
+                id: context.get_global_lifted_id(id)?,
+                typename: context.global_type_map.get(id).unwrap().clone(),
+            },
+            GlobalArgument::ConstantBuffer(ref id) => dst::FunctionParam {
+                id: context.get_cbuffer_instance_id(id)?,
+                typename: get_cl_cbuffer_type(id, context)?,
+            },
         });
     }
-    params.append(&mut try!(transpile_params(&func.params, context)));
-    let body = try!(transpile_statements(&func.scope_block.0, context));
+    params.append(&mut transpile_params(&func.params, context)?);
+    let body = transpile_statements(&func.scope_block.0, context)?;
     let decls = context.pop_scope_for_function();
     let cl_func = dst::FunctionDefinition {
-        id: try!(context.get_function_name(&func.id)),
-        returntype: try!(transpile_type(&func.returntype, context)),
+        id: context.get_function_name(&func.id)?,
+        returntype: transpile_type(&func.returntype, context)?,
         params: params,
         body: body,
         local_declarations: decls,
@@ -2138,35 +2312,34 @@ fn transpile_functiondefinition(func: &src::FunctionDefinition,
     Ok(dst::RootDefinition::Function(cl_func))
 }
 
-fn transpile_kernel(kernel: &src::Kernel,
-                    context: &mut Context)
-                    -> Result<dst::RootDefinition, TranspileError> {
+fn transpile_kernel(
+    kernel: &src::Kernel,
+    context: &mut Context,
+) -> Result<dst::RootDefinition, TranspileError> {
     context.push_scope_for_kernel(&kernel.scope_block);
     let mut params = vec![];
     for global in &context.kernel_arguments {
         params.push(match *global {
-            GlobalArgument::Global(ref id) => {
-                dst::KernelParam {
-                    id: try!(context.get_global_lifted_id(id)),
-                    typename: match context.global_type_map.get(id) {
-                        Some(ty) => ty.clone(),
-                        None => panic!("global type unknown {:?}", id.clone()),
-                    },
-                }
-            }
-            GlobalArgument::ConstantBuffer(ref id) => {
-                dst::KernelParam {
-                    id: try!(context.get_cbuffer_instance_id(id)),
-                    typename: try!(get_cl_cbuffer_type(id, context)),
-                }
-            }
+            GlobalArgument::Global(ref id) => dst::KernelParam {
+                id: context.get_global_lifted_id(id)?,
+                typename: match context.global_type_map.get(id) {
+                    Some(ty) => ty.clone(),
+                    None => panic!("global type unknown {:?}", id.clone()),
+                },
+            },
+            GlobalArgument::ConstantBuffer(ref id) => dst::KernelParam {
+                id: context.get_cbuffer_instance_id(id)?,
+                typename: get_cl_cbuffer_type(id, context)?,
+            },
         });
     }
-    let group_dim = dst::Dimension(kernel.group_dimensions.0,
-                                   kernel.group_dimensions.1,
-                                   kernel.group_dimensions.2);
-    let mut body = try!(transpile_kernel_input_semantics(&kernel.params, &group_dim, context));
-    let mut main_body = try!(transpile_statements(&kernel.scope_block.0, context));
+    let group_dim = dst::Dimension(
+        kernel.group_dimensions.0,
+        kernel.group_dimensions.1,
+        kernel.group_dimensions.2,
+    );
+    let mut body = transpile_kernel_input_semantics(&kernel.params, &group_dim, context)?;
+    let mut main_body = transpile_statements(&kernel.scope_block.0, context)?;
     let decls = context.pop_scope_for_function();
     body.append(&mut main_body);
     let cl_kernel = dst::Kernel {
@@ -2178,22 +2351,22 @@ fn transpile_kernel(kernel: &src::Kernel,
     Ok(dst::RootDefinition::Kernel(cl_kernel))
 }
 
-fn transpile_roots(root_defs: &[src::RootDefinition],
-                   context: &mut Context)
-                   -> Result<(), TranspileError> {
-
+fn transpile_roots(
+    root_defs: &[src::RootDefinition],
+    context: &mut Context,
+) -> Result<(), TranspileError> {
     for rootdef in root_defs {
         match *rootdef {
             src::RootDefinition::Struct(ref structdefinition) => {
-                let def = try!(transpile_structdefinition(structdefinition, context));
+                let def = transpile_structdefinition(structdefinition, context)?;
                 context.root_definitions.push(def);
             }
             src::RootDefinition::ConstantBuffer(ref cb) => {
-                let def = try!(transpile_cbuffer(cb, context));
+                let def = transpile_cbuffer(cb, context)?;
                 context.root_definitions.push(def);
             }
             src::RootDefinition::GlobalVariable(ref gv) => {
-                match try!(transpile_globalvariable(gv, context)) {
+                match transpile_globalvariable(gv, context)? {
                     Some(root) => context.root_definitions.push(root),
                     None => {}
                 }
@@ -2205,11 +2378,11 @@ fn transpile_roots(root_defs: &[src::RootDefinition],
     for rootdef in root_defs {
         match *rootdef {
             src::RootDefinition::Function(ref func) => {
-                let def = try!(transpile_functiondefinition(func, context));
+                let def = transpile_functiondefinition(func, context)?;
                 context.root_definitions.push(def);
             }
             src::RootDefinition::Kernel(ref kernel) => {
-                let def = try!(transpile_kernel(kernel, context));
+                let def = transpile_kernel(kernel, context)?;
                 context.root_definitions.push(def);
             }
             _ => {}
@@ -2220,12 +2393,13 @@ fn transpile_roots(root_defs: &[src::RootDefinition],
 }
 
 pub fn transpile(module: &src::Module) -> Result<dst::Module, TranspileError> {
+    let (mut context, binds) = Context::from_globals(
+        &module.global_table,
+        &module.global_declarations,
+        &module.root_definitions,
+    )?;
 
-    let (mut context, binds) = try!(Context::from_globals(&module.global_table,
-                                                          &module.global_declarations,
-                                                          &module.root_definitions));
-
-    try!(transpile_roots(&module.root_definitions, &mut context));
+    transpile_roots(&module.root_definitions, &mut context)?;
 
     let required_extensions = context.required_extensions.clone();
     let (cl_defs, decls, fragments) = context.destruct();
@@ -2243,21 +2417,19 @@ pub fn transpile(module: &src::Module) -> Result<dst::Module, TranspileError> {
 
 #[test]
 fn test_transpile() {
-
     use slp_lang_hst as hst;
-    use slp_transform_hst_to_hir::typeparse;
     use slp_shared::Located;
+    use slp_transform_hst_to_hir::typeparse;
 
     let module = hst::Module {
         entry_point: "CSMAIN".to_string(),
         root_definitions: vec![
             hst::RootDefinition::GlobalVariable(hst::GlobalVariable {
-                global_type: hst::Type::from_object(hst::ObjectType::Buffer(
-                    hst::DataType(
-                        hst::DataLayout::Scalar(hst::ScalarType::Int),
-                        hst::TypeModifier::default()
-                    )
-                )).into(),
+                global_type: hst::Type::from_object(hst::ObjectType::Buffer(hst::DataType(
+                    hst::DataLayout::Scalar(hst::ScalarType::Int),
+                    hst::TypeModifier::default(),
+                )))
+                .into(),
                 defs: vec![hst::GlobalVariableName {
                     name: "g_myInBuffer".to_string(),
                     bind: hst::VariableBind::Normal,
@@ -2271,7 +2443,7 @@ fn test_transpile() {
                 params: vec![hst::FunctionParam {
                     name: "x".to_string(),
                     param_type: hst::Type::uint().into(),
-                    semantic: None
+                    semantic: None,
                 }],
                 body: vec![],
                 attributes: vec![],
@@ -2282,7 +2454,7 @@ fn test_transpile() {
                 params: vec![hst::FunctionParam {
                     name: "x".to_string(),
                     param_type: hst::Type::float().into(),
-                    semantic: None
+                    semantic: None,
                 }],
                 body: vec![],
                 attributes: vec![],
@@ -2295,39 +2467,35 @@ fn test_transpile() {
                     hst::Statement::Empty,
                     hst::Statement::Var(hst::VarDef::one("a", hst::Type::uint().into())),
                     hst::Statement::Var(hst::VarDef::one("b", hst::Type::uint().into())),
-                    hst::Statement::Expression(Located::none(
-                        hst::Expression::BinaryOperation(hst::BinOp::Assignment,
-                            Box::new(Located::none(hst::Expression::Variable("a".to_string()))),
-                            Box::new(Located::none(hst::Expression::Variable("b".to_string())))
-                        )
-                    )),
+                    hst::Statement::Expression(Located::none(hst::Expression::BinaryOperation(
+                        hst::BinOp::Assignment,
+                        Box::new(Located::none(hst::Expression::Variable("a".to_string()))),
+                        Box::new(Located::none(hst::Expression::Variable("b".to_string()))),
+                    ))),
                     hst::Statement::If(
                         Located::none(hst::Expression::Variable("b".to_string())),
                         Box::new(hst::Statement::Empty),
                     ),
-                    hst::Statement::Expression(Located::none(
-                        hst::Expression::BinaryOperation(hst::BinOp::Assignment,
-                            Box::new(Located::none(hst::Expression::ArraySubscript(
-                                Box::new(Located::none(
-                                    hst::Expression::Variable("g_myInBuffer".to_string())
-                                )),
-                                Box::new(Located::none(
-                                    hst::Expression::Literal(hst::Literal::Int(0))
-                                ))
+                    hst::Statement::Expression(Located::none(hst::Expression::BinaryOperation(
+                        hst::BinOp::Assignment,
+                        Box::new(Located::none(hst::Expression::ArraySubscript(
+                            Box::new(Located::none(hst::Expression::Variable(
+                                "g_myInBuffer".to_string(),
                             ))),
-                            Box::new(Located::none(hst::Expression::Literal(hst::Literal::Int(4))))
-                        )
-                    )),
-                    hst::Statement::Expression(Located::none(
-                        hst::Expression::Call(
-                            Box::new(Located::none(
-                                hst::Expression::Variable("myFunc".to_string())
-                            )),
-                            vec![
-                                Located::none(hst::Expression::Variable("b".to_string()))
-                            ]
-                        )
-                    )),
+                            Box::new(Located::none(hst::Expression::Literal(hst::Literal::Int(
+                                0,
+                            )))),
+                        ))),
+                        Box::new(Located::none(hst::Expression::Literal(hst::Literal::Int(
+                            4,
+                        )))),
+                    ))),
+                    hst::Statement::Expression(Located::none(hst::Expression::Call(
+                        Box::new(Located::none(hst::Expression::Variable(
+                            "myFunc".to_string(),
+                        ))),
+                        vec![Located::none(hst::Expression::Variable("b".to_string()))],
+                    ))),
                 ],
                 attributes: vec![hst::FunctionAttribute::numthreads(8, 8, 1)],
             }),

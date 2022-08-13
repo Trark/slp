@@ -1,10 +1,9 @@
-
-use slp_shared::*;
 use slp_lang_htk::*;
-use slp_transform_preprocess::*;
-use slp_transform_lexer::lex;
-use slp_transform_htk_to_hst::parse;
+use slp_shared::*;
 use slp_transform_hst_to_hir::typeparse;
+use slp_transform_htk_to_hst::parse;
+use slp_transform_lexer::lex;
+use slp_transform_preprocess::*;
 
 fn token_id(name: &'static str) -> Token {
     Token::Id(Identifier(name.to_string()))

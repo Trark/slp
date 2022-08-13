@@ -1,6 +1,7 @@
 [package]
 name = "slp_sequence_hlsl_to_cl"
 version = "0.1.0"
+edition = "2021"
 authors = ["Trark"]
 
 [dependencies.slp_shared]

@@ -1,10 +1,8 @@
-
-use std::error;
-use std::fmt;
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 use slp_lang_cil as src;
 use slp_lang_cst as dst;
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
+use std::fmt;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum UntyperError {
@@ -27,9 +25,10 @@ struct Context {
 }
 
 impl Context {
-    fn from_globals(globals: &src::GlobalDeclarations,
-                    kernel_name: &str)
-                    -> Result<Context, UntyperError> {
+    fn from_globals(
+        globals: &src::GlobalDeclarations,
+        kernel_name: &str,
+    ) -> Result<Context, UntyperError> {
         let mut context = Context {
             global_name_map: HashMap::new(),
             local_scope: None,
@@ -139,21 +138,24 @@ impl Context {
     }
 
     fn get_global_name(&self, id: &src::GlobalId) -> Result<dst::Identifier, UntyperError> {
-        Ok(self.global_name_map
+        Ok(self
+            .global_name_map
             .get(&GlobalType::Variable(id.clone()))
             .expect("untyper: no global")
             .clone())
     }
 
     fn get_function_name(&self, id: &src::FunctionId) -> Result<dst::Identifier, UntyperError> {
-        Ok(self.global_name_map
+        Ok(self
+            .global_name_map
             .get(&GlobalType::Function(id.clone()))
             .expect("untyper: no function")
             .clone())
     }
 
     fn get_struct_name(&self, id: &src::StructId) -> Result<dst::Identifier, UntyperError> {
-        Ok(self.global_name_map
+        Ok(self
+            .global_name_map
             .get(&GlobalType::Struct(id.clone()))
             .expect("untyper: no struct")
             .clone())
@@ -167,30 +169,24 @@ impl Context {
     }
 }
 
-impl error::Error for UntyperError {
-    fn description(&self) -> &str {
+impl fmt::Display for UntyperError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            UntyperError::LocalVariableNotFound(_) => "local variable not found",
+            UntyperError::LocalVariableNotFound(_) => write!(f, "local variable not found"),
         }
     }
 }
 
-impl fmt::Display for UntyperError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", error::Error::description(self))
-    }
-}
-
-
 fn result_map<T, G, F>(func: F, inputs: &[T], context: &mut Context) -> Result<Vec<G>, UntyperError>
-    where F: Fn(&T, &mut Context) -> Result<G, UntyperError>
+where
+    F: Fn(&T, &mut Context) -> Result<G, UntyperError>,
 {
     inputs.iter().fold(Ok(vec![]), |vec, next| {
         let mut vec = match vec {
             Ok(vec) => vec,
             Err(err) => return Err(err),
         };
-        vec.push(try!(func(next, context)));
+        vec.push(func(next, context)?);
         Ok(vec)
     })
 }
@@ -206,14 +202,14 @@ fn untype_type(ty: &src::Type, context: &mut Context) -> Result<dst::Type, Untyp
         src::Type::IntPtrT => dst::Type::IntPtrT,
         src::Type::UIntPtrT => dst::Type::UIntPtrT,
         src::Type::Struct(ref identifier) => {
-            dst::Type::Struct(try!(context.get_struct_name(identifier)))
+            dst::Type::Struct(context.get_struct_name(identifier)?)
         }
-        src::Type::Pointer(ref address_space, ref inner) => {
-            dst::Type::Pointer(address_space.clone(),
-                               Box::new(try!(untype_type(inner, context))))
-        }
+        src::Type::Pointer(ref address_space, ref inner) => dst::Type::Pointer(
+            address_space.clone(),
+            Box::new(untype_type(inner, context)?),
+        ),
         src::Type::Array(ref inner, dim) => {
-            dst::Type::Array(Box::new(try!(untype_type(inner, context))), dim)
+            dst::Type::Array(Box::new(untype_type(inner, context)?), dim)
         }
         src::Type::Image1D(ref address_space) => dst::Type::Image1D(address_space.clone()),
         src::Type::Image1DBuffer(ref address_space) => {
@@ -246,237 +242,241 @@ fn untype_type(ty: &src::Type, context: &mut Context) -> Result<dst::Type, Untyp
     })
 }
 
-fn untype_intrinsic(instrinic: &src::Intrinsic,
-                    context: &mut Context)
-                    -> Result<dst::Intrinsic, UntyperError> {
+fn untype_intrinsic(
+    instrinic: &src::Intrinsic,
+    context: &mut Context,
+) -> Result<dst::Intrinsic, UntyperError> {
     Ok(match *instrinic {
         src::Intrinsic::GetGlobalId(ref expr) => {
-            dst::Intrinsic::GetGlobalId(Box::new(try!(untype_expression(expr, context))))
+            dst::Intrinsic::GetGlobalId(Box::new(untype_expression(expr, context)?))
         }
         src::Intrinsic::GetLocalId(ref expr) => {
-            dst::Intrinsic::GetLocalId(Box::new(try!(untype_expression(expr, context))))
+            dst::Intrinsic::GetLocalId(Box::new(untype_expression(expr, context)?))
         }
     })
 }
 
-fn untype_expression(expression: &src::Expression,
-                     context: &mut Context)
-                     -> Result<dst::Expression, UntyperError> {
+fn untype_expression(
+    expression: &src::Expression,
+    context: &mut Context,
+) -> Result<dst::Expression, UntyperError> {
     Ok(match *expression {
         src::Expression::Literal(ref literal) => dst::Expression::Literal(literal.clone()),
-        src::Expression::Local(ref id) => {
-            dst::Expression::Variable(try!(context.get_local_name(id)))
-        }
-        src::Expression::Global(ref id) => {
-            dst::Expression::Variable(try!(context.get_global_name(id)))
-        }
+        src::Expression::Local(ref id) => dst::Expression::Variable(context.get_local_name(id)?),
+        src::Expression::Global(ref id) => dst::Expression::Variable(context.get_global_name(id)?),
         src::Expression::UnaryOperation(ref un, ref expr) => {
-            dst::Expression::UnaryOperation(un.clone(),
-                                            Box::new(try!(untype_expression(expr, context))))
+            dst::Expression::UnaryOperation(un.clone(), Box::new(untype_expression(expr, context)?))
         }
         src::Expression::BinaryOperation(ref bin, ref e1, ref e2) => {
-            dst::Expression::BinaryOperation(bin.clone(),
-                                             Box::new(try!(untype_expression(e1, context))),
-                                             Box::new(try!(untype_expression(e2, context))))
+            dst::Expression::BinaryOperation(
+                bin.clone(),
+                Box::new(untype_expression(e1, context)?),
+                Box::new(untype_expression(e2, context)?),
+            )
         }
         src::Expression::TernaryConditional(ref e1, ref e2, ref e3) => {
-            dst::Expression::TernaryConditional(Box::new(try!(untype_expression(e1, context))),
-                                                Box::new(try!(untype_expression(e2, context))),
-                                                Box::new(try!(untype_expression(e3, context))))
+            dst::Expression::TernaryConditional(
+                Box::new(untype_expression(e1, context)?),
+                Box::new(untype_expression(e2, context)?),
+                Box::new(untype_expression(e3, context)?),
+            )
         }
-        src::Expression::Swizzle(ref expr, ref swizzle) => {
-            dst::Expression::Swizzle(Box::new(try!(untype_expression(expr, context))),
-                                     swizzle.iter()
-                                         .map(|swizzle_slot| {
-                    match *swizzle_slot {
-                        src::SwizzleSlot::X => dst::SwizzleSlot::X,
-                        src::SwizzleSlot::Y => dst::SwizzleSlot::Y,
-                        src::SwizzleSlot::Z => dst::SwizzleSlot::Z,
-                        src::SwizzleSlot::W => dst::SwizzleSlot::W,
-                    }
+        src::Expression::Swizzle(ref expr, ref swizzle) => dst::Expression::Swizzle(
+            Box::new(untype_expression(expr, context)?),
+            swizzle
+                .iter()
+                .map(|swizzle_slot| match *swizzle_slot {
+                    src::SwizzleSlot::X => dst::SwizzleSlot::X,
+                    src::SwizzleSlot::Y => dst::SwizzleSlot::Y,
+                    src::SwizzleSlot::Z => dst::SwizzleSlot::Z,
+                    src::SwizzleSlot::W => dst::SwizzleSlot::W,
                 })
-                                         .collect::<Vec<_>>())
-        }
-        src::Expression::ArraySubscript(ref arr, ref ind) => {
-            dst::Expression::ArraySubscript(Box::new(try!(untype_expression(arr, context))),
-                                            Box::new(try!(untype_expression(ind, context))))
-        }
+                .collect::<Vec<_>>(),
+        ),
+        src::Expression::ArraySubscript(ref arr, ref ind) => dst::Expression::ArraySubscript(
+            Box::new(untype_expression(arr, context)?),
+            Box::new(untype_expression(ind, context)?),
+        ),
         src::Expression::Member(ref expr, ref name) => {
-            dst::Expression::Member(Box::new(try!(untype_expression(expr, context))),
-                                    name.clone())
+            dst::Expression::Member(Box::new(untype_expression(expr, context)?), name.clone())
         }
         src::Expression::Deref(ref expr) => {
-            dst::Expression::Deref(Box::new(try!(untype_expression(expr, context))))
+            dst::Expression::Deref(Box::new(untype_expression(expr, context)?))
         }
         src::Expression::MemberDeref(ref expr, ref name) => {
-            dst::Expression::MemberDeref(Box::new(try!(untype_expression(expr, context))),
-                                         name.clone())
+            dst::Expression::MemberDeref(Box::new(untype_expression(expr, context)?), name.clone())
         }
         src::Expression::AddressOf(ref expr) => {
-            dst::Expression::AddressOf(Box::new(try!(untype_expression(expr, context))))
+            dst::Expression::AddressOf(Box::new(untype_expression(expr, context)?))
         }
         src::Expression::Call(ref func, ref params) => dst::Expression::Call(
-            Box::new(dst::Expression::Variable(try!(context.get_function_name(func)))),
-            try!(result_map(untype_expression, params, context))
+            Box::new(dst::Expression::Variable(context.get_function_name(func)?)),
+            result_map(untype_expression, params, context)?,
         ),
         src::Expression::NumericConstructor(ref scalar, ref dim, ref args) => {
-            let untyped_args = try!(result_map(untype_expression, args, context));
+            let untyped_args = result_map(untype_expression, args, context)?;
             dst::Expression::NumericConstructor(scalar.clone(), dim.clone(), untyped_args)
         }
-        src::Expression::Cast(ref ty, ref expr) => {
-            dst::Expression::Cast(try!(untype_type(ty, context)),
-                                  Box::new(try!(untype_expression(expr, context))))
-        }
+        src::Expression::Cast(ref ty, ref expr) => dst::Expression::Cast(
+            untype_type(ty, context)?,
+            Box::new(untype_expression(expr, context)?),
+        ),
         src::Expression::Intrinsic(ref intrinsic) => {
-            dst::Expression::Intrinsic(try!(untype_intrinsic(intrinsic, context)))
+            dst::Expression::Intrinsic(untype_intrinsic(intrinsic, context)?)
         }
-        src::Expression::UntypedIntrinsic(ref func, ref params) => {
-            dst::Expression::Call(Box::new(dst::Expression::Variable(func.clone())),
-                                  try!(result_map(untype_expression, params, context)))
-        }
+        src::Expression::UntypedIntrinsic(ref func, ref params) => dst::Expression::Call(
+            Box::new(dst::Expression::Variable(func.clone())),
+            result_map(untype_expression, params, context)?,
+        ),
         src::Expression::UntypedLiteral(ref name) => dst::Expression::Variable(name.clone()),
     })
 }
 
-fn untype_initializer(init: &src::Initializer,
-                      context: &mut Context)
-                      -> Result<dst::Initializer, UntyperError> {
+fn untype_initializer(
+    init: &src::Initializer,
+    context: &mut Context,
+) -> Result<dst::Initializer, UntyperError> {
     Ok(match *init {
         src::Initializer::Expression(ref expr) => {
-            dst::Initializer::Expression(try!(untype_expression(expr, context)))
+            dst::Initializer::Expression(untype_expression(expr, context)?)
         }
         src::Initializer::Aggregate(ref inits) => {
             let mut elements = Vec::with_capacity(inits.len());
             for init in inits {
-                elements.push(try!(untype_initializer(init, context)));
+                elements.push(untype_initializer(init, context)?);
             }
             dst::Initializer::Aggregate(elements)
         }
     })
 }
 
-fn untype_initializer_opt(init_opt: &Option<src::Initializer>,
-                          context: &mut Context)
-                          -> Result<Option<dst::Initializer>, UntyperError> {
+fn untype_initializer_opt(
+    init_opt: &Option<src::Initializer>,
+    context: &mut Context,
+) -> Result<Option<dst::Initializer>, UntyperError> {
     Ok(match *init_opt {
-        Some(ref init) => Some(try!(untype_initializer(init, context))),
+        Some(ref init) => Some(untype_initializer(init, context)?),
         None => None,
     })
 }
 
 fn untype_vardef(vd: &src::VarDef, context: &mut Context) -> Result<dst::VarDef, UntyperError> {
     Ok(dst::VarDef {
-        name: try!(context.get_local_name(&vd.id)),
-        typename: try!(untype_type(&vd.typename, context)),
-        init: try!(untype_initializer_opt(&vd.init, context)),
+        name: context.get_local_name(&vd.id)?,
+        typename: untype_type(&vd.typename, context)?,
+        init: untype_initializer_opt(&vd.init, context)?,
     })
 }
 
-fn untype_init_expression(member: &src::InitStatement,
-                          context: &mut Context)
-                          -> Result<dst::InitStatement, UntyperError> {
+fn untype_init_expression(
+    member: &src::InitStatement,
+    context: &mut Context,
+) -> Result<dst::InitStatement, UntyperError> {
     Ok(match *member {
         src::InitStatement::Empty => dst::InitStatement::Empty,
         src::InitStatement::Expression(ref expr) => {
-            dst::InitStatement::Expression(try!(untype_expression(expr, context)))
+            dst::InitStatement::Expression(untype_expression(expr, context)?)
         }
         src::InitStatement::Declaration(ref vd) => {
-            dst::InitStatement::Declaration(try!(untype_vardef(vd, context)))
+            dst::InitStatement::Declaration(untype_vardef(vd, context)?)
         }
     })
 }
 
-fn untype_statement(statement: &src::Statement,
-                    context: &mut Context)
-                    -> Result<dst::Statement, UntyperError> {
+fn untype_statement(
+    statement: &src::Statement,
+    context: &mut Context,
+) -> Result<dst::Statement, UntyperError> {
     Ok(match *statement {
         src::Statement::Empty => dst::Statement::Empty,
         src::Statement::Expression(ref expr) => {
-            dst::Statement::Expression(try!(untype_expression(expr, context)))
+            dst::Statement::Expression(untype_expression(expr, context)?)
         }
-        src::Statement::Var(ref vd) => dst::Statement::Var(try!(untype_vardef(vd, context))),
+        src::Statement::Var(ref vd) => dst::Statement::Var(untype_vardef(vd, context)?),
         src::Statement::Block(ref block) => {
-            dst::Statement::Block(try!(result_map(untype_statement, block, context)))
+            dst::Statement::Block(result_map(untype_statement, block, context)?)
         }
-        src::Statement::If(ref cond, ref statement) => {
-            dst::Statement::If(try!(untype_expression(cond, context)),
-                               Box::new(try!(untype_statement(statement, context))))
-        }
-        src::Statement::IfElse(ref cond, ref true_st, ref false_st) => {
-            dst::Statement::IfElse(try!(untype_expression(cond, context)),
-                                   Box::new(try!(untype_statement(true_st, context))),
-                                   Box::new(try!(untype_statement(false_st, context))))
-        }
-        src::Statement::For(ref init, ref cond, ref update, ref statement) => {
-            dst::Statement::For(try!(untype_init_expression(init, context)),
-                                try!(untype_expression(cond, context)),
-                                try!(untype_expression(update, context)),
-                                Box::new(try!(untype_statement(statement, context))))
-        }
-        src::Statement::While(ref cond, ref statement) => {
-            dst::Statement::While(try!(untype_expression(cond, context)),
-                                  Box::new(try!(untype_statement(statement, context))))
-        }
+        src::Statement::If(ref cond, ref statement) => dst::Statement::If(
+            untype_expression(cond, context)?,
+            Box::new(untype_statement(statement, context)?),
+        ),
+        src::Statement::IfElse(ref cond, ref true_st, ref false_st) => dst::Statement::IfElse(
+            untype_expression(cond, context)?,
+            Box::new(untype_statement(true_st, context)?),
+            Box::new(untype_statement(false_st, context)?),
+        ),
+        src::Statement::For(ref init, ref cond, ref update, ref statement) => dst::Statement::For(
+            untype_init_expression(init, context)?,
+            untype_expression(cond, context)?,
+            untype_expression(update, context)?,
+            Box::new(untype_statement(statement, context)?),
+        ),
+        src::Statement::While(ref cond, ref statement) => dst::Statement::While(
+            untype_expression(cond, context)?,
+            Box::new(untype_statement(statement, context)?),
+        ),
         src::Statement::Break => dst::Statement::Break,
         src::Statement::Continue => dst::Statement::Continue,
         src::Statement::Return(ref expr) => {
-            dst::Statement::Return(try!(untype_expression(expr, context)))
+            dst::Statement::Return(untype_expression(expr, context)?)
         }
     })
 }
 
-fn untype_struct_member(member: &src::StructMember,
-                        context: &mut Context)
-                        -> Result<dst::StructMember, UntyperError> {
+fn untype_struct_member(
+    member: &src::StructMember,
+    context: &mut Context,
+) -> Result<dst::StructMember, UntyperError> {
     Ok(dst::StructMember {
         name: member.name.clone(),
-        typename: try!(untype_type(&member.typename, context)),
+        typename: untype_type(&member.typename, context)?,
     })
 }
 
-fn untype_function_param(param: &src::FunctionParam,
-                         context: &mut Context)
-                         -> Result<dst::FunctionParam, UntyperError> {
+fn untype_function_param(
+    param: &src::FunctionParam,
+    context: &mut Context,
+) -> Result<dst::FunctionParam, UntyperError> {
     Ok(dst::FunctionParam {
-        name: try!(context.get_local_name(&param.id)),
-        typename: try!(untype_type(&param.typename, context)),
+        name: context.get_local_name(&param.id)?,
+        typename: untype_type(&param.typename, context)?,
     })
 }
 
-fn untype_kernel_param(param: &src::KernelParam,
-                       context: &mut Context)
-                       -> Result<dst::KernelParam, UntyperError> {
+fn untype_kernel_param(
+    param: &src::KernelParam,
+    context: &mut Context,
+) -> Result<dst::KernelParam, UntyperError> {
     Ok(dst::KernelParam {
-        name: try!(context.get_local_name(&param.id)),
-        typename: try!(untype_type(&param.typename, context)),
+        name: context.get_local_name(&param.id)?,
+        typename: untype_type(&param.typename, context)?,
     })
 }
 
-fn untype_root_definition(root: &src::RootDefinition,
-                          context: &mut Context)
-                          -> Result<dst::RootDefinition, UntyperError> {
+fn untype_root_definition(
+    root: &src::RootDefinition,
+    context: &mut Context,
+) -> Result<dst::RootDefinition, UntyperError> {
     Ok(match *root {
         src::RootDefinition::GlobalVariable(ref gv) => {
             dst::RootDefinition::GlobalVariable(dst::GlobalVariable {
-                name: try!(context.get_global_name(&gv.id)),
-                ty: try!(untype_type(&gv.ty, context)),
+                name: context.get_global_name(&gv.id)?,
+                ty: untype_type(&gv.ty, context)?,
                 address_space: gv.address_space.clone(),
-                init: try!(untype_initializer_opt(&gv.init, context)),
+                init: untype_initializer_opt(&gv.init, context)?,
             })
         }
-        src::RootDefinition::Struct(ref sd) => {
-            dst::RootDefinition::Struct(dst::StructDefinition {
-                name: try!(context.get_struct_name(&sd.id)),
-                members: try!(result_map(untype_struct_member, &sd.members, context)),
-            })
-        }
+        src::RootDefinition::Struct(ref sd) => dst::RootDefinition::Struct(dst::StructDefinition {
+            name: context.get_struct_name(&sd.id)?,
+            members: result_map(untype_struct_member, &sd.members, context)?,
+        }),
         src::RootDefinition::Function(ref fd) => {
             context.push_scope(&fd.local_declarations);
             let f = dst::RootDefinition::Function(dst::FunctionDefinition {
-                name: try!(context.get_function_name(&fd.id)),
-                returntype: try!(untype_type(&fd.returntype, context)),
-                params: try!(result_map(untype_function_param, &fd.params, context)),
-                body: try!(result_map(untype_statement, &fd.body, context)),
+                name: context.get_function_name(&fd.id)?,
+                returntype: untype_type(&fd.returntype, context)?,
+                params: result_map(untype_function_param, &fd.params, context)?,
+                body: result_map(untype_statement, &fd.body, context)?,
             });
             context.pop_scope();
             f
@@ -487,8 +487,8 @@ fn untype_root_definition(root: &src::RootDefinition,
             let dim = kernel.group_dimensions.clone();
             let k = dst::RootDefinition::Kernel(dst::Kernel {
                 name: name.clone(),
-                params: try!(result_map(untype_kernel_param, &kernel.params, context)),
-                body: try!(result_map(untype_statement, &kernel.body, context)),
+                params: result_map(untype_kernel_param, &kernel.params, context)?,
+                body: result_map(untype_statement, &kernel.body, context)?,
                 group_dimensions: dim.clone(),
             });
             context.pop_scope();
@@ -502,22 +502,23 @@ fn untype_root_definition(root: &src::RootDefinition,
 }
 
 pub fn untype_module(module: &src::Module, kernel_name: &str) -> Result<dst::Module, UntyperError> {
-
-    let mut context = try!(Context::from_globals(&module.global_declarations, kernel_name));
+    let mut context = Context::from_globals(&module.global_declarations, kernel_name)?;
 
     let mut final_defs = vec![];
     let mut fragment_list = module.fragments.keys().collect::<Vec<_>>();
     fragment_list.sort();
     for fragment in fragment_list {
         let id = module.fragments.get(fragment).expect("bad fragment key");
-        let name = try!(context.get_function_name(id));
+        let name = context.get_function_name(id)?;
         let gen = fragment.generate(&name);
         final_defs.push(dst::RootDefinition::Function(gen));
     }
 
-    let mut defs = try!(result_map(untype_root_definition,
-                                   &module.root_definitions,
-                                   &mut context));
+    let mut defs = result_map(
+        untype_root_definition,
+        &module.root_definitions,
+        &mut context,
+    )?;
     final_defs.append(&mut defs);
 
     let kernel_name = context.output_kernel_name.expect("No kernel");

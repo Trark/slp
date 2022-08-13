@@ -1,6 +1,7 @@
 [package]
 name = "slp_capi"
 version = "0.1.0"
+edition = "2021"
 authors = ["Trark"]
 
 [lib]

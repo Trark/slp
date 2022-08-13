@@ -1,6 +1,5 @@
-
+use crate::pel;
 use slp_lang_hir::*;
-use pel;
 
 /// Creates intrinsic nodes from argument expressions
 #[derive(PartialEq, Debug, Clone)]
@@ -281,9 +280,11 @@ pub fn get_intrinsics() -> &'static [IntrinsicDefinition] {
     INTRINSICS
 }
 
-pub struct MethodDefinition(pub ObjectType,
-                            pub String,
-                            pub Vec<(Vec<ParamType>, IntrinsicFactory)>);
+pub struct MethodDefinition(
+    pub ObjectType,
+    pub String,
+    pub Vec<(Vec<ParamType>, IntrinsicFactory)>,
+);
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
 pub fn get_method(object: &ObjectType, name: &str) -> Result<MethodDefinition, ()> {
@@ -370,11 +371,8 @@ pub fn get_method(object: &ObjectType, name: &str) -> Result<MethodDefinition, (
     }
 }
 
-
-
 #[test]
 fn test_param_count() {
-
     fn param_count(factory: &IntrinsicFactory) -> usize {
         match *factory {
             IntrinsicFactory::Intrinsic0(_) => 0,

@@ -1,11 +1,9 @@
-
 //! Combine transform to turn rel expressions into hir expressions
 
 use super::rel::*;
 use slp_lang_hir as hir;
-use std::error;
-use std::fmt;
 use std::collections::HashMap;
+use std::fmt;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum CombineError {
@@ -17,32 +15,32 @@ pub enum CombineError {
 
 pub type CombineResult<T> = Result<T, CombineError>;
 
-impl error::Error for CombineError {
-    fn description(&self) -> &str {
-        match *self {
-            CombineError::FailedToResolveMultiPartExpression => {
-                "expression too complex to resolve (rel parser internal error)"
-            }
-            CombineError::FailedToAllocateTemporary => "failed to allocate temporary",
-            CombineError::FailedToRegisterLocal => "failed to register local",
-            CombineError::LastBindDoesNotExist => "failed to find last part of rel sequence",
-        }
-    }
-}
-
 impl fmt::Display for CombineError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", error::Error::description(self))
+        match *self {
+            CombineError::FailedToResolveMultiPartExpression => {
+                write!(
+                    f,
+                    "expression too complex to resolve (rel parser internal error)"
+                )
+            }
+            CombineError::FailedToAllocateTemporary => write!(f, "failed to allocate temporary"),
+            CombineError::FailedToRegisterLocal => write!(f, "failed to register local"),
+            CombineError::LastBindDoesNotExist => {
+                write!(f, "failed to find last part of rel sequence")
+            }
+        }
     }
 }
 
 /// Handler for allocating variables inside combined expressions
 pub trait CombineContext {
     /// Create a new local variable id in the scope the expression will live in
-    fn allocate_local(&mut self,
-                      debug_name: String,
-                      ty: hir::Type)
-                      -> CombineResult<hir::VariableId>;
+    fn allocate_local(
+        &mut self,
+        debug_name: String,
+        ty: hir::Type,
+    ) -> CombineResult<hir::VariableId>;
 
     /// Register that the combined expression will use the given variable in
     /// the scope of the original expression, and return the ref used in the
@@ -86,7 +84,9 @@ impl ScopeCombineContext {
             Some(expr) => statements.push(hir::Statement::Expression(expr)),
             None => {}
         }
-        let decls = hir::ScopedDeclarations { variables: self.new_locals };
+        let decls = hir::ScopedDeclarations {
+            variables: self.new_locals,
+        };
         hir::ScopeBlock(statements, decls)
     }
 }
@@ -119,20 +119,19 @@ pub enum CombinedExpression {
     Multi(CombinedBlock),
 }
 
-pub fn hir_relocate(expr: hir::Expression,
-                    map: &HashMap<hir::VariableRef, hir::VariableRef>)
-                    -> hir::Expression {
+pub fn hir_relocate(
+    expr: hir::Expression,
+    map: &HashMap<hir::VariableRef, hir::VariableRef>,
+) -> hir::Expression {
     use slp_lang_hir::Expression;
     let relocate = |expr: Box<hir::Expression>| Box::new(hir_relocate(*expr, map));
     let relocater = |expr: hir::Expression| hir_relocate(expr, map);
     match expr {
         Expression::Literal(lit) => Expression::Literal(lit),
-        Expression::Variable(var_ref) => {
-            match map.get(&var_ref) {
-                Some(var) => Expression::Variable(var.clone()),
-                None => panic!("invalid remap table"),
-            }
-        }
+        Expression::Variable(var_ref) => match map.get(&var_ref) {
+            Some(var) => Expression::Variable(var.clone()),
+            None => panic!("invalid remap table"),
+        },
         Expression::Global(id) => Expression::Global(id),
         Expression::ConstantVariable(id, name) => Expression::ConstantVariable(id, name),
         Expression::TernaryConditional(cond, left, right) => {
@@ -163,9 +162,7 @@ pub fn hir_relocate(expr: hir::Expression,
                 e.expr = relocater(e.expr);
                 e
             };
-            let cons = elements.into_iter()
-                .map(fun)
-                .collect();
+            let cons = elements.into_iter().map(fun).collect();
             Expression::NumericConstructor(dtyl, cons)
         }
         Expression::Cast(ty, expr) => {
@@ -244,7 +241,11 @@ fn combine_group(seq: Sequence) -> Sequence {
             }
             None
         } else {
-            let exprs = removed_binds.into_iter().rev().map(|bind| trivialize_bind(bind)).collect();
+            let exprs = removed_binds
+                .into_iter()
+                .rev()
+                .map(|bind| trivialize_bind(bind))
+                .collect();
             Some(exprs)
         }
     }
@@ -259,10 +260,11 @@ fn combine_group(seq: Sequence) -> Sequence {
         }
     }
 
-    fn consume_last2(id1: BindId,
-                     id2: BindId,
-                     binds: &mut Vec<Bind>)
-                     -> Option<(hir::Expression, hir::Expression)> {
+    fn consume_last2(
+        id1: BindId,
+        id2: BindId,
+        binds: &mut Vec<Bind>,
+    ) -> Option<(hir::Expression, hir::Expression)> {
         match consume_lastn(&[id1, id2], binds) {
             Some(mut vec) => {
                 assert!(vec.len() == 2);
@@ -274,11 +276,12 @@ fn combine_group(seq: Sequence) -> Sequence {
         }
     }
 
-    fn consume_last3(id1: BindId,
-                     id2: BindId,
-                     id3: BindId,
-                     binds: &mut Vec<Bind>)
-                     -> Option<(hir::Expression, hir::Expression, hir::Expression)> {
+    fn consume_last3(
+        id1: BindId,
+        id2: BindId,
+        id3: BindId,
+        binds: &mut Vec<Bind>,
+    ) -> Option<(hir::Expression, hir::Expression, hir::Expression)> {
         match consume_lastn(&[id1, id2, id3], binds) {
             Some(mut vec) => {
                 assert!(vec.len() == 3);
@@ -419,14 +422,10 @@ fn combine_group(seq: Sequence) -> Sequence {
                     None => return Command::NumericConstructor(dtyl, cons_slots),
                 };
                 assert_eq!(vals.len(), arity.len());
-                let cons = arity.into_iter()
+                let cons = arity
+                    .into_iter()
                     .zip(vals)
-                    .map(|(a, e)| {
-                        hir::ConstructorSlot {
-                            arity: a,
-                            expr: e,
-                        }
-                    })
+                    .map(|(a, e)| hir::ConstructorSlot { arity: a, expr: e })
                     .collect();
                 let expr = hir::Expression::NumericConstructor(dtyl, cons);
                 Command::Trivial(expr, MutationParam::Mutable)
@@ -517,12 +516,15 @@ fn combine_group(seq: Sequence) -> Sequence {
     }
 }
 
-fn combine_complex(seq: Sequence, context: &mut CombineContext) -> CombineResult<CombinedBlock> {
+fn combine_complex(
+    seq: Sequence,
+    context: &mut dyn CombineContext,
+) -> CombineResult<CombinedBlock> {
     // Build map of all required local variables
     let used = seq.find_used_locals();
     let mut required_locals = HashMap::with_capacity(used.len());
     for var in used {
-        required_locals.insert(var, try!(context.register_local(var)));
+        required_locals.insert(var, context.register_local(var)?);
     }
 
     /// Processed state for bind slot
@@ -545,38 +547,41 @@ fn combine_complex(seq: Sequence, context: &mut CombineContext) -> CombineResult
     }
 
     impl ProcessedBind {
-        fn enqueue_write_back_ensure(&self,
-                                     sts: &mut Vec<hir::Statement>,
-                                     processed: &HashMap<BindId, ProcessedBind>) {
+        fn enqueue_write_back_ensure(
+            &self,
+            sts: &mut Vec<hir::Statement>,
+            processed: &HashMap<BindId, ProcessedBind>,
+        ) {
             match self.write_back {
                 WriteBack::Invoke(ref wb) => sts.push(hir::Statement::Expression(wb.clone())),
                 WriteBack::Nothing => {}
                 WriteBack::Fail => panic!("out param used for expression without write back"),
             }
             match self.recursive_write_back {
-                Some(ref id) => {
-                    match processed.get(id) {
-                        Some(ref p) => p.enqueue_write_back(sts, processed),
-                        None => panic!("recursive_write_back depends on non-existant id"),
-                    }
-                }
+                Some(ref id) => match processed.get(id) {
+                    Some(ref p) => p.enqueue_write_back(sts, processed),
+                    None => panic!("recursive_write_back depends on non-existant id"),
+                },
                 None => {}
             }
         }
 
-        fn enqueue_write_back(&self,
-                              sts: &mut Vec<hir::Statement>,
-                              processed: &HashMap<BindId, ProcessedBind>) {
+        fn enqueue_write_back(
+            &self,
+            sts: &mut Vec<hir::Statement>,
+            processed: &HashMap<BindId, ProcessedBind>,
+        ) {
             if self.write_back != WriteBack::Fail {
                 self.enqueue_write_back_ensure(sts, processed)
             }
         }
     }
 
-    fn allocate_local(name: &str,
-                      ty: hir::Type,
-                      context: &mut CombineContext)
-                      -> CombineResult<hir::VariableId> {
+    fn allocate_local(
+        name: &str,
+        ty: hir::Type,
+        context: &mut dyn CombineContext,
+    ) -> CombineResult<hir::VariableId> {
         // Ensure type is allocatable as a variable
         if ty.is_array() || ty.is_void() {
             return Err(CombineError::FailedToResolveMultiPartExpression);
@@ -584,13 +589,14 @@ fn combine_complex(seq: Sequence, context: &mut CombineContext) -> CombineResult
         context.allocate_local(name.to_string(), ty)
     }
 
-    fn build_command(command: Command,
-                     im: InputModifier,
-                     ty: hir::Type,
-                     locals: &HashMap<hir::VariableRef, hir::VariableRef>,
-                     processed: &HashMap<BindId, ProcessedBind>,
-                     context: &mut CombineContext)
-                     -> CombineResult<(Vec<hir::Statement>, ProcessedBind)> {
+    fn build_command(
+        command: Command,
+        im: InputModifier,
+        ty: hir::Type,
+        locals: &HashMap<hir::VariableRef, hir::VariableRef>,
+        processed: &HashMap<BindId, ProcessedBind>,
+        context: &mut dyn CombineContext,
+    ) -> CombineResult<(Vec<hir::Statement>, ProcessedBind)> {
         match command {
             Command::Literal(_) => panic!("combine_complex: literal encountered"),
             Command::Variable(var_prev_scope) => {
@@ -627,7 +633,7 @@ fn combine_complex(seq: Sequence, context: &mut CombineContext) -> CombineResult
             }
             Command::Swizzle(val, swizzle) => {
                 // Create temporary local
-                let id = try!(allocate_local("swizzle", ty.clone(), context));
+                let id = allocate_local("swizzle", ty.clone(), context)?;
                 let val_p = match processed.get(&val) {
                     Some(p) => p,
                     None => panic!("reference local bind does not exist (Swizzle)"),
@@ -692,7 +698,7 @@ fn combine_complex(seq: Sequence, context: &mut CombineContext) -> CombineResult
                     } else {
                         None
                     };
-                    let id = try!(allocate_local("tex", ty.clone(), context));
+                    let id = allocate_local("tex", ty.clone(), context)?;
                     let vd = hir::VarDef {
                         id: id.clone(),
                         local_type: hir::LocalType(ty.clone(), hir::LocalStorage::Local, None),
@@ -706,7 +712,11 @@ fn combine_complex(seq: Sequence, context: &mut CombineContext) -> CombineResult
                         let value = Box::new(var_ref.clone());
                         hir::Expression::Intrinsic3(si, texture, index, value)
                     };
-                    (vec![hir::Statement::Var(vd)], var_ref, WriteBack::Invoke(store))
+                    (
+                        vec![hir::Statement::Var(vd)],
+                        var_ref,
+                        WriteBack::Invoke(store),
+                    )
                 };
                 let p = ProcessedBind {
                     reference: Some(reference),
@@ -734,7 +744,7 @@ fn combine_complex(seq: Sequence, context: &mut CombineContext) -> CombineResult
                     let statements = vec![hir::Statement::Expression(init)];
                     (statements, None)
                 } else {
-                    let id = try!(allocate_local("call", ty.clone(), context));
+                    let id = allocate_local("call", ty.clone(), context)?;
                     let vd = hir::VarDef {
                         id: id.clone(),
                         local_type: hir::LocalType(ty.clone(), hir::LocalStorage::Local, None),
@@ -754,7 +764,7 @@ fn combine_complex(seq: Sequence, context: &mut CombineContext) -> CombineResult
                 Ok((statements, p))
             }
             Command::NumericConstructor(dtyl, cons) => {
-                let id = try!(allocate_local("cons", ty.clone(), context));
+                let id = allocate_local("cons", ty.clone(), context)?;
                 let mut hir_cons = vec![];
                 for con in cons {
                     let expr = match processed.get(&con.expr) {
@@ -809,7 +819,7 @@ fn combine_complex(seq: Sequence, context: &mut CombineContext) -> CombineResult
                 } else {
                     let val_expr = val_p.reference.clone().expect("void input (cast)");
                     let casted_expr = hir::Expression::Cast(ty.clone(), Box::new(val_expr.clone()));
-                    let id = try!(allocate_local("cast", ty.clone(), context));
+                    let id = allocate_local("cast", ty.clone(), context)?;
                     // Push the temporary local into a hir node
                     let tmp_var = {
                         let tmp_var_ref = hir::VariableRef(id.clone(), hir::ScopeRef(0));
@@ -870,7 +880,7 @@ fn combine_complex(seq: Sequence, context: &mut CombineContext) -> CombineResult
                     let statements = vec![hir::Statement::Expression(init)];
                     (statements, None)
                 } else {
-                    let id = try!(allocate_local("i2", ty.clone(), context));
+                    let id = allocate_local("i2", ty.clone(), context)?;
                     let vd = hir::VarDef {
                         id: id.clone(),
                         local_type: hir::LocalType(ty.clone(), hir::LocalStorage::Local, None),
@@ -919,7 +929,7 @@ fn combine_complex(seq: Sequence, context: &mut CombineContext) -> CombineResult
                     let statements = vec![hir::Statement::Expression(init)];
                     (statements, None)
                 } else {
-                    let id = try!(allocate_local("i3", ty.clone(), context));
+                    let id = allocate_local("i3", ty.clone(), context)?;
                     let vd = hir::VarDef {
                         id: id.clone(),
                         local_type: hir::LocalType(ty.clone(), hir::LocalStorage::Local, None),
@@ -948,7 +958,7 @@ fn combine_complex(seq: Sequence, context: &mut CombineContext) -> CombineResult
             }
             Command::Trivial(expr, MutationParam::Mutable) => {
                 let expr = hir_relocate(expr, locals);
-                let id = try!(allocate_local("expr", ty.clone(), context));;
+                let id = allocate_local("expr", ty.clone(), context)?;
                 let vd = hir::VarDef {
                     id: id.clone(),
                     local_type: hir::LocalType(ty.clone(), hir::LocalStorage::Local, None),
@@ -982,13 +992,14 @@ fn combine_complex(seq: Sequence, context: &mut CombineContext) -> CombineResult
 
     let mut statements = Vec::with_capacity(seq.binds.len() + 1);
     for bind in seq.binds {
-
-        let r = try!(build_command(bind.value,
-                                   bind.required_input,
-                                   bind.ty,
-                                   &required_locals,
-                                   &processed_binds,
-                                   context));
+        let r = build_command(
+            bind.value,
+            bind.required_input,
+            bind.ty,
+            &required_locals,
+            &processed_binds,
+            context,
+        )?;
 
         let (sts, processed) = r;
         processed_binds.insert(bind.id, processed);
@@ -998,12 +1009,10 @@ fn combine_complex(seq: Sequence, context: &mut CombineContext) -> CombineResult
     }
 
     let last_expr = match seq.last {
-        Some(last) => {
-            match processed_binds.get(&last) {
-                Some(p) => p.reference.clone(),
-                None => return Err(CombineError::LastBindDoesNotExist),
-            }
-        }
+        Some(last) => match processed_binds.get(&last) {
+            Some(p) => p.reference.clone(),
+            None => return Err(CombineError::LastBindDoesNotExist),
+        },
         None => None,
     };
 
@@ -1038,7 +1047,10 @@ fn combine_trivial(seq: Sequence) -> TrivialResult {
     if is_trivial {
         let mut seq = seq;
         match seq.binds.pop() {
-            Some(Bind { value: Command::Trivial(expr, _), .. }) => TrivialResult::Trivial(expr),
+            Some(Bind {
+                value: Command::Trivial(expr, _),
+                ..
+            }) => TrivialResult::Trivial(expr),
             _ => panic!("bad is_trivial logic"),
         }
     } else {
@@ -1046,24 +1058,28 @@ fn combine_trivial(seq: Sequence) -> TrivialResult {
     }
 }
 
-pub fn combine(seq: Sequence, context: &mut CombineContext) -> CombineResult<CombinedExpression> {
+pub fn combine(
+    seq: Sequence,
+    context: &mut dyn CombineContext,
+) -> CombineResult<CombinedExpression> {
     let seq = combine_group(seq);
     match combine_trivial(seq) {
         TrivialResult::Trivial(expr) => Ok(CombinedExpression::Single(expr)),
         TrivialResult::Complex(seq) => {
-            Ok(CombinedExpression::Multi(try!(combine_complex(seq, context))))
+            Ok(CombinedExpression::Multi(combine_complex(seq, context)?))
         }
     }
 }
 
 #[test]
 fn test_combine_single_variable() {
-
     let var_ref = hir::VariableRef(hir::VariableId(0), hir::ScopeRef(0));
     let var_seq = Sequence {
-        binds: vec![
-            Bind::direct(0, Command::Variable(var_ref.clone()), hir::Type::float()),
-        ],
+        binds: vec![Bind::direct(
+            0,
+            Command::Variable(var_ref.clone()),
+            hir::Type::float(),
+        )],
         last: Some(BindId(0)),
     };
     let var_expr = combine(var_seq, &mut FakeCombineContext).expect("combine failed");
@@ -1075,15 +1091,21 @@ fn test_combine_single_variable() {
 fn test_combine_binary_operation() {
     let var_0_ref = hir::VariableRef(hir::VariableId(0), hir::ScopeRef(0));
     let var_1_ref = hir::VariableRef(hir::VariableId(1), hir::ScopeRef(0));
-    let dty = hir::DataType(hir::DataLayout::Scalar(hir::ScalarType::Float),
-                            hir::TypeModifier::default());
+    let dty = hir::DataType(
+        hir::DataLayout::Scalar(hir::ScalarType::Float),
+        hir::TypeModifier::default(),
+    );
     let ty = hir::Type::from_data(dty.clone());
     let add = hir::Intrinsic2::Add(dty.clone());
     let bin_seq = Sequence {
         binds: vec![
             Bind::direct(0, Command::Variable(var_0_ref.clone()), ty.clone()),
             Bind::direct(1, Command::Variable(var_1_ref.clone()), ty.clone()),
-            Bind::direct(2, Command::Intrinsic2(add.clone(), BindId(0), BindId(1)), ty),
+            Bind::direct(
+                2,
+                Command::Intrinsic2(add.clone(), BindId(0), BindId(1)),
+                ty,
+            ),
         ],
         last: Some(BindId(2)),
     };
@@ -1096,7 +1118,6 @@ fn test_combine_binary_operation() {
 
 #[test]
 fn test_combine_texture_assignment() {
-
     let lit_zero = hir::Literal::Int(0);
     let dtyl_index = hir::DataLayout::Vector(hir::ScalarType::Int, 2);
 
@@ -1117,10 +1138,23 @@ fn test_combine_texture_assignment() {
             Bind::direct(0, Command::Global(tex_0), tex_ty.clone()),
             Bind::direct(1, Command::Literal(lit_zero.clone()), hir::Type::int()),
             Bind::direct(2, Command::Literal(lit_zero.clone()), hir::Type::int()),
-            Bind::direct(3, Command::NumericConstructor(dtyl_index.clone(), vec![
-                ConstructorSlot { arity: 1, expr: BindId(1) },
-                ConstructorSlot { arity: 1, expr: BindId(2) }
-            ]), hir::Type::intn(2)),
+            Bind::direct(
+                3,
+                Command::NumericConstructor(
+                    dtyl_index.clone(),
+                    vec![
+                        ConstructorSlot {
+                            arity: 1,
+                            expr: BindId(1),
+                        },
+                        ConstructorSlot {
+                            arity: 1,
+                            expr: BindId(2),
+                        },
+                    ],
+                ),
+                hir::Type::intn(2),
+            ),
             Bind {
                 id: BindId(4),
                 value: Command::RWTexture2DIndex(dty.clone(), BindId(0), BindId(3)),
@@ -1130,15 +1164,28 @@ fn test_combine_texture_assignment() {
             Bind::direct(5, Command::Global(tex_1), tex_ty),
             Bind::direct(6, Command::Literal(lit_zero.clone()), hir::Type::int()),
             Bind::direct(7, Command::Literal(lit_zero.clone()), hir::Type::int()),
-            Bind::direct(8, Command::NumericConstructor(dtyl_index, vec![
-                ConstructorSlot { arity: 1, expr: BindId(6) },
-                ConstructorSlot { arity: 1, expr: BindId(7) }
-            ]), hir::Type::intn(2)),
-            Bind::direct(9, Command::Intrinsic2(
-                hir::Intrinsic2::Texture2DLoad(dty),
-                BindId(5),
-                BindId(8)
-            ), ty.clone()),
+            Bind::direct(
+                8,
+                Command::NumericConstructor(
+                    dtyl_index,
+                    vec![
+                        ConstructorSlot {
+                            arity: 1,
+                            expr: BindId(6),
+                        },
+                        ConstructorSlot {
+                            arity: 1,
+                            expr: BindId(7),
+                        },
+                    ],
+                ),
+                hir::Type::intn(2),
+            ),
+            Bind::direct(
+                9,
+                Command::Intrinsic2(hir::Intrinsic2::Texture2DLoad(dty), BindId(5), BindId(8)),
+                ty.clone(),
+            ),
             Bind::direct(10, Command::Intrinsic2(assign, BindId(4), BindId(9)), ty),
         ],
         last: Some(BindId(10)),
@@ -1155,66 +1202,62 @@ fn test_combine_texture_assignment() {
                         vec![
                             hir::ConstructorSlot {
                                 arity: 1,
-                                expr: hir::Expression::Literal(hir::Literal::Int(0))
+                                expr: hir::Expression::Literal(hir::Literal::Int(0)),
                             },
                             hir::ConstructorSlot {
                                 arity: 1,
-                                expr: hir::Expression::Literal(hir::Literal::Int(0))
+                                expr: hir::Expression::Literal(hir::Literal::Int(0)),
                             },
-                        ]
-                    )
-                ))
+                        ],
+                    ),
+                )),
             }),
             hir::Statement::Var(hir::VarDef {
                 id: hir::VariableId(1),
                 local_type: hir::LocalType(hir::Type::floatn(4), hir::LocalStorage::Local, None),
-                init: None
+                init: None,
             }),
             hir::Statement::Var(hir::VarDef {
                 id: hir::VariableId(2),
                 local_type: hir::LocalType(hir::Type::floatn(4), hir::LocalStorage::Local, None),
-                init: Some(hir::Initializer::Expression(
-                    hir::Expression::Intrinsic2(
-                        hir::Intrinsic2::Texture2DLoad(hir::DataType(
-                            hir::DataLayout::Vector(hir::ScalarType::Float, 4),
-                            hir::TypeModifier::default()
-                        )),
-                        Box::new(hir::Expression::Global(hir::GlobalId(1))),
-                        Box::new(hir::Expression::NumericConstructor(
-                            hir::DataLayout::Vector(hir::ScalarType::Int, 2),
-                            vec![
-                                hir::ConstructorSlot {
-                                    arity: 1,
-                                    expr: hir::Expression::Literal(hir::Literal::Int(0))
-                                },
-                                hir::ConstructorSlot {
-                                    arity: 1,
-                                    expr: hir::Expression::Literal(hir::Literal::Int(0))
-                                },
-                            ]
-                        ))
-                    )
-                ))
+                init: Some(hir::Initializer::Expression(hir::Expression::Intrinsic2(
+                    hir::Intrinsic2::Texture2DLoad(hir::DataType(
+                        hir::DataLayout::Vector(hir::ScalarType::Float, 4),
+                        hir::TypeModifier::default(),
+                    )),
+                    Box::new(hir::Expression::Global(hir::GlobalId(1))),
+                    Box::new(hir::Expression::NumericConstructor(
+                        hir::DataLayout::Vector(hir::ScalarType::Int, 2),
+                        vec![
+                            hir::ConstructorSlot {
+                                arity: 1,
+                                expr: hir::Expression::Literal(hir::Literal::Int(0)),
+                            },
+                            hir::ConstructorSlot {
+                                arity: 1,
+                                expr: hir::Expression::Literal(hir::Literal::Int(0)),
+                            },
+                        ],
+                    )),
+                ))),
             }),
             hir::Statement::Var(hir::VarDef {
                 id: hir::VariableId(3),
                 local_type: hir::LocalType(hir::Type::floatn(4), hir::LocalStorage::Local, None),
-                init: Some(hir::Initializer::Expression(
-                    hir::Expression::Intrinsic2(
-                        hir::Intrinsic2::Assignment(hir::Type::floatn(4)),
-                        Box::new(hir::Expression::Variable(hir::VariableRef::raw(1, 0))),
-                        Box::new(hir::Expression::Variable(hir::VariableRef::raw(2, 0)))
-                    )
-                ))
+                init: Some(hir::Initializer::Expression(hir::Expression::Intrinsic2(
+                    hir::Intrinsic2::Assignment(hir::Type::floatn(4)),
+                    Box::new(hir::Expression::Variable(hir::VariableRef::raw(1, 0))),
+                    Box::new(hir::Expression::Variable(hir::VariableRef::raw(2, 0))),
+                ))),
             }),
             hir::Statement::Expression(hir::Expression::Intrinsic3(
                 hir::Intrinsic3::RWTexture2DStore(hir::DataType(
                     hir::DataLayout::Vector(hir::ScalarType::Float, 4),
-                    hir::TypeModifier::default()
+                    hir::TypeModifier::default(),
                 )),
                 Box::new(hir::Expression::Global(hir::GlobalId(0))),
                 Box::new(hir::Expression::Variable(hir::VariableRef::raw(0, 0))),
-                Box::new(hir::Expression::Variable(hir::VariableRef::raw(1, 0)))
+                Box::new(hir::Expression::Variable(hir::VariableRef::raw(1, 0))),
             )),
         ],
         last_expression: Some(hir::Expression::Variable(hir::VariableRef::raw(3, 0))),

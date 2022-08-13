@@ -1,4 +1,3 @@
-
 use slp_lang_cst::*;
 
 /// A type to represent the final OpenCL source
@@ -11,7 +10,9 @@ pub struct Binary {
 impl Binary {
     pub fn from_cir(cir: &Module) -> Binary {
         let printer = print(cir);
-        Binary { source: printer.buffer.clone() }
+        Binary {
+            source: printer.buffer.clone(),
+        }
     }
 }
 
@@ -138,11 +139,12 @@ fn print_typename(typename: &Type, printer: &mut Printer) {
     };
 }
 
-fn print_unaryoperation(unaryop: &UnaryOp,
-                        expr: &Box<Expression>,
-                        last_precedence: u32,
-                        printer: &mut Printer) {
-
+fn print_unaryoperation(
+    unaryop: &UnaryOp,
+    expr: &Box<Expression>,
+    last_precedence: u32,
+    printer: &mut Printer,
+) {
     let (op_symbol, op_prec, after) = match *unaryop {
         UnaryOp::PrefixIncrement => ("++", 2, false),
         UnaryOp::PrefixDecrement => ("--", 2, false),
@@ -169,12 +171,13 @@ fn print_unaryoperation(unaryop: &UnaryOp,
     }
 }
 
-fn print_binaryoperation(binop: &BinOp,
-                         lhs: &Box<Expression>,
-                         rhs: &Box<Expression>,
-                         last_precedence: u32,
-                         printer: &mut Printer) {
-
+fn print_binaryoperation(
+    binop: &BinOp,
+    lhs: &Box<Expression>,
+    rhs: &Box<Expression>,
+    last_precedence: u32,
+    printer: &mut Printer,
+) {
     let op_symbol = match *binop {
         BinOp::Add => "+",
         BinOp::Subtract => "-",
@@ -247,57 +250,36 @@ fn print_binaryoperation(binop: &BinOp,
 }
 
 fn print_literal(lit: &Literal, printer: &mut Printer) {
-    printer.print(&(match lit {
-        &Literal::Bool(b) => {
-            if b {
-                "true".to_string()
-            } else {
-                "false".to_string()
+    printer.print(
+        &(match lit {
+            &Literal::Bool(b) => {
+                if b {
+                    "true".to_string()
+                } else {
+                    "false".to_string()
+                }
             }
-        }
-        &Literal::Int(i) => format!("{}", i),
-        &Literal::UInt(i) => format!("{}u", i),
-        &Literal::Long(i) => format!("{}L", i),
-        &Literal::Half(f) => {
-            format!("{}{}h",
-                    f,
-                    if f == f.floor() {
-                        ".0"
-                    } else {
-                        ""
-                    })
-        }
-        &Literal::Float(f) => {
-            // Currently don't expect any way to get a negative
-            // value in here
-            assert!(f.is_sign_positive());
-            if f.is_infinite() {
-                format!("{}INFINITY",
-                        if f.is_sign_positive() {
-                            ""
-                        } else {
-                            "-"
-                        })
-            } else {
-                format!("{}{}f",
-                        f,
-                        if f == f.floor() {
-                            ".0"
-                        } else {
-                            ""
-                        })
+            &Literal::Int(i) => format!("{}", i),
+            &Literal::UInt(i) => format!("{}u", i),
+            &Literal::Long(i) => format!("{}L", i),
+            &Literal::Half(f) => {
+                format!("{}{}h", f, if f == f.floor() { ".0" } else { "" })
             }
-        }
-        &Literal::Double(f) => {
-            format!("{}{}",
-                    f,
-                    if f == f.floor() {
-                        ".0"
-                    } else {
-                        ""
-                    })
-        }
-    })[..]);
+            &Literal::Float(f) => {
+                // Currently don't expect any way to get a negative
+                // value in here
+                assert!(f.is_sign_positive());
+                if f.is_infinite() {
+                    format!("{}INFINITY", if f.is_sign_positive() { "" } else { "-" })
+                } else {
+                    format!("{}{}f", f, if f == f.floor() { ".0" } else { "" })
+                }
+            }
+            &Literal::Double(f) => {
+                format!("{}{}", f, if f == f.floor() { ".0" } else { "" })
+            }
+        })[..],
+    );
 }
 
 fn print_intrinsic(intrinsic: &Intrinsic, printer: &mut Printer) {
@@ -653,7 +635,6 @@ fn print_rootdefinition_globalvariable(gv: &GlobalVariable, printer: &mut Printe
     printer.print(";");
 }
 
-
 fn print_rootdefinition_struct(structdefinition: &StructDefinition, printer: &mut Printer) {
     printer.print("struct");
     printer.space();
@@ -720,7 +701,6 @@ fn print_rootdefinition_function(function: &FunctionDefinition, printer: &mut Pr
 }
 
 fn print_rootdefinition_kernel(kernel: &Kernel, printer: &mut Printer) {
-
     printer.print("__attribute__");
     printer.print("(");
     printer.print("(");

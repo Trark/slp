@@ -1,11 +1,12 @@
 [package]
 name = "slipstream"
 version = "0.1.0"
+edition = "2021"
 authors = ["Trark"]
 
 [dependencies]
-docopt = "0.6.0"
-rustc-serialize = "0.3"
+docopt = "1.1.1"
+serde = "1.0.130"
 
 [dependencies.slp_sequence_hlsl_to_cl]
 path = "../src/sequence/hlsl_to_cl"

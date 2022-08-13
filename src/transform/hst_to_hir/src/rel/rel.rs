@@ -1,4 +1,3 @@
-
 //! # Rel: Reduced Expression Language
 //!
 //! Minilanguage for reducing expressions into parts

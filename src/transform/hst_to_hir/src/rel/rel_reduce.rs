@@ -1,17 +1,15 @@
-
 //! Reduce transform to turn pel expressions into rel expressions
 
 use super::rel::*;
-use pel;
-use typer::FunctionOverload;
+use crate::pel;
+use crate::typer::FunctionOverload;
 use slp_lang_hir as hir;
-use slp_lang_hir::Type;
 #[cfg(test)]
 use slp_lang_hir::ToExpressionType;
-use std::error;
-use std::fmt;
+use slp_lang_hir::Type;
 #[cfg(test)]
 use std::collections::HashMap;
+use std::fmt;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum ReduceError {
@@ -21,18 +19,12 @@ pub enum ReduceError {
 
 pub type ReduceResult<T> = Result<T, ReduceError>;
 
-impl error::Error for ReduceError {
-    fn description(&self) -> &str {
-        match *self {
-            ReduceError::EmptyReduction => "reduced expression is empty",
-            ReduceError::FailedTypeParse => "failed to parse type reducing pel to rel",
-        }
-    }
-}
-
 impl fmt::Display for ReduceError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", error::Error::description(self))
+        match *self {
+            ReduceError::EmptyReduction => write!(f, "reduced expression is empty"),
+            ReduceError::FailedTypeParse => write!(f, "failed to parse type reducing pel to rel"),
+        }
     }
 }
 
@@ -80,10 +72,10 @@ fn simplify_node(expr: pel::Expression) -> pel::Expression {
     // we can swizzle assign in cl, so this node represents this combined
     // operation and will generate more optimal cl code (it will be trivial
     // in the rel language instead of requiring complex combination)
-    use slp_lang_hir::Intrinsic2::Assignment as Assign;
-    use slp_lang_hir::Intrinsic2::AssignSwizzle;
     use pel::Expression::Intrinsic2 as I2;
     use pel::Expression::Swizzle;
+    use slp_lang_hir::Intrinsic2::AssignSwizzle;
+    use slp_lang_hir::Intrinsic2::Assignment as Assign;
     if let I2(Assign(ty), e1, e2) = expr {
         let unboxed_e1 = *e1;
         if let Swizzle(val, swizzle) = unboxed_e1 {
@@ -96,11 +88,12 @@ fn simplify_node(expr: pel::Expression) -> pel::Expression {
     }
 }
 
-fn reduce_node(expr: pel::Expression,
-               input_modifier: InputModifier,
-               sb: SequenceBuilder,
-               context: &ReduceContext)
-               -> ReduceResult<(SequenceBuilder, BindId)> {
+fn reduce_node(
+    expr: pel::Expression,
+    input_modifier: InputModifier,
+    sb: SequenceBuilder,
+    context: &dyn ReduceContext,
+) -> ReduceResult<(SequenceBuilder, BindId)> {
     let ty = match pel::TypeParser::get_expression_type(&expr, context.as_type_context()) {
         Ok(ety) => ety.0,
         Err(_) => return Err(ReduceError::FailedTypeParse),
@@ -112,24 +105,24 @@ fn reduce_node(expr: pel::Expression,
         pel::Expression::Global(id) => (sb, Command::Global(id)),
         pel::Expression::ConstantVariable(id, name) => (sb, Command::ConstantVariable(id, name)),
         pel::Expression::TernaryConditional(cond, lhs, rhs) => {
-            let (sb, cond_id) = try!(reduce_node(*cond, InputModifier::In, sb, context));
-            let lhs_seq = Box::new(try!(reduce(*lhs, context)));
-            let rhs_seq = Box::new(try!(reduce(*rhs, context)));
+            let (sb, cond_id) = reduce_node(*cond, InputModifier::In, sb, context)?;
+            let lhs_seq = Box::new(reduce(*lhs, context)?);
+            let rhs_seq = Box::new(reduce(*rhs, context)?);
             (sb, Command::TernaryConditional(cond_id, lhs_seq, rhs_seq))
         }
         pel::Expression::Swizzle(val, swizzle) => {
-            let (sb, val_id) = try!(reduce_node(*val, input_modifier.clone(), sb, context));
+            let (sb, val_id) = reduce_node(*val, input_modifier.clone(), sb, context)?;
             (sb, Command::Swizzle(val_id, swizzle))
         }
         pel::Expression::ArraySubscript(arr, index) => {
-            let (sb, arr_id) = try!(reduce_node(*arr, InputModifier::In, sb, context));
-            let (sb, index_id) = try!(reduce_node(*index, InputModifier::In, sb, context));
+            let (sb, arr_id) = reduce_node(*arr, InputModifier::In, sb, context)?;
+            let (sb, index_id) = reduce_node(*index, InputModifier::In, sb, context)?;
             let bt = Command::ArraySubscript(arr_id, index_id);
             (sb, bt)
         }
         pel::Expression::Texture2DIndex(dty, tex, index) => {
-            let (sb, tex_id) = try!(reduce_node(*tex, InputModifier::In, sb, context));
-            let (sb, index_id) = try!(reduce_node(*index, InputModifier::In, sb, context));
+            let (sb, tex_id) = reduce_node(*tex, InputModifier::In, sb, context)?;
+            let (sb, index_id) = reduce_node(*index, InputModifier::In, sb, context)?;
             let bt = if input_modifier == InputModifier::In {
                 Command::Intrinsic2(hir::Intrinsic2::Texture2DLoad(dty), tex_id, index_id)
             } else {
@@ -138,8 +131,8 @@ fn reduce_node(expr: pel::Expression,
             (sb, bt)
         }
         pel::Expression::RWTexture2DIndex(dty, tex, index) => {
-            let (sb, tex_id) = try!(reduce_node(*tex, InputModifier::In, sb, context));
-            let (sb, index_id) = try!(reduce_node(*index, InputModifier::In, sb, context));
+            let (sb, tex_id) = reduce_node(*tex, InputModifier::In, sb, context)?;
+            let (sb, index_id) = reduce_node(*index, InputModifier::In, sb, context)?;
             let bt = if input_modifier == InputModifier::In {
                 Command::Intrinsic2(hir::Intrinsic2::RWTexture2DLoad(dty), tex_id, index_id)
             } else {
@@ -148,30 +141,29 @@ fn reduce_node(expr: pel::Expression,
             (sb, bt)
         }
         pel::Expression::Member(composite, member) => {
-            let (sb, composite_id) =
-                try!(reduce_node(*composite, input_modifier.clone(), sb, context));
+            let (sb, composite_id) = reduce_node(*composite, input_modifier.clone(), sb, context)?;
             (sb, Command::Member(composite_id, member))
         }
         pel::Expression::Call(id, args) => {
             let overload = context.find_overload(&id);
             let fold_fn = |res: ReduceResult<(SequenceBuilder, Vec<BindId>)>, param| {
-                let (sb, mut vec) = try!(res);
+                let (sb, mut vec) = res?;
                 let (arg, im) = param;
-                let (sb, arg) = try!(reduce_node(arg, im, sb, context));
+                let (sb, arg) = reduce_node(arg, im, sb, context)?;
                 vec.push(arg);
                 Ok((sb, vec))
             };
             let initial = Vec::with_capacity(args.len());
             let im_iter = overload.2.iter().map(|p| p.1.clone());
             let param_iter = args.into_iter().zip(im_iter);
-            let (sb, arg_ids) = try!(param_iter.fold(Ok((sb, initial)), fold_fn));
+            let (sb, arg_ids) = param_iter.fold(Ok((sb, initial)), fold_fn)?;
             (sb, Command::Call(id, arg_ids))
         }
         pel::Expression::NumericConstructor(dtyl, cons) => {
             let fold_fn = |res: ReduceResult<(SequenceBuilder, Vec<ConstructorSlot>)>, arg| {
-                let (sb, mut vec) = try!(res);
+                let (sb, mut vec) = res?;
                 let pel::ConstructorSlot { arity, expr } = arg;
-                let (sb, arg) = try!(reduce_node(expr, InputModifier::In, sb, context));
+                let (sb, arg) = reduce_node(expr, InputModifier::In, sb, context)?;
                 vec.push(ConstructorSlot {
                     arity: arity,
                     expr: arg,
@@ -179,33 +171,33 @@ fn reduce_node(expr: pel::Expression,
                 Ok((sb, vec))
             };
             let initial = Vec::with_capacity(cons.len());
-            let (sb, con_ids) = try!(cons.into_iter().fold(Ok((sb, initial)), fold_fn));
+            let (sb, con_ids) = cons.into_iter().fold(Ok((sb, initial)), fold_fn)?;
             (sb, Command::NumericConstructor(dtyl, con_ids))
         }
         pel::Expression::Cast(ty, node) => {
-            let (sb, node_id) = try!(reduce_node(*node, input_modifier.clone(), sb, context));
+            let (sb, node_id) = reduce_node(*node, input_modifier.clone(), sb, context)?;
             (sb, Command::Cast(ty, node_id))
         }
         pel::Expression::Intrinsic0(i) => (sb, Command::Intrinsic0(i)),
         pel::Expression::Intrinsic1(i, e1) => {
             let im1 = i.get_param1_input_modifier();
-            let (sb, e1_id) = try!(reduce_node(*e1, im1, sb, context));
+            let (sb, e1_id) = reduce_node(*e1, im1, sb, context)?;
             (sb, Command::Intrinsic1(i, e1_id))
         }
         pel::Expression::Intrinsic2(i, e1, e2) => {
             let im1 = i.get_param1_input_modifier();
-            let (sb, e1_id) = try!(reduce_node(*e1, im1, sb, context));
+            let (sb, e1_id) = reduce_node(*e1, im1, sb, context)?;
             let im2 = i.get_param2_input_modifier();
-            let (sb, e2_id) = try!(reduce_node(*e2, im2, sb, context));
+            let (sb, e2_id) = reduce_node(*e2, im2, sb, context)?;
             (sb, Command::Intrinsic2(i, e1_id, e2_id))
         }
         pel::Expression::Intrinsic3(i, e1, e2, e3) => {
             let im1 = i.get_param1_input_modifier();
-            let (sb, e1_id) = try!(reduce_node(*e1, im1, sb, context));
+            let (sb, e1_id) = reduce_node(*e1, im1, sb, context)?;
             let im2 = i.get_param2_input_modifier();
-            let (sb, e2_id) = try!(reduce_node(*e2, im2, sb, context));
+            let (sb, e2_id) = reduce_node(*e2, im2, sb, context)?;
             let im3 = i.get_param3_input_modifier();
-            let (sb, e3_id) = try!(reduce_node(*e3, im3, sb, context));
+            let (sb, e3_id) = reduce_node(*e3, im3, sb, context)?;
             let bt = Command::Intrinsic3(i, e1_id, e2_id, e3_id);
             (sb, bt)
         }
@@ -214,9 +206,9 @@ fn reduce_node(expr: pel::Expression,
     Ok((sb, id))
 }
 
-pub fn reduce(root_expr: pel::Expression, context: &ReduceContext) -> ReduceResult<Sequence> {
+pub fn reduce(root_expr: pel::Expression, context: &dyn ReduceContext) -> ReduceResult<Sequence> {
     let builder = SequenceBuilder::new();
-    let builder = try!(reduce_node(root_expr, InputModifier::In, builder, context)).0;
+    let builder = reduce_node(root_expr, InputModifier::In, builder, context)?.0;
     builder.finalize()
 }
 
@@ -247,21 +239,24 @@ impl hir::TypeContext for TestReduceContext {
             None => panic!("TestReduceContext::get_global"),
         }
     }
-    fn get_constant(&self,
-                    _: &hir::ConstantBufferId,
-                    _: &str)
-                    -> Result<hir::ExpressionType, hir::TypeError> {
+    fn get_constant(
+        &self,
+        _: &hir::ConstantBufferId,
+        _: &str,
+    ) -> Result<hir::ExpressionType, hir::TypeError> {
         panic!("TestReduceContext::get_constant")
     }
-    fn get_struct_member(&self,
-                         _: &hir::StructId,
-                         _: &str)
-                         -> Result<hir::ExpressionType, hir::TypeError> {
+    fn get_struct_member(
+        &self,
+        _: &hir::StructId,
+        _: &str,
+    ) -> Result<hir::ExpressionType, hir::TypeError> {
         panic!("TestReduceContext::get_struct_member")
     }
-    fn get_function_return(&self,
-                           _: &hir::FunctionId)
-                           -> Result<hir::ExpressionType, hir::TypeError> {
+    fn get_function_return(
+        &self,
+        _: &hir::FunctionId,
+    ) -> Result<hir::ExpressionType, hir::TypeError> {
         panic!("TestReduceContext::get_function_return")
     }
 }
@@ -303,8 +298,10 @@ fn test_reduce_binary_operation() {
     let var_0 = pel::Expression::Variable(var_0_ref.clone());
     let var_1_ref = hir::VariableRef(hir::VariableId(1), hir::ScopeRef(0));
     let var_1 = pel::Expression::Variable(var_1_ref.clone());
-    let dty = hir::DataType(hir::DataLayout::Scalar(hir::ScalarType::Float),
-                            hir::TypeModifier::default());
+    let dty = hir::DataType(
+        hir::DataLayout::Scalar(hir::ScalarType::Float),
+        hir::TypeModifier::default(),
+    );
     let ty = Type::from_data(dty.clone());
     let add = hir::Intrinsic2::Add(dty.clone());
     let pel = pel::Expression::Intrinsic2(add.clone(), Box::new(var_0), Box::new(var_1));
@@ -325,15 +322,23 @@ fn test_reduce_binary_operation() {
 
 #[test]
 fn test_reduce_texture_assignment() {
-
     let lit_zero = hir::Literal::Int(0);
     let lit_zero_pel = pel::Expression::Literal(lit_zero.clone());
     let dtyl_index = hir::DataLayout::Vector(hir::ScalarType::Int, 2);
     let cons = vec![
-        pel::ConstructorSlot { arity: 1, expr: lit_zero_pel.clone() },
-        pel::ConstructorSlot { arity: 1, expr: lit_zero_pel },
+        pel::ConstructorSlot {
+            arity: 1,
+            expr: lit_zero_pel.clone(),
+        },
+        pel::ConstructorSlot {
+            arity: 1,
+            expr: lit_zero_pel,
+        },
     ];
-    let lit_zero2 = Box::new(pel::Expression::NumericConstructor(dtyl_index.clone(), cons));
+    let lit_zero2 = Box::new(pel::Expression::NumericConstructor(
+        dtyl_index.clone(),
+        cons,
+    ));
 
     let dtyl = hir::DataLayout::Vector(hir::ScalarType::Float, 4);
     let dty = hir::DataType(dtyl, hir::TypeModifier::default());
@@ -348,8 +353,9 @@ fn test_reduce_texture_assignment() {
     let assign = hir::Intrinsic2::Assignment(Type::from_data(dty.clone()));
     let pel = pel::Expression::Intrinsic2(assign.clone(), Box::new(ti_0), Box::new(ti_1));
 
-    let tex_ty =
-        Type::from_layout(hir::TypeLayout::Object(hir::ObjectType::RWTexture2D(dty.clone())));
+    let tex_ty = Type::from_layout(hir::TypeLayout::Object(hir::ObjectType::RWTexture2D(
+        dty.clone(),
+    )));
     let c = TestReduceContext::new()
         .global(tex_0, tex_ty.clone())
         .global(tex_1, tex_ty.clone());
@@ -359,10 +365,23 @@ fn test_reduce_texture_assignment() {
             Bind::direct(0, Command::Global(tex_0), tex_ty.clone()),
             Bind::direct(1, Command::Literal(lit_zero.clone()), Type::int()),
             Bind::direct(2, Command::Literal(lit_zero.clone()), Type::int()),
-            Bind::direct(3, Command::NumericConstructor(dtyl_index.clone(), vec![
-                ConstructorSlot { arity: 1, expr: BindId(1) },
-                ConstructorSlot { arity: 1, expr: BindId(2) }
-            ]), Type::intn(2)),
+            Bind::direct(
+                3,
+                Command::NumericConstructor(
+                    dtyl_index.clone(),
+                    vec![
+                        ConstructorSlot {
+                            arity: 1,
+                            expr: BindId(1),
+                        },
+                        ConstructorSlot {
+                            arity: 1,
+                            expr: BindId(2),
+                        },
+                    ],
+                ),
+                Type::intn(2),
+            ),
             Bind {
                 id: BindId(4),
                 value: Command::RWTexture2DIndex(dty.clone(), BindId(0), BindId(3)),
@@ -372,14 +391,27 @@ fn test_reduce_texture_assignment() {
             Bind::direct(5, Command::Global(tex_1), tex_ty),
             Bind::direct(6, Command::Literal(lit_zero.clone()), Type::int()),
             Bind::direct(7, Command::Literal(lit_zero.clone()), Type::int()),
-            Bind::direct(8, Command::NumericConstructor(dtyl_index, vec![
-                ConstructorSlot { arity: 1, expr: BindId(6) },
-                ConstructorSlot { arity: 1, expr: BindId(7) }
-            ]), Type::intn(2)),
-            Bind::direct(9, Command::Intrinsic2(
-                hir::Intrinsic2::Texture2DLoad(dty),
-                BindId(5),
-                BindId(8)), ty.clone()
+            Bind::direct(
+                8,
+                Command::NumericConstructor(
+                    dtyl_index,
+                    vec![
+                        ConstructorSlot {
+                            arity: 1,
+                            expr: BindId(6),
+                        },
+                        ConstructorSlot {
+                            arity: 1,
+                            expr: BindId(7),
+                        },
+                    ],
+                ),
+                Type::intn(2),
+            ),
+            Bind::direct(
+                9,
+                Command::Intrinsic2(hir::Intrinsic2::Texture2DLoad(dty), BindId(5), BindId(8)),
+                ty.clone(),
             ),
             Bind::direct(10, Command::Intrinsic2(assign, BindId(4), BindId(9)), ty),
         ],
