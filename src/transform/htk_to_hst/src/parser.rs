@@ -1,9 +1,28 @@
+use nom::{
+    alt, call, complete, delimited, do_parse, error_position, many0, map, map_res, preceded,
+    separated_list, separated_nonempty_list, tag, terminated, tuple, tuple_parser,
+};
 use nom::{ErrorKind, IResult, Needed};
 use slp_lang_hst::*;
 use slp_lang_htk::*;
 use slp_shared::*;
 use std::collections::HashMap;
 use std::fmt;
+
+macro_rules! opt(
+    ($i:expr, $submac:ident!( $($args:tt)* )) => (
+      {
+        match $submac!($i, $($args)*) {
+          ParseResult::Done(i,o)     => ParseResult::Done(i, Some(o)),
+          ParseResult::Error(_)      => ParseResult::Done($i, None),
+          ParseResult::Incomplete(i) => ParseResult::Incomplete(i)
+        }
+      }
+    );
+    ($i:expr, $f:expr) => (
+      opt!($i, call!($f));
+    );
+);
 
 #[derive(PartialEq, Clone)]
 pub struct ParseError(
@@ -62,12 +81,12 @@ macro_rules! token (
     ($i:expr, $inp: pat) => (
         {
             let _: &[LexToken] = $i;
-            let res: IResult<&[LexToken], LexToken, ParseErrorReason> = if $i.len() == 0 {
-                IResult::Incomplete(Needed::Size(1))
+            let res: ParseResult<LexToken> = if $i.len() == 0 {
+                ParseResult::<LexToken>::Incomplete(Needed::Size(1))
             } else {
                 match $i[0] {
-                    LexToken($inp, _) => IResult::Done(&$i[1..], $i[0].clone()),
-                    _ => IResult::Error(ErrorKind::Custom(ParseErrorReason::WrongToken))
+                    LexToken($inp, _) => ParseResult::<LexToken>::Done(&$i[1..], $i[0].clone()),
+                    _ => ParseResult::<LexToken>::Error(ErrorKind::Custom(ParseErrorReason::WrongToken))
                 }
             };
             res
@@ -77,11 +96,11 @@ macro_rules! token (
         {
             let _: &[LexToken] = $i;
             if $i.len() == 0 {
-                IResult::Incomplete(Needed::Size(1))
+                ParseResult::Incomplete(Needed::Size(1))
             } else {
                 match $i[0] {
-                    $inp => IResult::Done(&$i[1..], $res),
-                    _ => IResult::Error(ErrorKind::Custom(ParseErrorReason::WrongToken))
+                    $inp => ParseResult::Done(&$i[1..], $res),
+                    _ => ParseResult::Error(ErrorKind::Custom(ParseErrorReason::WrongToken))
                 }
             }
         }

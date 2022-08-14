@@ -5,7 +5,7 @@ edition = "2021"
 authors = ["Trark"]
 
 [dependencies]
-nom = "2.0.0"
+nom = "3.0.0"
 
 [dependencies.slp_shared]
 path = "../../shared"
