@@ -2,7 +2,6 @@ use nom::{
     alt, call, complete, delimited, do_parse, many0, map, map_res, opt, preceded, separated_list,
     separated_nonempty_list, tag, terminated,
 };
-use nom::{ErrorKind, IResult, Needed};
 use slp_lang_hst::*;
 use slp_lang_htk::*;
 use slp_shared::*;
@@ -54,6 +53,7 @@ pub enum ParseErrorReason {
     UnknownType,
     DuplicateStructSymbol,
     SymbolIsNotAStruct,
+    ErrorKind(nom::error::ErrorKind),
 }
 
 impl fmt::Display for ParseError {
@@ -71,7 +71,7 @@ macro_rules! token (
             } else {
                 match $i[0] {
                     LexToken($inp, _) => Ok((&$i[1..], $i[0].clone())),
-                    _ => Err(nom::Err::Error(nom::Context::Code($i, nom::ErrorKind::Custom(ParseErrorReason::WrongToken)))),
+                    _ => Err(nom::Err::Error(ParseErrorContext($i, ParseErrorReason::WrongToken))),
                 }
             };
             res
@@ -85,7 +85,7 @@ macro_rules! token (
             } else {
                 match $i[0] {
                     $inp => Ok((&$i[1..], $res)),
-                    _ => Err(nom::Err::Error(nom::Context::Code($i, nom::ErrorKind::Custom(ParseErrorReason::WrongToken)))),
+                    _ => Err(nom::Err::Error(ParseErrorContext($i, ParseErrorReason::WrongToken))),
                 }
             }
         }
@@ -104,7 +104,20 @@ impl SymbolTable {
     }
 }
 
-type ParseResult<'t, T> = IResult<&'t [LexToken], T, ParseErrorReason>;
+type ParseResult<'t, T> = nom::IResult<&'t [LexToken], T, ParseErrorContext<'t>>;
+
+#[derive(PartialEq, Debug, Clone)]
+struct ParseErrorContext<'a>(&'a [LexToken], ParseErrorReason);
+
+impl<'a> nom::error::ParseError<&'a [LexToken]> for ParseErrorContext<'a> {
+    fn from_error_kind(input: &'a [LexToken], kind: nom::error::ErrorKind) -> Self {
+        ParseErrorContext(input, ParseErrorReason::ErrorKind(kind))
+    }
+
+    fn append(_: &[LexToken], _: nom::error::ErrorKind, other: Self) -> Self {
+        other
+    }
+}
 
 trait Parse: Sized {
     type Output;
@@ -130,7 +143,7 @@ impl Parse for VariableName {
 }
 
 // Parse scalar type as part of a string
-fn parse_scalartype_str(input: &[u8]) -> IResult<&[u8], ScalarType> {
+fn parse_scalartype_str(input: &[u8]) -> nom::IResult<&[u8], ScalarType> {
     alt!(input,
         complete!(tag!("bool")) => { |_| ScalarType::Bool } |
         complete!(tag!("int")) => { |_| ScalarType::Int } |
@@ -144,7 +157,7 @@ fn parse_scalartype_str(input: &[u8]) -> IResult<&[u8], ScalarType> {
 
 // Parse data type as part of a string
 fn parse_datalayout_str(typename: &str) -> Option<DataLayout> {
-    fn digit(input: &[u8]) -> IResult<&[u8], u32> {
+    fn digit(input: &[u8]) -> nom::IResult<&[u8], u32> {
         alt!(input,
             tag!("1") => { |_| { 1 } } |
             tag!("2") => { |_| { 2 } } |
@@ -153,7 +166,7 @@ fn parse_datalayout_str(typename: &str) -> Option<DataLayout> {
         )
     }
 
-    fn parse_str(input: &[u8]) -> IResult<&[u8], DataLayout> {
+    fn parse_str(input: &[u8]) -> nom::IResult<&[u8], DataLayout> {
         match parse_scalartype_str(input) {
             Err(err) => Err(err),
             Ok((rest, ty)) => {
@@ -172,9 +185,9 @@ fn parse_datalayout_str(typename: &str) -> Option<DataLayout> {
                                         if rest.len() == 0 {
                                             Ok((&[], DataLayout::Matrix(ty, x, y)))
                                         } else {
-                                            Err(nom::Err::Error(nom::Context::Code(
+                                            Err(nom::Err::Error((
                                                 input,
-                                                nom::ErrorKind::Custom(0),
+                                                nom::error::ErrorKind::Tag,
                                             )))
                                         }
                                     }
@@ -216,22 +229,22 @@ impl Parse for DataLayout {
                                 if rest.len() == 0 {
                                     Ok((&input[1..], ty))
                                 } else {
-                                    Err(nom::Err::Error(nom::Context::Code(
+                                    Err(nom::Err::Error(ParseErrorContext(
                                         input,
-                                        nom::ErrorKind::Custom(ParseErrorReason::UnknownType),
+                                        ParseErrorReason::UnknownType,
                                     )))
                                 }
                             }
                             Err(nom::Err::Incomplete(rem)) => Err(nom::Err::Incomplete(rem)),
-                            Err(_) => Err(nom::Err::Error(nom::Context::Code(
+                            Err(_) => Err(nom::Err::Error(ParseErrorContext(
                                 input,
-                                nom::ErrorKind::Custom(ParseErrorReason::UnknownType),
+                                ParseErrorReason::UnknownType,
                             ))),
                         }
                     }
-                    _ => Err(nom::Err::Error(nom::Context::Code(
+                    _ => Err(nom::Err::Error(ParseErrorContext(
                         input,
-                        nom::ErrorKind::Custom(ParseErrorReason::WrongToken),
+                        ParseErrorReason::WrongToken,
                     ))),
                 }
             }
@@ -268,15 +281,15 @@ impl Parse for DataLayout {
                     }
                     _ => match parse_datalayout_str(&name[..]) {
                         Some(ty) => Ok((&input[1..], ty)),
-                        None => Err(nom::Err::Error(nom::Context::Code(
+                        None => Err(nom::Err::Error(ParseErrorContext(
                             input,
-                            nom::ErrorKind::Custom(ParseErrorReason::UnknownType),
+                            ParseErrorReason::UnknownType,
                         ))),
                     },
                 },
-                _ => Err(nom::Err::Error(nom::Context::Code(
+                _ => Err(nom::Err::Error(ParseErrorContext(
                     input,
-                    nom::ErrorKind::Custom(ParseErrorReason::WrongToken),
+                    ParseErrorReason::WrongToken,
                 ))),
             }
         }
@@ -304,10 +317,10 @@ impl Parse for StructuredLayout {
             match token!(input, Token::Id(_)) {
                 Ok((rest, LexToken(Token::Id(Identifier(name)), _))) => match st.0.get(&name) {
                     Some(&SymbolType::Struct) => Ok((rest, StructuredLayout::Custom(name.clone()))),
-                    _ => {
-                        let reason = ErrorKind::Custom(ParseErrorReason::SymbolIsNotAStruct);
-                        Err(nom::Err::Error(nom::Context::Code(input, reason)))
-                    }
+                    _ => Err(nom::Err::Error(ParseErrorContext(
+                        input,
+                        ParseErrorReason::SymbolIsNotAStruct,
+                    ))),
                 },
                 Err(err) => Err(err),
                 _ => unreachable!(),
@@ -406,16 +419,16 @@ impl Parse for ObjectType {
                 "OutputPatch" => ParseType::OutputPatch,
 
                 _ => {
-                    return Err(nom::Err::Error(nom::Context::Code(
+                    return Err(nom::Err::Error(ParseErrorContext(
                         input,
-                        nom::ErrorKind::Custom(ParseErrorReason::UnknownType),
+                        ParseErrorReason::UnknownType,
                     )))
                 }
             },
             _ => {
-                return Err(nom::Err::Error(nom::Context::Code(
+                return Err(nom::Err::Error(ParseErrorContext(
                     input,
-                    nom::ErrorKind::Custom(ParseErrorReason::UnknownType),
+                    ParseErrorReason::UnknownType,
                 )))
             }
         };
@@ -523,7 +536,7 @@ impl Parse for ObjectType {
     }
 }
 
-fn parse_voidtype(input: &[LexToken]) -> IResult<&[LexToken], TypeLayout, ParseErrorReason> {
+fn parse_voidtype(input: &[LexToken]) -> ParseResult<TypeLayout> {
     if input.len() == 0 {
         Err(nom::Err::Incomplete(nom::Needed::Size(1)))
     } else {
@@ -532,15 +545,15 @@ fn parse_voidtype(input: &[LexToken]) -> IResult<&[LexToken], TypeLayout, ParseE
                 if name == "void" {
                     Ok((&input[1..], TypeLayout::Void))
                 } else {
-                    Err(nom::Err::Error(nom::Context::Code(
+                    Err(nom::Err::Error(ParseErrorContext(
                         input,
-                        nom::ErrorKind::Custom(ParseErrorReason::UnknownType),
+                        ParseErrorReason::UnknownType,
                     )))
                 }
             }
-            _ => Err(nom::Err::Error(nom::Context::Code(
+            _ => Err(nom::Err::Error(ParseErrorContext(
                 input,
-                nom::ErrorKind::Custom(ParseErrorReason::WrongToken),
+                ParseErrorReason::WrongToken,
             ))),
         }
     }
@@ -883,7 +896,7 @@ fn combine_rights(
 }
 
 fn expr_p3<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    fn binop_p3(input: &[LexToken]) -> IResult<&[LexToken], BinOp, ParseErrorReason> {
+    fn binop_p3(input: &[LexToken]) -> ParseResult<BinOp> {
         alt!(input,
             token!(Token::Asterix) => { |_| BinOp::Multiply } |
             token!(Token::ForwardSlash) => { |_| BinOp::Divide } |
@@ -910,7 +923,7 @@ fn expr_p3<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
 }
 
 fn expr_p4<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    fn binop_p4(input: &[LexToken]) -> IResult<&[LexToken], BinOp, ParseErrorReason> {
+    fn binop_p4(input: &[LexToken]) -> ParseResult<BinOp> {
         alt!(input,
             token!(Token::Plus) => { |_| BinOp::Add } |
             token!(Token::Minus) => { |_| BinOp::Subtract }
@@ -936,7 +949,7 @@ fn expr_p4<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
 }
 
 fn expr_p5<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    fn parse_op(input: &[LexToken]) -> IResult<&[LexToken], BinOp, ParseErrorReason> {
+    fn parse_op(input: &[LexToken]) -> ParseResult<BinOp> {
         alt!(
             input,
             do_parse!(
@@ -970,7 +983,7 @@ fn expr_p5<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
 }
 
 fn expr_p6<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    fn parse_op(input: &[LexToken]) -> IResult<&[LexToken], BinOp, ParseErrorReason> {
+    fn parse_op(input: &[LexToken]) -> ParseResult<BinOp> {
         alt!(input,
             do_parse!(
                 token!(Token::LeftAngleBracket(FollowedBy::Token))
@@ -1006,7 +1019,7 @@ fn expr_p6<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
 }
 
 fn expr_p7<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    fn parse_op(input: &[LexToken]) -> IResult<&[LexToken], BinOp, ParseErrorReason> {
+    fn parse_op(input: &[LexToken]) -> ParseResult<BinOp> {
         alt!(input,
             token!(Token::DoubleEquals) => { |_| BinOp::Equality } |
             token!(Token::ExclamationEquals) => { |_| BinOp::Inequality }
@@ -1138,7 +1151,7 @@ fn expr_p13<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Loca
 }
 
 fn expr_p14<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    fn op_p14(input: &[LexToken]) -> IResult<&[LexToken], BinOp, ParseErrorReason> {
+    fn op_p14(input: &[LexToken]) -> ParseResult<BinOp> {
         alt!(
             input,
             token!(LexToken(Token::Equals, _) => BinOp::Assignment)
@@ -1242,7 +1255,7 @@ impl Parse for Initializer {
         }
 
         if input.len() == 0 {
-            Err(nom::Err::Incomplete(Needed::Size(1)))
+            Err(nom::Err::Incomplete(nom::Needed::Size(1)))
         } else {
             match input[0].0 {
                 Token::Equals => map!(&input[1..], call!(init_any, st), |init| Some(init)),
@@ -1259,7 +1272,10 @@ fn test_initializer() {
         Initializer::parse(input, &st)
     }
 
-    assert_eq!(initializer(&[]), Err(nom::Err::Incomplete(Needed::Size(1))));
+    assert_eq!(
+        initializer(&[]),
+        Err(nom::Err::Incomplete(nom::Needed::Size(1)))
+    );
 
     // Semicolon to trigger parsing to end
     let semicolon = LexToken::with_no_loc(Token::Semicolon);
@@ -1368,7 +1384,7 @@ impl Parse for VarDef {
 impl Parse for InitStatement {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        let res: IResult<&[LexToken], InitStatement, ParseErrorReason> = alt!(input,
+        let res: ParseResult<InitStatement> = alt!(input,
             parse!(VarDef, st) => { |vd| InitStatement::Declaration(vd) } |
             parse!(Expression, st) => { |e| InitStatement::Expression(e) }
         );
@@ -1416,7 +1432,7 @@ impl Parse for Statement {
             Err(err) => return Err(err),
         };
         if input.len() == 0 {
-            Err(nom::Err::Incomplete(Needed::Size(1)))
+            Err(nom::Err::Incomplete(nom::Needed::Size(1)))
         } else {
             let (head, tail) = (input[0].clone(), &input[1..]);
             match head {
@@ -1434,7 +1450,7 @@ impl Parse for Statement {
                         Err(err) => Err(err),
                         Ok((rest, Statement::If(cond, first))) => {
                             if input.len() == 0 {
-                                Err(nom::Err::Incomplete(Needed::Size(1)))
+                                Err(nom::Err::Incomplete(nom::Needed::Size(1)))
                             } else {
                                 let (head, tail) = (rest[0].clone(), &rest[1..]);
                                 match head {
@@ -1890,13 +1906,13 @@ fn rootdefinition_with_semicolon<'t>(
 
 // Find the error with the longest tokens used
 fn get_most_relevant_error<'a: 'c, 'b: 'c, 'c>(
-    lhs: nom::Err<&'a [LexToken], ParseErrorReason>,
-    _: nom::Err<&'b [LexToken], ParseErrorReason>,
-) -> nom::Err<&'c [LexToken], ParseErrorReason> {
+    lhs: nom::Err<ParseErrorContext<'a>>,
+    _: nom::Err<ParseErrorContext<'b>>,
+) -> nom::Err<ParseErrorContext<'c>> {
     lhs
 }
 
-pub fn module(input: &[LexToken]) -> IResult<&[LexToken], Vec<RootDefinition>, ParseErrorReason> {
+fn module(input: &[LexToken]) -> ParseResult<Vec<RootDefinition>> {
     let mut roots = Vec::new();
     let mut rest = input;
     let mut symbol_table = SymbolTable::empty();
@@ -1908,10 +1924,7 @@ pub fn module(input: &[LexToken]) -> IResult<&[LexToken], Vec<RootDefinition>, P
                     match symbol_table.0.insert(sd.name.clone(), SymbolType::Struct) {
                         Some(_) => {
                             let reason = ParseErrorReason::DuplicateStructSymbol;
-                            return Err(nom::Err::Error(nom::Context::Code(
-                                input,
-                                ErrorKind::Custom(reason),
-                            )));
+                            return Err(nom::Err::Error(ParseErrorContext(input, reason)));
                         }
                         None => {}
                     }
@@ -1932,17 +1945,6 @@ pub fn module(input: &[LexToken]) -> IResult<&[LexToken], Vec<RootDefinition>, P
     }
 }
 
-fn errorkind_to_reason(errkind: ErrorKind<ParseErrorReason>) -> ParseErrorReason {
-    match errkind {
-        ErrorKind::Custom(reason) => reason,
-        _ => ParseErrorReason::Unknown,
-    }
-}
-
-fn iresult_to_error(err: ErrorKind<ParseErrorReason>) -> ParseError {
-    ParseError(errorkind_to_reason(err), None, None)
-}
-
 pub fn parse(entry_point: String, source: &[LexToken]) -> Result<Module, ParseError> {
     let parse_result = module(source);
 
@@ -1956,8 +1958,8 @@ pub fn parse(entry_point: String, source: &[LexToken]) -> Result<Module, ParseEr
             entry_point: entry_point,
             root_definitions: hlsl,
         }),
-        Err(nom::Err::Error(nom::Context::Code(_, err))) => Err(iresult_to_error(err)),
-        Err(nom::Err::Failure(nom::Context::Code(_, err))) => Err(iresult_to_error(err)),
+        Err(nom::Err::Error(ParseErrorContext(_, err))) => Err(ParseError(err, None, None)),
+        Err(nom::Err::Failure(ParseErrorContext(_, err))) => Err(ParseError(err, None, None)),
         Err(nom::Err::Incomplete(_)) => Err(ParseError(
             ParseErrorReason::UnexpectedEndOfStream,
             None,
@@ -1980,7 +1982,7 @@ fn bexp_var(var_name: &'static str, line: u64, column: u64) -> Box<Located<Expre
 }
 
 #[cfg(test)]
-fn node<T>(input: &[LexToken]) -> IResult<&[LexToken], <T as Parse>::Output, ParseErrorReason>
+fn node<T>(input: &[LexToken]) -> ParseResult<<T as Parse>::Output>
 where
     T: Parse,
 {
@@ -2050,10 +2052,10 @@ where
                     Err(nom::Err::Incomplete(needed)) => {
                         panic!("Failed to parse `{:?}`: Needed {:?} more", stream, needed)
                     }
-                    Err(nom::Err::Error(nom::Context::Code(_, err))) => {
+                    Err(nom::Err::Error(ParseErrorContext(_, err))) => {
                         panic!("Failed to parse `{:?}`: Error: {:?}", err, stream)
                     }
-                    Err(nom::Err::Failure(nom::Context::Code(_, err))) => {
+                    Err(nom::Err::Failure(ParseErrorContext(_, err))) => {
                         panic!("Failed to parse `{:?}`: Error: {:?}", err, stream)
                     }
                 }
@@ -2067,7 +2069,7 @@ where
 fn node_with_symbols<'t, T>(
     input: &'t [LexToken],
     st: &SymbolTable,
-) -> IResult<&'t [LexToken], <T as Parse>::Output, ParseErrorReason>
+) -> ParseResult<'t, <T as Parse>::Output>
 where
     T: Parse,
 {
@@ -2103,10 +2105,10 @@ where
                     Err(nom::Err::Incomplete(needed)) => {
                         panic!("Failed to parse `{:?}`: Needed {:?} more", stream, needed)
                     }
-                    Err(nom::Err::Error(nom::Context::Code(_, err))) => {
+                    Err(nom::Err::Error(ParseErrorContext(_, err))) => {
                         panic!("Failed to parse `{:?}`: Error: {:?}", err, stream)
                     }
-                    Err(nom::Err::Failure(nom::Context::Code(_, err))) => {
+                    Err(nom::Err::Failure(ParseErrorContext(_, err))) => {
                         panic!("Failed to parse `{:?}`: Error: {:?}", err, stream)
                     }
                 }
