@@ -234,25 +234,27 @@ impl Parse for DataLayout {
             match &input[0] {
                 &LexToken(Token::Id(Identifier(ref name)), _) => match &name[..] {
                     "vector" => {
-                        chain!(&input[1..],
-                            token!(Token::LeftAngleBracket(_)) ~
-                            scalar: parse_scalartype ~
-                            token!(Token::Comma) ~
-                            x: parse_digit ~
-                            token!(Token::RightAngleBracket(_)),
-                            || { DataLayout::Vector(scalar, x) }
+                        do_parse!(
+                            &input[1..],
+                            token!(Token::LeftAngleBracket(_))
+                                >> scalar: parse_scalartype
+                                >> token!(Token::Comma)
+                                >> x: parse_digit
+                                >> token!(Token::RightAngleBracket(_))
+                                >> (DataLayout::Vector(scalar, x))
                         )
                     }
                     "matrix" => {
-                        chain!(&input[1..],
-                            token!(Token::LeftAngleBracket(_)) ~
-                            scalar: parse_scalartype ~
-                            token!(Token::Comma) ~
-                            x: parse_digit ~
-                            token!(Token::Comma) ~
-                            y: parse_digit ~
-                            token!(Token::RightAngleBracket(_)),
-                            || { DataLayout::Matrix(scalar, x, y) }
+                        do_parse!(
+                            &input[1..],
+                            token!(Token::LeftAngleBracket(_))
+                                >> scalar: parse_scalartype
+                                >> token!(Token::Comma)
+                                >> x: parse_digit
+                                >> token!(Token::Comma)
+                                >> y: parse_digit
+                                >> token!(Token::RightAngleBracket(_))
+                                >> (DataLayout::Matrix(scalar, x, y))
                         )
                     }
                     _ => match parse_datalayout_str(&name[..]) {
@@ -542,12 +544,17 @@ impl Parse for Type {
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
         let parse_typelayout = |input| TypeLayout::parse(input, &st);
         // Todo: modifiers that aren't const
-        chain!(input,
-            is_const: opt!(token!(Token::Const)) ~
-            tl: parse_typelayout,
-            || {
-                Type(tl, TypeModifier { is_const: !is_const.is_none(), .. TypeModifier::default() })
-            }
+        do_parse!(
+            input,
+            is_const: opt!(token!(Token::Const))
+                >> tl: parse_typelayout
+                >> (Type(
+                    tl,
+                    TypeModifier {
+                        is_const: !is_const.is_none(),
+                        ..TypeModifier::default()
+                    }
+                ))
         )
     }
 }
@@ -558,16 +565,14 @@ impl Parse for GlobalType {
         let parse_typename = |input| Type::parse(input, &st);
         // Interpolation modifiers unimplemented
         // Non-standard combinations of storage classes unimplemented
-        chain!(input,
+        do_parse!(
+            input,
             gs: opt!(alt!(
-                token!(LexToken(Token::Static, _) => GlobalStorage::Static) |
-                token!(LexToken(Token::GroupShared, _) => GlobalStorage::GroupShared) |
-                token!(LexToken(Token::Extern, _) => GlobalStorage::Extern)
-            )) ~
-            ty: parse_typename,
-            || {
-                GlobalType(ty, gs.unwrap_or(GlobalStorage::default()), None)
-            }
+                token!(LexToken(Token::Static, _) => GlobalStorage::Static)
+                    | token!(LexToken(Token::GroupShared, _) => GlobalStorage::GroupShared)
+                    | token!(LexToken(Token::Extern, _) => GlobalStorage::Extern)
+            )) >> ty: parse_typename
+                >> (GlobalType(ty, gs.unwrap_or(GlobalStorage::default()), None))
         )
     }
 }
@@ -618,23 +623,22 @@ fn parse_arraydim<'t>(
     input: &'t [LexToken],
     st: &SymbolTable,
 ) -> ParseResult<'t, Option<Located<Expression>>> {
-    chain!(input,
-        token!(Token::LeftSquareBracket) ~
-        constant_expression: opt!(parse!(ExpressionNoSeq, st)) ~
-        token!(Token::RightSquareBracket),
-        || { constant_expression }
+    do_parse!(
+        input,
+        token!(Token::LeftSquareBracket)
+            >> constant_expression: opt!(parse!(ExpressionNoSeq, st))
+            >> token!(Token::RightSquareBracket)
+            >> (constant_expression)
     )
 }
 
 fn expr_paren<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
     alt!(input,
-        chain!(
-            start: token!(Token::LeftParen) ~
-            expr: parse!(Expression, st) ~
-            token!(Token::RightParen),
-            || {
-                Located::new(expr.to_node(), start.to_loc())
-            }
+        do_parse!(
+            start: token!(Token::LeftParen)
+                >> expr: parse!(Expression, st)
+                >> token!(Token::RightParen)
+                >> (Located::new(expr.to_node(), start.to_loc()))
         ) |
         parse!(VariableName, st) => {
             |name: Located<String>| { Located::new(Expression::Variable(name.node), name.location) }
@@ -680,61 +684,63 @@ fn expr_p1<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
         input: &'t [LexToken],
         st: &SymbolTable,
     ) -> ParseResult<'t, Located<Precedence1Postfix>> {
-        chain!(
+        do_parse!(
             input,
             right:
                 alt!(
-                    chain!(
-                        start: token!(Token::Plus) ~
-                        token!(Token::Plus),
-                        || {
-                            Located::new(Precedence1Postfix::Increment, start.to_loc())
-                        }
-                    ) | chain!(
-                        start: token!(Token::Minus) ~
-                        token!(Token::Minus),
-                        || {
-                            Located::new(Precedence1Postfix::Decrement, start.to_loc())
-                        }
-                    ) | chain!(
-                        start: token!(Token::LeftParen) ~
-                        params: opt!(chain!(
-                            first: parse!(ExpressionNoSeq, st) ~
-                            rest: many0!(chain!(
-                                token!(Token::Comma) ~
-                                next: parse!(ExpressionNoSeq, st),
-                                || { next }
-                            )),
-                            || {
-                                let mut v = Vec::new();
-                                v.push(first);
-                                for next in rest.iter() {
-                                    v.push(next.clone())
-                                }
-                                v
-                            }
-                        )) ~
-                        token!(Token::RightParen),
-                        || { Located::new(Precedence1Postfix::Call(
-                            match params.clone() { Some(v) => v, None => Vec::new() }
-                        ), start.to_loc()) }
-                    ) | chain!(
-                        token!(Token::Period) ~
-                        member: parse!(VariableName, st),
-                        || {
-                            Located::new(
+                    do_parse!(
+                        start: token!(Token::Plus)
+                            >> token!(Token::Plus)
+                            >> (Located::new(Precedence1Postfix::Increment, start.to_loc()))
+                    ) | do_parse!(
+                        start: token!(Token::Minus)
+                            >> token!(Token::Minus)
+                            >> (Located::new(Precedence1Postfix::Decrement, start.to_loc()))
+                    ) | do_parse!(
+                        start: token!(Token::LeftParen)
+                            >> params:
+                                opt!(do_parse!(
+                                    first: parse!(ExpressionNoSeq, st)
+                                        >> rest: many0!(do_parse!(
+                                            token!(Token::Comma)
+                                                >> next: parse!(ExpressionNoSeq, st)
+                                                >> (next)
+                                        ))
+                                        >> ({
+                                            let mut v = Vec::new();
+                                            v.push(first);
+                                            for next in rest.iter() {
+                                                v.push(next.clone())
+                                            }
+                                            v
+                                        })
+                                ))
+                            >> token!(Token::RightParen)
+                            >> (Located::new(
+                                Precedence1Postfix::Call(match params.clone() {
+                                    Some(v) => v,
+                                    None => Vec::new(),
+                                }),
+                                start.to_loc()
+                            ))
+                    ) | do_parse!(
+                        token!(Token::Period)
+                            >> member: parse!(VariableName, st)
+                            >> (Located::new(
                                 Precedence1Postfix::Member(member.node.clone()),
                                 member.location.clone()
-                            )
-                        }
-                    ) | chain!(
-                        start: token!(Token::LeftSquareBracket) ~
-                        subscript: parse!(ExpressionNoSeq, st) ~
-                        token!(Token::RightSquareBracket),
-                        || Located::new(Precedence1Postfix::ArraySubscript(subscript), start.to_loc())
+                            ))
+                    ) | do_parse!(
+                        start: token!(Token::LeftSquareBracket)
+                            >> subscript: parse!(ExpressionNoSeq, st)
+                            >> token!(Token::RightSquareBracket)
+                            >> (Located::new(
+                                Precedence1Postfix::ArraySubscript(subscript),
+                                start.to_loc()
+                            ))
                     )
-                ),
-            || right
+                )
+                >> (right)
         )
     }
 
@@ -744,12 +750,13 @@ fn expr_p1<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
         } else {
             return IResult::Incomplete(Needed::Size(1));
         };
-        chain!(input,
-            dtyl: parse!(DataLayout, st) ~
-            token!(Token::LeftParen) ~
-            list: separated_list!(token!(Token::Comma), parse!(ExpressionNoSeq, st)) ~
-            token!(Token::RightParen),
-            || Located::new(Expression::NumericConstructor(dtyl, list), loc)
+        do_parse!(
+            input,
+            dtyl: parse!(DataLayout, st)
+                >> token!(Token::LeftParen)
+                >> list: separated_list!(token!(Token::Comma), parse!(ExpressionNoSeq, st))
+                >> token!(Token::RightParen)
+                >> (Located::new(Expression::NumericConstructor(dtyl, list), loc))
         )
     }
 
@@ -759,57 +766,54 @@ fn expr_p1<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
         IResult::Error(_) => input,
     };
 
-    chain!(input,
-        left: call!(expr_paren, st) ~
-        rights: many0!(call!(expr_p1_right, st)),
-        || {
-            let loc = left.location.clone();
-            let mut final_expression = left;
-            for val in rights.iter() {
-                final_expression = Located::new(match val.node.clone() {
-                    Precedence1Postfix::Increment => {
-                        Expression::UnaryOperation(
-                            UnaryOp::PostfixIncrement,
-                            Box::new(final_expression)
-                        )
-                    },
-                    Precedence1Postfix::Decrement => {
-                        Expression::UnaryOperation(
-                            UnaryOp::PostfixDecrement,
-                            Box::new(final_expression)
-                        )
-                    },
-                    Precedence1Postfix::Call(params) => {
-                        Expression::Call(Box::new(final_expression), params)
-                    },
-                    Precedence1Postfix::ArraySubscript(expr) => {
-                        Expression::ArraySubscript(Box::new(final_expression), Box::new(expr))
-                    },
-                    Precedence1Postfix::Member(name) => {
-                        Expression::Member(Box::new(final_expression), name)
-                    },
-                }, loc.clone())
-            }
-            final_expression
-        }
+    do_parse!(
+        input,
+        left: call!(expr_paren, st)
+            >> rights: many0!(call!(expr_p1_right, st))
+            >> ({
+                let loc = left.location.clone();
+                let mut final_expression = left;
+                for val in rights.iter() {
+                    final_expression = Located::new(
+                        match val.node.clone() {
+                            Precedence1Postfix::Increment => Expression::UnaryOperation(
+                                UnaryOp::PostfixIncrement,
+                                Box::new(final_expression),
+                            ),
+                            Precedence1Postfix::Decrement => Expression::UnaryOperation(
+                                UnaryOp::PostfixDecrement,
+                                Box::new(final_expression),
+                            ),
+                            Precedence1Postfix::Call(params) => {
+                                Expression::Call(Box::new(final_expression), params)
+                            }
+                            Precedence1Postfix::ArraySubscript(expr) => Expression::ArraySubscript(
+                                Box::new(final_expression),
+                                Box::new(expr),
+                            ),
+                            Precedence1Postfix::Member(name) => {
+                                Expression::Member(Box::new(final_expression), name)
+                            }
+                        },
+                        loc.clone(),
+                    )
+                }
+                final_expression
+            })
     )
 }
 
 fn unaryop_prefix<'t>(input: &'t [LexToken]) -> ParseResult<'t, Located<UnaryOp>> {
     alt!(input,
-        chain!(
-            start: token!(Token::Plus) ~
-            token!(Token::Plus),
-            || {
-                Located::new(UnaryOp::PrefixIncrement, start.to_loc())
-            }
+        do_parse!(
+            start: token!(Token::Plus)
+                >> token!(Token::Plus)
+                >> (Located::new(UnaryOp::PrefixIncrement, start.to_loc()))
         ) |
-        chain!(
-            start: token!(Token::Minus) ~
-            token!(Token::Minus),
-            || {
-                Located::new(UnaryOp::PrefixDecrement, start.to_loc())
-            }
+        do_parse!(
+            start: token!(Token::Minus)
+                >> token!(Token::Minus)
+                >> (Located::new(UnaryOp::PrefixDecrement, start.to_loc()))
         ) |
         token!(Token::Plus) => { |s: LexToken| Located::new(UnaryOp::Plus, s.to_loc()) } |
         token!(Token::Minus) => { |s: LexToken| Located::new(UnaryOp::Minus, s.to_loc()) } |
@@ -823,21 +827,21 @@ fn unaryop_prefix<'t>(input: &'t [LexToken]) -> ParseResult<'t, Located<UnaryOp>
 fn expr_p2<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
     alt!(
         input,
-        chain!(
-            unary: unaryop_prefix ~
-            expr: call!(expr_p2, st),
-            || {
-                Located::new(Expression::UnaryOperation(
-                    unary.node.clone(),
-                    Box::new(expr)
-                ), unary.location.clone())
-            }
-        ) | chain!(
-            start: token!(Token::LeftParen) ~
-            cast: parse!(Type, st) ~
-            token!(Token::RightParen) ~
-            expr: call!(expr_p2, st),
-            || Located::new(Expression::Cast(cast, Box::new(expr)), start.to_loc())
+        do_parse!(
+            unary: unaryop_prefix
+                >> expr: call!(expr_p2, st)
+                >> ({
+                    Located::new(
+                        Expression::UnaryOperation(unary.node.clone(), Box::new(expr)),
+                        unary.location.clone(),
+                    )
+                })
+        ) | do_parse!(
+            start: token!(Token::LeftParen)
+                >> cast: parse!(Type, st)
+                >> token!(Token::RightParen)
+                >> expr: call!(expr_p2, st)
+                >> (Located::new(Expression::Cast(cast, Box::new(expr)), start.to_loc()))
         ) | call!(expr_p1, st)
     )
 }
@@ -875,17 +879,17 @@ fn expr_p3<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
         input: &'t [LexToken],
         st: &SymbolTable,
     ) -> ParseResult<'t, (BinOp, Located<Expression>)> {
-        chain!(input,
-            op: binop_p3 ~
-            right: call!(expr_p2, st),
-            || (op, right)
+        do_parse!(
+            input,
+            op: binop_p3 >> right: call!(expr_p2, st) >> (op, right)
         )
     }
 
-    chain!(input,
-        left: call!(expr_p2, st) ~
-        rights: many0!(call!(expr_p3_right, st)),
-        || combine_rights(left, rights)
+    do_parse!(
+        input,
+        left: call!(expr_p2, st)
+            >> rights: many0!(call!(expr_p3_right, st))
+            >> (combine_rights(left, rights))
     )
 }
 
@@ -901,17 +905,17 @@ fn expr_p4<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
         input: &'t [LexToken],
         st: &SymbolTable,
     ) -> ParseResult<'t, (BinOp, Located<Expression>)> {
-        chain!(input,
-            op: binop_p4 ~
-            right: call!(expr_p3, st),
-            || (op, right)
+        do_parse!(
+            input,
+            op: binop_p4 >> right: call!(expr_p3, st) >> (op, right)
         )
     }
 
-    chain!(input,
-        left: call!(expr_p3, st) ~
-        rights: many0!(call!(expr_p4_right, st)),
-        || combine_rights(left, rights)
+    do_parse!(
+        input,
+        left: call!(expr_p3, st)
+            >> rights: many0!(call!(expr_p4_right, st))
+            >> (combine_rights(left, rights))
     )
 }
 
@@ -919,14 +923,14 @@ fn expr_p5<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
     fn parse_op(input: &[LexToken]) -> IResult<&[LexToken], BinOp, ParseErrorReason> {
         alt!(
             input,
-            chain!(
-                token!(Token::LeftAngleBracket(FollowedBy::Token)) ~
-                token!(Token::LeftAngleBracket(_)),
-                || BinOp::LeftShift
-            ) | chain!(
-                token!(Token::RightAngleBracket(FollowedBy::Token)) ~
-                token!(Token::RightAngleBracket(_)),
-                || BinOp::RightShift
+            do_parse!(
+                token!(Token::LeftAngleBracket(FollowedBy::Token))
+                    >> token!(Token::LeftAngleBracket(_))
+                    >> (BinOp::LeftShift)
+            ) | do_parse!(
+                token!(Token::RightAngleBracket(FollowedBy::Token))
+                    >> token!(Token::RightAngleBracket(_))
+                    >> (BinOp::RightShift)
             )
         )
     }
@@ -935,32 +939,32 @@ fn expr_p5<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
         input: &'t [LexToken],
         st: &SymbolTable,
     ) -> ParseResult<'t, (BinOp, Located<Expression>)> {
-        chain!(input,
-            op: parse_op ~
-            right: call!(expr_p4, st),
-            || (op, right)
+        do_parse!(
+            input,
+            op: parse_op >> right: call!(expr_p4, st) >> (op, right)
         )
     }
 
-    chain!(input,
-        left: call!(expr_p4, st) ~
-        rights: many0!(call!(parse_rights, st)),
-        || combine_rights(left, rights)
+    do_parse!(
+        input,
+        left: call!(expr_p4, st)
+            >> rights: many0!(call!(parse_rights, st))
+            >> (combine_rights(left, rights))
     )
 }
 
 fn expr_p6<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
     fn parse_op(input: &[LexToken]) -> IResult<&[LexToken], BinOp, ParseErrorReason> {
         alt!(input,
-            chain!(
-                token!(Token::LeftAngleBracket(FollowedBy::Token)) ~
-                token!(Token::Equals),
-                || BinOp::LessEqual
+            do_parse!(
+                token!(Token::LeftAngleBracket(FollowedBy::Token))
+                    >> token!(Token::Equals)
+                    >> (BinOp::LessEqual)
             ) |
-            chain!(
-                token!(Token::RightAngleBracket(FollowedBy::Token)) ~
-                token!(Token::Equals),
-                || BinOp::GreaterEqual
+            do_parse!(
+                token!(Token::RightAngleBracket(FollowedBy::Token))
+                    >> token!(Token::Equals)
+                    >> (BinOp::GreaterEqual)
             ) |
             token!(Token::LeftAngleBracket(_)) => { |_| BinOp::LessThan } |
             token!(Token::RightAngleBracket(_)) => { |_| BinOp::GreaterThan }
@@ -971,17 +975,17 @@ fn expr_p6<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
         input: &'t [LexToken],
         st: &SymbolTable,
     ) -> ParseResult<'t, (BinOp, Located<Expression>)> {
-        chain!(input,
-            op: parse_op ~
-            right: call!(expr_p5, st),
-            || (op, right)
+        do_parse!(
+            input,
+            op: parse_op >> right: call!(expr_p5, st) >> (op, right)
         )
     }
 
-    chain!(input,
-        left: call!(expr_p5, st) ~
-        rights: many0!(call!(parse_rights, st)),
-        || combine_rights(left, rights)
+    do_parse!(
+        input,
+        left: call!(expr_p5, st)
+            >> rights: many0!(call!(parse_rights, st))
+            >> (combine_rights(left, rights))
     )
 }
 
@@ -997,111 +1001,123 @@ fn expr_p7<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
         input: &'t [LexToken],
         st: &SymbolTable,
     ) -> ParseResult<'t, (BinOp, Located<Expression>)> {
-        chain!(input,
-            op: parse_op ~
-            right: call!(expr_p6, st),
-            || (op, right)
+        do_parse!(
+            input,
+            op: parse_op >> right: call!(expr_p6, st) >> (op, right)
         )
     }
 
-    chain!(input,
-        left: call!(expr_p6, st) ~
-        rights: many0!(call!(parse_rights, st)),
-        || combine_rights(left, rights)
+    do_parse!(
+        input,
+        left: call!(expr_p6, st)
+            >> rights: many0!(call!(parse_rights, st))
+            >> (combine_rights(left, rights))
     )
 }
 
 fn expr_p8<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    chain!(input,
-        left: call!(expr_p7, st) ~
-        rights: many0!(chain!(
-            op: token!(LexToken(Token::Ampersand(_), _) => BinOp::BitwiseAnd) ~
-            right: call!(expr_p7, st),
-            || (op, right)
-        )),
-        || combine_rights(left, rights)
+    do_parse!(
+        input,
+        left: call!(expr_p7, st)
+            >> rights:
+                many0!(do_parse!(
+                    op: token!(LexToken(Token::Ampersand(_), _) => BinOp::BitwiseAnd)
+                        >> right: call!(expr_p7, st)
+                        >> (op, right)
+                ))
+            >> (combine_rights(left, rights))
     )
 }
 
 fn expr_p9<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    chain!(input,
-        left: call!(expr_p8, st) ~
-        rights: many0!(chain!(
-            op: token!(LexToken(Token::Hat, _) => BinOp::BitwiseXor) ~
-            right: call!(expr_p8, st),
-            || (op, right)
-        )),
-        || combine_rights(left, rights)
+    do_parse!(
+        input,
+        left: call!(expr_p8, st)
+            >> rights:
+                many0!(do_parse!(
+                    op: token!(LexToken(Token::Hat, _) => BinOp::BitwiseXor)
+                        >> right: call!(expr_p8, st)
+                        >> (op, right)
+                ))
+            >> (combine_rights(left, rights))
     )
 }
 
 fn expr_p10<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    chain!(input,
-        left: call!(expr_p9, st) ~
-        rights: many0!(chain!(
-            op: token!(LexToken(Token::VerticalBar(_), _) => BinOp::BitwiseOr) ~
-            right: call!(expr_p9, st),
-            || (op, right)
-        )),
-        || combine_rights(left, rights)
+    do_parse!(
+        input,
+        left: call!(expr_p9, st)
+            >> rights:
+                many0!(do_parse!(
+                    op: token!(LexToken(Token::VerticalBar(_), _) => BinOp::BitwiseOr)
+                        >> right: call!(expr_p9, st)
+                        >> (op, right)
+                ))
+            >> (combine_rights(left, rights))
     )
 }
 
 fn expr_p11<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    chain!(input,
-        left: call!(expr_p10, st) ~
-        rights: many0!(chain!(
-            op: chain!(
-                token!(Token::Ampersand(FollowedBy::Token)) ~
-                token!(Token::Ampersand(_)),
-                || BinOp::BooleanAnd
-            ) ~
-            right: call!(expr_p10, st),
-            || (op, right)
-        )),
-        || combine_rights(left, rights)
+    do_parse!(
+        input,
+        left: call!(expr_p10, st)
+            >> rights:
+                many0!(do_parse!(
+                    op: do_parse!(
+                        token!(Token::Ampersand(FollowedBy::Token))
+                            >> token!(Token::Ampersand(_))
+                            >> (BinOp::BooleanAnd)
+                    ) >> right: call!(expr_p10, st)
+                        >> (op, right)
+                ))
+            >> (combine_rights(left, rights))
     )
 }
 
 fn expr_p12<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    chain!(input,
-        left: call!(expr_p11, st) ~
-        rights: many0!(chain!(
-            op: chain!(
-                token!(Token::VerticalBar(FollowedBy::Token)) ~
-                token!(Token::VerticalBar(_)),
-                || BinOp::BooleanOr
-            ) ~
-            right: call!(expr_p11, st),
-            || (op, right)
-        )),
-        || combine_rights(left, rights)
+    do_parse!(
+        input,
+        left: call!(expr_p11, st)
+            >> rights:
+                many0!(do_parse!(
+                    op: do_parse!(
+                        token!(Token::VerticalBar(FollowedBy::Token))
+                            >> token!(Token::VerticalBar(_))
+                            >> (BinOp::BooleanOr)
+                    ) >> right: call!(expr_p11, st)
+                        >> (op, right)
+                ))
+            >> (combine_rights(left, rights))
     )
 }
 
 fn expr_p13<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    chain!(input,
-        main: call!(expr_p12, st) ~
-        opt: opt!(chain!(
-            token!(Token::QuestionMark) ~
-            left: call!(expr_p13, st) ~
-            token!(Token::Colon) ~
-            right: call!(expr_p13, st),
-            || (left, right)
-        )),
-        || {
-            match opt.clone() {
-                Some((left, right)) => {
-                    let loc = main.location.clone();
-                    Located::new(Expression::TernaryConditional(
-                        Box::new(main),
-                        Box::new(left),
-                        Box::new(right)
-                    ), loc)
+    do_parse!(
+        input,
+        main: call!(expr_p12, st)
+            >> opt: opt!(do_parse!(
+                token!(Token::QuestionMark)
+                    >> left: call!(expr_p13, st)
+                    >> token!(Token::Colon)
+                    >> right: call!(expr_p13, st)
+                    >> (left, right)
+            ))
+            >> ({
+                match opt.clone() {
+                    Some((left, right)) => {
+                        let loc = main.location.clone();
+                        Located::new(
+                            Expression::TernaryConditional(
+                                Box::new(main),
+                                Box::new(left),
+                                Box::new(right),
+                            ),
+                            loc,
+                        )
+                    }
+                    None => main,
                 }
-                None => main,
-            }
-        }
+            })
     )
 }
 
@@ -1110,42 +1126,56 @@ fn expr_p14<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Loca
         alt!(
             input,
             token!(LexToken(Token::Equals, _) => BinOp::Assignment)
-                | chain!(token!(Token::Plus) ~ token!(Token::Equals), || BinOp::SumAssignment)
-                | chain!(token!(Token::Minus) ~ token!(Token::Equals), || BinOp::DifferenceAssignment)
-                | chain!(token!(Token::Asterix) ~ token!(Token::Equals), || BinOp::ProductAssignment)
-                | chain!(
-                   token!(Token::ForwardSlash) ~
-                   token!(Token::Equals),
-                   || BinOp::QuotientAssignment
+                | do_parse!(token!(Token::Plus) >> token!(Token::Equals) >> (BinOp::SumAssignment))
+                | do_parse!(
+                    token!(Token::Minus) >> token!(Token::Equals) >> (BinOp::DifferenceAssignment)
                 )
-                | chain!(token!(Token::Percent) ~ token!(Token::Equals), || BinOp::RemainderAssignment)
+                | do_parse!(
+                    token!(Token::Asterix) >> token!(Token::Equals) >> (BinOp::ProductAssignment)
+                )
+                | do_parse!(
+                    token!(Token::ForwardSlash)
+                        >> token!(Token::Equals)
+                        >> (BinOp::QuotientAssignment)
+                )
+                | do_parse!(
+                    token!(Token::Percent) >> token!(Token::Equals) >> (BinOp::RemainderAssignment)
+                )
         )
     }
 
-    chain!(input,
-        lhs: call!(expr_p13, st) ~
-        opt: opt!(chain!(op: op_p14 ~ rhs: call!(expr_p14, st), || (op, rhs))),
-        || {
-            match opt.clone() {
-                Some((op, rhs)) => {
-                    let loc = lhs.location.clone();
-                    Located::new(Expression::BinaryOperation(op, Box::new(lhs), Box::new(rhs)), loc)
+    do_parse!(
+        input,
+        lhs: call!(expr_p13, st)
+            >> opt: opt!(do_parse!(
+                op: op_p14 >> rhs: call!(expr_p14, st) >> (op, rhs)
+            ))
+            >> ({
+                match opt.clone() {
+                    Some((op, rhs)) => {
+                        let loc = lhs.location.clone();
+                        Located::new(
+                            Expression::BinaryOperation(op, Box::new(lhs), Box::new(rhs)),
+                            loc,
+                        )
+                    }
+                    None => lhs,
                 }
-                None => lhs,
-            }
-        }
+            })
     )
 }
 
 fn expr_p15<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    chain!(input,
-        left: call!(expr_p14, st) ~
-        rights: many0!(chain!(
-            op: token!(LexToken(Token::Comma, _) => BinOp::Sequence) ~
-            right: call!(expr_p14, st),
-            || (op, right)
-        )),
-        || combine_rights(left, rights)
+    do_parse!(
+        input,
+        left: call!(expr_p14, st)
+            >> rights:
+                many0!(do_parse!(
+                    op: token!(LexToken(Token::Comma, _) => BinOp::Sequence)
+                        >> right: call!(expr_p14, st)
+                        >> (op, right)
+                ))
+            >> (combine_rights(left, rights))
     )
 }
 
@@ -1290,30 +1320,34 @@ fn test_initializer() {
 impl Parse for VarDef {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        chain!(input,
-            typename: parse!(LocalType, st) ~
-            defs: map_res!(separated_list!(
-                token!(Token::Comma),
-                chain!(
-                    varname: parse!(VariableName, st) ~
-                    array_dim: opt!(call!(parse_arraydim, st)) ~
-                    init: parse!(Initializer, st),
-                    || LocalVariableName {
-                        name: varname.to_node(),
-                        bind: match array_dim {
-                            Some(ref expr) => VariableBind::Array(expr.clone()),
-                            None => VariableBind::Normal
-                        },
-                        init: init
-                    }
+        do_parse!(
+            input,
+            typename: parse!(LocalType, st)
+                >> defs: map_res!(
+                    separated_list!(
+                        token!(Token::Comma),
+                        do_parse!(
+                            varname: parse!(VariableName, st)
+                                >> array_dim: opt!(call!(parse_arraydim, st))
+                                >> init: parse!(Initializer, st)
+                                >> (LocalVariableName {
+                                    name: varname.to_node(),
+                                    bind: match array_dim {
+                                        Some(ref expr) => VariableBind::Array(expr.clone()),
+                                        None => VariableBind::Normal,
+                                    },
+                                    init: init
+                                })
+                        )
+                    ),
+                    |res: Vec<_>| if res.len() > 0 { Ok(res) } else { Err(()) }
                 )
-            ), |res: Vec<_>| if res.len() > 0 { Ok(res) } else { Err(()) }),
-            || {
-                VarDef {
-                    local_type: typename,
-                    defs: defs,
-                }
-            }
+                >> ({
+                    VarDef {
+                        local_type: typename,
+                        defs: defs,
+                    }
+                })
         )
     }
 }
@@ -1334,17 +1368,18 @@ impl Parse for InitStatement {
 }
 
 fn statement_attribute<'t>(input: &'t [LexToken], _: &SymbolTable) -> ParseResult<'t, ()> {
-    chain!(input,
-        token!(Token::LeftSquareBracket) ~
-        token!(Token::Id(_)) ~
-        opt!(chain!(
-            token!(Token::LeftParen) ~
-            separated_nonempty_list!(token!(Token::Comma), token!(Token::Id(_))) ~
-            token!(Token::RightParen),
-            || ()
-        )) ~
-        token!(Token::RightSquareBracket),
-        || ()
+    do_parse!(
+        input,
+        token!(Token::LeftSquareBracket)
+            >> token!(Token::Id(_))
+            >> opt!(do_parse!(
+                token!(Token::LeftParen)
+                    >> separated_nonempty_list!(token!(Token::Comma), token!(Token::Id(_)))
+                    >> token!(Token::RightParen)
+                    >> ()
+            ))
+            >> token!(Token::RightSquareBracket)
+            >> ()
     )
 }
 
@@ -1378,12 +1413,13 @@ impl Parse for Statement {
             match head {
                 LexToken(Token::Semicolon, _) => IResult::Done(tail, Statement::Empty),
                 LexToken(Token::If, _) => {
-                    let if_part = chain!(tail,
-                        token!(Token::LeftParen) ~
-                        cond: parse!(Expression, st) ~
-                        token!(Token::RightParen) ~
-                        inner_statement: parse!(Statement, st),
-                        || Statement::If(cond, Box::new(inner_statement))
+                    let if_part = do_parse!(
+                        tail,
+                        token!(Token::LeftParen)
+                            >> cond: parse!(Expression, st)
+                            >> token!(Token::RightParen)
+                            >> inner_statement: parse!(Statement, st)
+                            >> (Statement::If(cond, Box::new(inner_statement)))
                     );
                     match if_part {
                         IResult::Incomplete(rem) => IResult::Incomplete(rem),
@@ -1411,34 +1447,37 @@ impl Parse for Statement {
                     }
                 }
                 LexToken(Token::For, _) => {
-                    chain!(tail,
-                        token!(Token::LeftParen) ~
-                        init: parse!(InitStatement, st) ~
-                        token!(Token::Semicolon) ~
-                        cond: parse!(Expression, st) ~
-                        token!(Token::Semicolon) ~
-                        inc: parse!(Expression, st) ~
-                        token!(Token::RightParen) ~
-                        inner: parse!(Statement, st),
-                        || Statement::For(init, cond, inc, Box::new(inner))
+                    do_parse!(
+                        tail,
+                        token!(Token::LeftParen)
+                            >> init: parse!(InitStatement, st)
+                            >> token!(Token::Semicolon)
+                            >> cond: parse!(Expression, st)
+                            >> token!(Token::Semicolon)
+                            >> inc: parse!(Expression, st)
+                            >> token!(Token::RightParen)
+                            >> inner: parse!(Statement, st)
+                            >> (Statement::For(init, cond, inc, Box::new(inner)))
                     )
                 }
                 LexToken(Token::While, _) => {
-                    chain!(tail,
-                        token!(Token::LeftParen) ~
-                        cond: parse!(Expression, st) ~
-                        token!(Token::RightParen) ~
-                        inner: parse!(Statement, st),
-                        || Statement::While(cond, Box::new(inner))
+                    do_parse!(
+                        tail,
+                        token!(Token::LeftParen)
+                            >> cond: parse!(Expression, st)
+                            >> token!(Token::RightParen)
+                            >> inner: parse!(Statement, st)
+                            >> (Statement::While(cond, Box::new(inner)))
                     )
                 }
                 LexToken(Token::Break, _) => IResult::Done(tail, Statement::Break),
                 LexToken(Token::Continue, _) => IResult::Done(tail, Statement::Continue),
                 LexToken(Token::Return, _) => {
-                    chain!(tail,
-                        expression_statement: parse!(Expression, st) ~
-                        token!(Token::Semicolon),
-                        || Statement::Return(expression_statement)
+                    do_parse!(
+                        tail,
+                        expression_statement: parse!(Expression, st)
+                            >> token!(Token::Semicolon)
+                            >> (Statement::Return(expression_statement))
                     )
                 }
                 LexToken(Token::LeftBrace, _) => {
@@ -1446,10 +1485,11 @@ impl Parse for Statement {
                 }
                 _ => {
                     // Try parsing a variable definition
-                    let vd = chain!(input,
-                        var: parse!(VarDef, st) ~
-                        token!(Token::Semicolon),
-                        || Statement::Var(var)
+                    let vd = do_parse!(
+                        input,
+                        var: parse!(VarDef, st)
+                            >> token!(Token::Semicolon)
+                            >> (Statement::Var(var))
                     );
                     let err = match vd {
                         IResult::Done(rest, statement) => return IResult::Done(rest, statement),
@@ -1457,10 +1497,11 @@ impl Parse for Statement {
                         IResult::Error(e) => e,
                     };
                     // Try parsing an expression statement
-                    let res = chain!(input,
-                        expression_statement: parse!(Expression, st) ~
-                        token!(Token::Semicolon),
-                        || Statement::Expression(expression_statement)
+                    let res = do_parse!(
+                        input,
+                        expression_statement: parse!(Expression, st)
+                            >> token!(Token::Semicolon)
+                            >> (Statement::Expression(expression_statement))
                     );
                     let err = match res {
                         IResult::Done(rest, statement) => return IResult::Done(rest, statement),
@@ -1504,16 +1545,17 @@ fn statement_block<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'
 impl Parse for StructMemberName {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        chain!(input,
-            name: parse!(VariableName, st) ~
-            array_dim: opt!(call!(parse_arraydim, st)),
-            || StructMemberName {
-                name: name.to_node(),
-                bind: match array_dim {
-                    Some(ref expr) => VariableBind::Array(expr.clone()),
-                    None => VariableBind::Normal
-                },
-            }
+        do_parse!(
+            input,
+            name: parse!(VariableName, st)
+                >> array_dim: opt!(call!(parse_arraydim, st))
+                >> (StructMemberName {
+                    name: name.to_node(),
+                    bind: match array_dim {
+                        Some(ref expr) => VariableBind::Array(expr.clone()),
+                        None => VariableBind::Normal,
+                    },
+                })
         )
     }
 }
@@ -1521,11 +1563,18 @@ impl Parse for StructMemberName {
 impl Parse for StructMember {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        chain!(input,
-            typename: parse!(Type, st) ~
-            defs: separated_nonempty_list!(token!(Token::Comma), parse!(StructMemberName, st)) ~
-            token!(Token::Semicolon),
-            || StructMember { ty: typename, defs: defs }
+        do_parse!(
+            input,
+            typename: parse!(Type, st)
+                >> defs: separated_nonempty_list!(
+                    token!(Token::Comma),
+                    parse!(StructMemberName, st)
+                )
+                >> token!(Token::Semicolon)
+                >> (StructMember {
+                    ty: typename,
+                    defs: defs
+                })
         )
     }
 }
@@ -1533,17 +1582,18 @@ impl Parse for StructMember {
 impl Parse for StructDefinition {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        chain!(input,
-            token!(Token::Struct) ~
-            structname: parse!(VariableName, st) ~
-            token!(Token::LeftBrace) ~
-            members: many0!(chain!(
-                member: parse!(StructMember, st),
-                || member
-            )) ~
-            token!(Token::RightBrace) ~
-            token!(Token::Semicolon),
-            || { StructDefinition { name: structname.to_node(), members: members } }
+        do_parse!(
+            input,
+            token!(Token::Struct)
+                >> structname: parse!(VariableName, st)
+                >> token!(Token::LeftBrace)
+                >> members: many0!(parse!(StructMember, st))
+                >> token!(Token::RightBrace)
+                >> token!(Token::Semicolon)
+                >> (StructDefinition {
+                    name: structname.to_node(),
+                    members: members
+                })
         )
     }
 }
@@ -1551,17 +1601,18 @@ impl Parse for StructDefinition {
 impl Parse for ConstantVariableName {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        chain!(input,
-            name: parse!(VariableName, st) ~
-            array_dim: opt!(call!(parse_arraydim, st)),
-            || ConstantVariableName {
-                name: name.to_node(),
-                bind: match array_dim {
-                    Some(ref expr) => VariableBind::Array(expr.clone()),
-                    None => VariableBind::Normal
-                },
-                offset: None,
-            }
+        do_parse!(
+            input,
+            name: parse!(VariableName, st)
+                >> array_dim: opt!(call!(parse_arraydim, st))
+                >> (ConstantVariableName {
+                    name: name.to_node(),
+                    bind: match array_dim {
+                        Some(ref expr) => VariableBind::Array(expr.clone()),
+                        None => VariableBind::Normal,
+                    },
+                    offset: None,
+                })
         )
     }
 }
@@ -1569,11 +1620,18 @@ impl Parse for ConstantVariableName {
 impl Parse for ConstantVariable {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        chain!(input,
-            typename: parse!(Type, st) ~
-            defs: separated_nonempty_list!(token!(Token::Comma), parse!(ConstantVariableName, st)) ~
-            token!(Token::Semicolon),
-            || ConstantVariable { ty: typename, defs: defs }
+        do_parse!(
+            input,
+            typename: parse!(Type, st)
+                >> defs: separated_nonempty_list!(
+                    token!(Token::Comma),
+                    parse!(ConstantVariableName, st)
+                )
+                >> token!(Token::Semicolon)
+                >> (ConstantVariable {
+                    ty: typename,
+                    defs: defs
+                })
         )
     }
 }
@@ -1600,20 +1658,22 @@ impl Parse for ConstantSlot {
 impl Parse for ConstantBuffer {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        chain!(input,
-            token!(Token::ConstantBuffer) ~
-            name: parse!(VariableName, st) ~
-            slot: opt!(parse!(ConstantSlot, st)) ~
-            members: delimited!(
-                token!(Token::LeftBrace),
-                many0!(parse!(ConstantVariable, st)),
-                token!(Token::RightBrace)
-            ),
-            || ConstantBuffer {
-                name: name.to_node(),
-                slot: slot,
-                members: members
-            }
+        do_parse!(
+            input,
+            token!(Token::ConstantBuffer)
+                >> name: parse!(VariableName, st)
+                >> slot: opt!(parse!(ConstantSlot, st))
+                >> members:
+                    delimited!(
+                        token!(Token::LeftBrace),
+                        many0!(parse!(ConstantVariable, st)),
+                        token!(Token::RightBrace)
+                    )
+                >> (ConstantBuffer {
+                    name: name.to_node(),
+                    slot: slot,
+                    members: members
+                })
         )
     }
 }
@@ -1646,20 +1706,21 @@ impl Parse for GlobalSlot {
 impl Parse for GlobalVariableName {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        chain!(input,
-            name: parse!(VariableName, st) ~
-            array_dim: opt!(call!(parse_arraydim, st)) ~
-            slot: opt!(parse!(GlobalSlot, st)) ~
-            init: parse!(Initializer, st),
-            || GlobalVariableName {
-                name: name.to_node(),
-                bind: match array_dim {
-                    Some(ref expr) => VariableBind::Array(expr.clone()),
-                    None => VariableBind::Normal
-                },
-                slot: slot,
-                init: init
-            }
+        do_parse!(
+            input,
+            name: parse!(VariableName, st)
+                >> array_dim: opt!(call!(parse_arraydim, st))
+                >> slot: opt!(parse!(GlobalSlot, st))
+                >> init: parse!(Initializer, st)
+                >> (GlobalVariableName {
+                    name: name.to_node(),
+                    bind: match array_dim {
+                        Some(ref expr) => VariableBind::Array(expr.clone()),
+                        None => VariableBind::Normal,
+                    },
+                    slot: slot,
+                    init: init
+                })
         )
     }
 }
@@ -1667,14 +1728,18 @@ impl Parse for GlobalVariableName {
 impl Parse for GlobalVariable {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        chain!(input,
-            typename: parse!(GlobalType, st) ~
-            defs: separated_nonempty_list!(token!(Token::Comma), parse!(GlobalVariableName, st)) ~
-            token!(Token::Semicolon),
-            || GlobalVariable {
-                global_type: typename,
-                defs: defs
-            }
+        do_parse!(
+            input,
+            typename: parse!(GlobalType, st)
+                >> defs: separated_nonempty_list!(
+                    token!(Token::Comma),
+                    parse!(GlobalVariableName, st)
+                )
+                >> token!(Token::Semicolon)
+                >> (GlobalVariable {
+                    global_type: typename,
+                    defs: defs
+                })
         )
     }
 }
@@ -1682,32 +1747,30 @@ impl Parse for GlobalVariable {
 impl Parse for FunctionAttribute {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        chain!(input,
-            token!(Token::LeftSquareBracket) ~
-            attr: alt!(
-                chain!(
+        do_parse!(
+            input,
+            token!(Token::LeftSquareBracket)
+                >> attr: alt!(do_parse!(
                     map_res!(token!(Token::Id(_)), |tok| {
                         if let LexToken(Token::Id(Identifier(name)), _) = tok {
                             match &name[..] {
                                 "numthreads" => Ok(name.clone()),
-                                _ => Err(())
+                                _ => Err(()),
                             }
                         } else {
                             Err(())
                         }
-                    }) ~
-                    token!(Token::LeftParen) ~
-                    x: parse!(ExpressionNoSeq, st) ~
-                    token!(Token::Comma) ~
-                    y: parse!(ExpressionNoSeq, st) ~
-                    token!(Token::Comma) ~
-                    z: parse!(ExpressionNoSeq, st) ~
-                    token!(Token::RightParen),
-                    || { FunctionAttribute::NumThreads(x, y, z) }
-                )
-            ) ~
-            token!(Token::RightSquareBracket),
-            || attr
+                    }) >> token!(Token::LeftParen)
+                        >> x: parse!(ExpressionNoSeq, st)
+                        >> token!(Token::Comma)
+                        >> y: parse!(ExpressionNoSeq, st)
+                        >> token!(Token::Comma)
+                        >> z: parse!(ExpressionNoSeq, st)
+                        >> token!(Token::RightParen)
+                        >> (FunctionAttribute::NumThreads(x, y, z))
+                ))
+                >> token!(Token::RightSquareBracket)
+                >> (attr)
         )
     }
 }
@@ -1715,31 +1778,33 @@ impl Parse for FunctionAttribute {
 impl Parse for FunctionParam {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        chain!(input,
-            ty: parse!(ParamType, st) ~
-            param: parse!(VariableName, st) ~
-            semantic: opt!(chain!(
-                token!(Token::Colon) ~
-                tok: map_res!(token!(Token::Id(_)), |tok| {
-                    if let LexToken(Token::Id(Identifier(name)), _) = tok {
-                        match &name[..] {
-                            "SV_DispatchThreadID" => Ok(Semantic::DispatchThreadId),
-                            "SV_GroupID" => Ok(Semantic::GroupId),
-                            "SV_GroupIndex" => Ok(Semantic::GroupIndex),
-                            "SV_GroupThreadID" => Ok(Semantic::GroupThreadId),
-                            _ => Err(())
-                        }
-                    } else {
-                        Err(())
-                    }
-                }),
-                || tok
-            )),
-            || FunctionParam {
-                name: param.to_node(),
-                param_type: ty,
-                semantic: semantic
-            }
+        do_parse!(
+            input,
+            ty: parse!(ParamType, st)
+                >> param: parse!(VariableName, st)
+                >> semantic:
+                    opt!(do_parse!(
+                        token!(Token::Colon)
+                            >> tok: map_res!(token!(Token::Id(_)), |tok| {
+                                if let LexToken(Token::Id(Identifier(name)), _) = tok {
+                                    match &name[..] {
+                                        "SV_DispatchThreadID" => Ok(Semantic::DispatchThreadId),
+                                        "SV_GroupID" => Ok(Semantic::GroupId),
+                                        "SV_GroupIndex" => Ok(Semantic::GroupIndex),
+                                        "SV_GroupThreadID" => Ok(Semantic::GroupThreadId),
+                                        _ => Err(()),
+                                    }
+                                } else {
+                                    Err(())
+                                }
+                            })
+                            >> (tok)
+                    ))
+                >> (FunctionParam {
+                    name: param.to_node(),
+                    param_type: ty,
+                    semantic: semantic
+                })
         )
     }
 }
@@ -1747,23 +1812,25 @@ impl Parse for FunctionParam {
 impl Parse for FunctionDefinition {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        chain!(input,
-            attributes: many0!(parse!(FunctionAttribute, st)) ~
-            ret: parse!(Type, st) ~
-            func_name: parse!(VariableName, st) ~
-            params: delimited!(
-                token!(Token::LeftParen),
-                separated_list!(token!(Token::Comma), parse!(FunctionParam, st)),
-                token!(Token::RightParen)
-            ) ~
-            body: call!(statement_block, st),
-            || FunctionDefinition {
-                name: func_name.to_node(),
-                returntype: ret,
-                params: params,
-                body: body,
-                attributes: attributes
-            }
+        do_parse!(
+            input,
+            attributes: many0!(parse!(FunctionAttribute, st))
+                >> ret: parse!(Type, st)
+                >> func_name: parse!(VariableName, st)
+                >> params:
+                    delimited!(
+                        token!(Token::LeftParen),
+                        separated_list!(token!(Token::Comma), parse!(FunctionParam, st)),
+                        token!(Token::RightParen)
+                    )
+                >> body: call!(statement_block, st)
+                >> (FunctionDefinition {
+                    name: func_name.to_node(),
+                    returntype: ret,
+                    params: params,
+                    body: body,
+                    attributes: attributes
+                })
         )
     }
 }
