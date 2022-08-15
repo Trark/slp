@@ -1,6 +1,6 @@
 use nom::{
-    alt, call, complete, delimited, do_parse, many0, map, map_res, opt, preceded, separated_list,
-    separated_nonempty_list, tag, terminated,
+    alt, call, complete, delimited, do_parse, many0, map, opt, preceded, separated_list0,
+    separated_list1, tag, terminated,
 };
 use slp_lang_hst::*;
 use slp_lang_htk::*;
@@ -53,6 +53,7 @@ pub enum ParseErrorReason {
     UnknownType,
     DuplicateStructSymbol,
     SymbolIsNotAStruct,
+    UnexpectedAttribute(String),
     ErrorKind(nom::error::ErrorKind),
 }
 
@@ -67,7 +68,7 @@ macro_rules! token (
         {
             let _: &[LexToken] = $i;
             let res: ParseResult<LexToken> = if $i.len() == 0 {
-                Err(nom::Err::Incomplete(nom::Needed::Size(1)))
+                Err(nom::Err::Incomplete(nom::Needed::new(1)))
             } else {
                 match $i[0] {
                     LexToken($inp, _) => Ok((&$i[1..], $i[0].clone())),
@@ -81,7 +82,7 @@ macro_rules! token (
         {
             let _: &[LexToken] = $i;
             if $i.len() == 0 {
-                Err(nom::Err::Incomplete(nom::Needed::Size(1)))
+                Err(nom::Err::Incomplete(nom::Needed::new(1)))
             } else {
                 match $i[0] {
                     $inp => Ok((&$i[1..], $res)),
@@ -185,7 +186,7 @@ fn parse_datalayout_str(typename: &str) -> Option<DataLayout> {
                                         if rest.len() == 0 {
                                             Ok((&[], DataLayout::Matrix(ty, x, y)))
                                         } else {
-                                            Err(nom::Err::Error((
+                                            Err(nom::Err::Error(nom::error::Error::new(
                                                 input,
                                                 nom::error::ErrorKind::Tag,
                                             )))
@@ -220,7 +221,7 @@ impl Parse for DataLayout {
         // Parse scalar type as a full token
         fn parse_scalartype(input: &[LexToken]) -> ParseResult<ScalarType> {
             if input.len() == 0 {
-                Err(nom::Err::Incomplete(nom::Needed::Size(1)))
+                Err(nom::Err::Incomplete(nom::Needed::new(1)))
             } else {
                 match &input[0] {
                     &LexToken(Token::Id(Identifier(ref name)), _) => {
@@ -251,7 +252,7 @@ impl Parse for DataLayout {
         }
 
         if input.len() == 0 {
-            Err(nom::Err::Incomplete(nom::Needed::Size(1)))
+            Err(nom::Err::Incomplete(nom::Needed::new(1)))
         } else {
             match &input[0] {
                 &LexToken(Token::Id(Identifier(ref name)), _) => match &name[..] {
@@ -353,7 +354,7 @@ impl Parse for ObjectType {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
         if input.len() == 0 {
-            return Err(nom::Err::Incomplete(nom::Needed::Size(1)));
+            return Err(nom::Err::Incomplete(nom::Needed::new(1)));
         }
 
         enum ParseType {
@@ -538,7 +539,7 @@ impl Parse for ObjectType {
 
 fn parse_voidtype(input: &[LexToken]) -> ParseResult<TypeLayout> {
     if input.len() == 0 {
-        Err(nom::Err::Incomplete(nom::Needed::Size(1)))
+        Err(nom::Err::Incomplete(nom::Needed::new(1)))
     } else {
         match &input[0] {
             &LexToken(Token::Id(Identifier(ref name)), _) => {
@@ -777,13 +778,13 @@ fn expr_p1<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
         let loc = if input.len() > 0 {
             input[0].1.clone()
         } else {
-            return Err(nom::Err::Incomplete(nom::Needed::Size(1)));
+            return Err(nom::Err::Incomplete(nom::Needed::new(1)));
         };
         do_parse!(
             input,
             dtyl: parse!(DataLayout, st)
                 >> token!(Token::LeftParen)
-                >> list: separated_list!(token!(Token::Comma), parse!(ExpressionNoSeq, st))
+                >> list: separated_list0!(token!(Token::Comma), parse!(ExpressionNoSeq, st))
                 >> token!(Token::RightParen)
                 >> (Located::new(Expression::NumericConstructor(dtyl, list), loc))
         )
@@ -1243,7 +1244,7 @@ impl Parse for Initializer {
                 input,
                 delimited!(
                     token!(Token::LeftBrace),
-                    separated_nonempty_list!(token!(Token::Comma), call!(init_any, st)),
+                    separated_list1!(token!(Token::Comma), call!(init_any, st)),
                     token!(Token::RightBrace)
                 ),
                 |exprs| Initializer::Aggregate(exprs)
@@ -1255,7 +1256,7 @@ impl Parse for Initializer {
         }
 
         if input.len() == 0 {
-            Err(nom::Err::Incomplete(nom::Needed::Size(1)))
+            Err(nom::Err::Incomplete(nom::Needed::new(1)))
         } else {
             match input[0].0 {
                 Token::Equals => map!(&input[1..], call!(init_any, st), |init| Some(init)),
@@ -1274,7 +1275,7 @@ fn test_initializer() {
 
     assert_eq!(
         initializer(&[]),
-        Err(nom::Err::Incomplete(nom::Needed::Size(1)))
+        Err(nom::Err::Incomplete(nom::Needed::new(1)))
     );
 
     // Semicolon to trigger parsing to end
@@ -1352,24 +1353,21 @@ impl Parse for VarDef {
         do_parse!(
             input,
             typename: parse!(LocalType, st)
-                >> defs: map_res!(
-                    separated_list!(
-                        token!(Token::Comma),
-                        do_parse!(
-                            varname: parse!(VariableName, st)
-                                >> array_dim: opt!(call!(parse_arraydim, st))
-                                >> init: parse!(Initializer, st)
-                                >> (LocalVariableName {
-                                    name: varname.to_node(),
-                                    bind: match array_dim {
-                                        Some(ref expr) => VariableBind::Array(expr.clone()),
-                                        None => VariableBind::Normal,
-                                    },
-                                    init: init
-                                })
-                        )
-                    ),
-                    |res: Vec<_>| if res.len() > 0 { Ok(res) } else { Err(()) }
+                >> defs: separated_list1!(
+                    token!(Token::Comma),
+                    do_parse!(
+                        varname: parse!(VariableName, st)
+                            >> array_dim: opt!(call!(parse_arraydim, st))
+                            >> init: parse!(Initializer, st)
+                            >> (LocalVariableName {
+                                name: varname.to_node(),
+                                bind: match array_dim {
+                                    Some(ref expr) => VariableBind::Array(expr.clone()),
+                                    None => VariableBind::Normal,
+                                },
+                                init: init
+                            })
+                    )
                 )
                 >> ({
                     VarDef {
@@ -1403,7 +1401,7 @@ fn statement_attribute<'t>(input: &'t [LexToken], _: &SymbolTable) -> ParseResul
             >> token!(Token::Id(_))
             >> opt!(do_parse!(
                 token!(Token::LeftParen)
-                    >> separated_nonempty_list!(token!(Token::Comma), token!(Token::Id(_)))
+                    >> separated_list1!(token!(Token::Comma), token!(Token::Id(_)))
                     >> token!(Token::RightParen)
                     >> ()
             ))
@@ -1432,7 +1430,7 @@ impl Parse for Statement {
             Err(err) => return Err(err),
         };
         if input.len() == 0 {
-            Err(nom::Err::Incomplete(nom::Needed::Size(1)))
+            Err(nom::Err::Incomplete(nom::Needed::new(1)))
         } else {
             let (head, tail) = (input[0].clone(), &input[1..]);
             match head {
@@ -1450,7 +1448,7 @@ impl Parse for Statement {
                         Err(err) => Err(err),
                         Ok((rest, Statement::If(cond, first))) => {
                             if input.len() == 0 {
-                                Err(nom::Err::Incomplete(nom::Needed::Size(1)))
+                                Err(nom::Err::Incomplete(nom::Needed::new(1)))
                             } else {
                                 let (head, tail) = (rest[0].clone(), &rest[1..]);
                                 match head {
@@ -1591,10 +1589,7 @@ impl Parse for StructMember {
         do_parse!(
             input,
             typename: parse!(Type, st)
-                >> defs: separated_nonempty_list!(
-                    token!(Token::Comma),
-                    parse!(StructMemberName, st)
-                )
+                >> defs: separated_list1!(token!(Token::Comma), parse!(StructMemberName, st))
                 >> token!(Token::Semicolon)
                 >> (StructMember {
                     ty: typename,
@@ -1648,10 +1643,7 @@ impl Parse for ConstantVariable {
         do_parse!(
             input,
             typename: parse!(Type, st)
-                >> defs: separated_nonempty_list!(
-                    token!(Token::Comma),
-                    parse!(ConstantVariableName, st)
-                )
+                >> defs: separated_list1!(token!(Token::Comma), parse!(ConstantVariableName, st))
                 >> token!(Token::Semicolon)
                 >> (ConstantVariable {
                     ty: typename,
@@ -1664,19 +1656,19 @@ impl Parse for ConstantVariable {
 impl Parse for ConstantSlot {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], _: &SymbolTable) -> ParseResult<'t, Self> {
-        map_res!(
-            input,
-            preceded!(token!(Token::Colon), token!(Token::Register(_))),
-            |reg| {
-                match reg {
-                    LexToken(Token::Register(RegisterSlot::B(slot)), _) => {
-                        Ok(ConstantSlot(slot)) as Result<ConstantSlot, ParseErrorReason>
-                    }
-                    LexToken(Token::Register(_), _) => Err(ParseErrorReason::WrongSlotType),
-                    _ => unreachable!(),
+        match preceded!(input, token!(Token::Colon), token!(Token::Register(_))) {
+            Ok((input, reg)) => match reg {
+                LexToken(Token::Register(RegisterSlot::B(slot)), _) => {
+                    Ok((input, ConstantSlot(slot)))
                 }
-            }
-        )
+                LexToken(Token::Register(_), _) => Err(nom::Err::Error(ParseErrorContext(
+                    input,
+                    ParseErrorReason::WrongSlotType,
+                ))),
+                _ => unreachable!(),
+            },
+            Err(err) => Err(err),
+        }
     }
 }
 
@@ -1706,25 +1698,25 @@ impl Parse for ConstantBuffer {
 impl Parse for GlobalSlot {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], _: &SymbolTable) -> ParseResult<'t, Self> {
-        map_res!(
-            input,
-            preceded!(token!(Token::Colon), token!(Token::Register(_))),
-            |reg| {
-                match reg {
-                    LexToken(Token::Register(RegisterSlot::T(slot)), _) => {
-                        Ok(GlobalSlot::ReadSlot(slot))
-                    }
-                    LexToken(Token::Register(RegisterSlot::U(slot)), _) => {
-                        Ok(GlobalSlot::ReadWriteSlot(slot))
-                    }
-                    LexToken(Token::Register(RegisterSlot::S(slot)), _) => {
-                        Ok(GlobalSlot::SamplerSlot(slot))
-                    }
-                    LexToken(Token::Register(_), _) => Err(ParseErrorReason::WrongSlotType),
-                    _ => unreachable!(),
+        match preceded!(input, token!(Token::Colon), token!(Token::Register(_))) {
+            Ok((rest, reg)) => match reg {
+                LexToken(Token::Register(RegisterSlot::T(slot)), _) => {
+                    Ok((rest, GlobalSlot::ReadSlot(slot)))
                 }
-            }
-        )
+                LexToken(Token::Register(RegisterSlot::U(slot)), _) => {
+                    Ok((rest, GlobalSlot::ReadWriteSlot(slot)))
+                }
+                LexToken(Token::Register(RegisterSlot::S(slot)), _) => {
+                    Ok((rest, GlobalSlot::SamplerSlot(slot)))
+                }
+                LexToken(Token::Register(_), _) => Err(nom::Err::Error(ParseErrorContext(
+                    input,
+                    ParseErrorReason::WrongSlotType,
+                ))),
+                _ => unreachable!(),
+            },
+            Err(err) => Err(err),
+        }
     }
 }
 
@@ -1756,16 +1748,29 @@ impl Parse for GlobalVariable {
         do_parse!(
             input,
             typename: parse!(GlobalType, st)
-                >> defs: separated_nonempty_list!(
-                    token!(Token::Comma),
-                    parse!(GlobalVariableName, st)
-                )
+                >> defs: separated_list1!(token!(Token::Comma), parse!(GlobalVariableName, st))
                 >> token!(Token::Semicolon)
                 >> (GlobalVariable {
                     global_type: typename,
                     defs: defs
                 })
         )
+    }
+}
+
+fn parse_numthreads(input: &[LexToken]) -> ParseResult<()> {
+    match input.first() {
+        Some(LexToken(Token::Id(Identifier(name)), _)) => match &name[..] {
+            "numthreads" => Ok((&input[1..], ())),
+            _ => Err(nom::Err::Error(ParseErrorContext(
+                input,
+                ParseErrorReason::UnexpectedAttribute(name.clone()),
+            ))),
+        },
+        _ => Err(nom::Err::Error(ParseErrorContext(
+            input,
+            ParseErrorReason::WrongToken,
+        ))),
     }
 }
 
@@ -1776,16 +1781,8 @@ impl Parse for FunctionAttribute {
             input,
             token!(Token::LeftSquareBracket)
                 >> attr: alt!(do_parse!(
-                    map_res!(token!(Token::Id(_)), |tok| {
-                        if let LexToken(Token::Id(Identifier(name)), _) = tok {
-                            match &name[..] {
-                                "numthreads" => Ok(name.clone()),
-                                _ => Err(()),
-                            }
-                        } else {
-                            Err(())
-                        }
-                    }) >> token!(Token::LeftParen)
+                    parse_numthreads
+                        >> token!(Token::LeftParen)
                         >> x: parse!(ExpressionNoSeq, st)
                         >> token!(Token::Comma)
                         >> y: parse!(ExpressionNoSeq, st)
@@ -1800,6 +1797,25 @@ impl Parse for FunctionAttribute {
     }
 }
 
+fn parse_semantic(input: &[LexToken]) -> ParseResult<Semantic> {
+    match input.first() {
+        Some(LexToken(Token::Id(Identifier(name)), _)) => match &name[..] {
+            "SV_DispatchThreadID" => Ok((&input[1..], Semantic::DispatchThreadId)),
+            "SV_GroupID" => Ok((&input[1..], Semantic::GroupId)),
+            "SV_GroupIndex" => Ok((&input[1..], Semantic::GroupIndex)),
+            "SV_GroupThreadID" => Ok((&input[1..], Semantic::GroupThreadId)),
+            _ => Err(nom::Err::Error(ParseErrorContext(
+                input,
+                ParseErrorReason::UnexpectedAttribute(name.clone()),
+            ))),
+        },
+        _ => Err(nom::Err::Error(ParseErrorContext(
+            input,
+            ParseErrorReason::WrongToken,
+        ))),
+    }
+}
+
 impl Parse for FunctionParam {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
@@ -1809,21 +1825,7 @@ impl Parse for FunctionParam {
                 >> param: parse!(VariableName, st)
                 >> semantic:
                     opt!(do_parse!(
-                        token!(Token::Colon)
-                            >> tok: map_res!(token!(Token::Id(_)), |tok| {
-                                if let LexToken(Token::Id(Identifier(name)), _) = tok {
-                                    match &name[..] {
-                                        "SV_DispatchThreadID" => Ok(Semantic::DispatchThreadId),
-                                        "SV_GroupID" => Ok(Semantic::GroupId),
-                                        "SV_GroupIndex" => Ok(Semantic::GroupIndex),
-                                        "SV_GroupThreadID" => Ok(Semantic::GroupThreadId),
-                                        _ => Err(()),
-                                    }
-                                } else {
-                                    Err(())
-                                }
-                            })
-                            >> (tok)
+                        token!(Token::Colon) >> tok: parse_semantic >> (tok)
                     ))
                 >> (FunctionParam {
                     name: param.to_node(),
@@ -1845,7 +1847,7 @@ impl Parse for FunctionDefinition {
                 >> params:
                     delimited!(
                         token!(Token::LeftParen),
-                        separated_list!(token!(Token::Comma), parse!(FunctionParam, st)),
+                        separated_list0!(token!(Token::Comma), parse!(FunctionParam, st)),
                         token!(Token::RightParen)
                     )
                 >> body: call!(statement_block, st)
