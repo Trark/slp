@@ -1,7 +1,3 @@
-use nom::{
-    alt, call, complete, delimited, do_parse, many0, map, opt, preceded, separated_list0,
-    separated_list1, tag, terminated,
-};
 use slp_lang_hst::*;
 use slp_lang_htk::*;
 use slp_shared::*;
@@ -63,36 +59,6 @@ impl fmt::Display for ParseError {
     }
 }
 
-macro_rules! token (
-    ($i:expr, $inp: pat) => (
-        {
-            let _: &[LexToken] = $i;
-            let res: ParseResult<LexToken> = if $i.len() == 0 {
-                Err(nom::Err::Incomplete(nom::Needed::new(1)))
-            } else {
-                match $i[0] {
-                    LexToken($inp, _) => Ok((&$i[1..], $i[0].clone())),
-                    _ => Err(nom::Err::Error(ParseErrorContext($i, ParseErrorReason::WrongToken))),
-                }
-            };
-            res
-        }
-    );
-    ($i:expr, $inp: pat => $res: expr) => (
-        {
-            let _: &[LexToken] = $i;
-            if $i.len() == 0 {
-                Err(nom::Err::Incomplete(nom::Needed::new(1)))
-            } else {
-                match $i[0] {
-                    $inp => Ok((&$i[1..], $res)),
-                    _ => Err(nom::Err::Error(ParseErrorContext($i, ParseErrorReason::WrongToken))),
-                }
-            }
-        }
-    );
-);
-
 enum SymbolType {
     Struct,
 }
@@ -125,80 +91,158 @@ trait Parse: Sized {
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self::Output>;
 }
 
-macro_rules! parse {
-    ($i:expr, $ty:ty, $($args:expr),* ) => ( <$ty as Parse>::parse( $i, $($args),* ) );
+/// Create parser for a type that implements Parse
+fn parse_typed<'t, 's, T: Parse>(
+    st: &'s SymbolTable,
+) -> impl Fn(&'t [LexToken]) -> ParseResult<T::Output> + 's {
+    move |input: &'t [LexToken]| T::parse(input, st)
+}
+
+/// Parse an exact token from the start of the stream
+fn parse_token<'t>(token: Token) -> impl Fn(&'t [LexToken]) -> ParseResult<LexToken> {
+    move |input: &'t [LexToken]| {
+        if input.is_empty() {
+            return Err(nom::Err::Incomplete(nom::Needed::new(1)));
+        }
+        match input[0] {
+            LexToken(ref t, _) if *t == token => Ok((&input[1..], input[0].clone())),
+            _ => Err(nom::Err::Error(ParseErrorContext(
+                input,
+                ParseErrorReason::WrongToken,
+            ))),
+        }
+    }
+}
+
+/// Match a single identifier token
+fn match_identifier(input: &[LexToken]) -> ParseResult<&Identifier> {
+    match input {
+        [LexToken(Token::Id(ref id), _), rest @ ..] => Ok((rest, id)),
+        _ => Err(nom::Err::Error(ParseErrorContext(
+            input,
+            ParseErrorReason::WrongToken,
+        ))),
+    }
+}
+
+/// Match a single < that may or may not be followed by whitespace
+fn match_left_angle_bracket(input: &[LexToken]) -> ParseResult<LexToken> {
+    match input {
+        [first @ LexToken(Token::LeftAngleBracket(_), _), rest @ ..] => Ok((rest, first.clone())),
+        _ => Err(nom::Err::Error(ParseErrorContext(
+            input,
+            ParseErrorReason::WrongToken,
+        ))),
+    }
+}
+
+/// Match a single > that may or may not be followed by whitespace
+fn match_right_angle_bracket(input: &[LexToken]) -> ParseResult<LexToken> {
+    match input {
+        [first @ LexToken(Token::RightAngleBracket(_), _), rest @ ..] => Ok((rest, first.clone())),
+        _ => Err(nom::Err::Error(ParseErrorContext(
+            input,
+            ParseErrorReason::WrongToken,
+        ))),
+    }
 }
 
 struct VariableName;
 
 impl Parse for VariableName {
     type Output = Located<String>;
-    fn parse<'t>(tks: &'t [LexToken], _: &SymbolTable) -> ParseResult<'t, Self::Output> {
-        map!(tks, token!(Token::Id(_)), |tok| {
-            match tok {
-                LexToken(Token::Id(Identifier(name)), loc) => Located::new(name.clone(), loc),
-                _ => unreachable!(),
+    fn parse<'t>(input: &'t [LexToken], _: &SymbolTable) -> ParseResult<'t, Self::Output> {
+        if input.is_empty() {
+            return Err(nom::Err::Incomplete(nom::Needed::new(1)));
+        }
+
+        match &input[0] {
+            LexToken(Token::Id(Identifier(name)), loc) => {
+                Ok((&input[1..], Located::new(name.clone(), loc.clone())))
             }
-        })
+            _ => Err(nom::Err::Error(ParseErrorContext(
+                input,
+                ParseErrorReason::WrongToken,
+            ))),
+        }
     }
 }
 
 // Parse scalar type as part of a string
 fn parse_scalartype_str(input: &[u8]) -> nom::IResult<&[u8], ScalarType> {
-    alt!(input,
-        complete!(tag!("bool")) => { |_| ScalarType::Bool } |
-        complete!(tag!("int")) => { |_| ScalarType::Int } |
-        complete!(tag!("uint")) => { |_| ScalarType::UInt } |
-        complete!(tag!("dword")) => { |_| ScalarType::UInt } |
-        complete!(tag!("half")) => { |_| ScalarType::Half } |
-        complete!(tag!("float")) => { |_| ScalarType::Float } |
-        complete!(tag!("double")) => { |_| ScalarType::Double }
-    )
+    use nom::bytes::complete::tag;
+    use nom::combinator::map;
+    nom::branch::alt((
+        map(tag("bool"), |_| ScalarType::Bool),
+        map(tag("int"), |_| ScalarType::Int),
+        map(tag("uint"), |_| ScalarType::UInt),
+        map(tag("dword"), |_| ScalarType::UInt),
+        map(tag("half"), |_| ScalarType::Half),
+        map(tag("float"), |_| ScalarType::Float),
+        map(tag("double"), |_| ScalarType::Double),
+    ))(input)
 }
 
 // Parse data type as part of a string
 fn parse_datalayout_str(typename: &str) -> Option<DataLayout> {
     fn digit(input: &[u8]) -> nom::IResult<&[u8], u32> {
-        alt!(input,
-            tag!("1") => { |_| { 1 } } |
-            tag!("2") => { |_| { 2 } } |
-            tag!("3") => { |_| { 3 } } |
-            tag!("4") => { |_| { 4 } }
-        )
+        // Handle end of stream
+        if input.is_empty() {
+            return Err(nom::Err::Error(nom::error::Error::new(
+                input,
+                nom::error::ErrorKind::Tag,
+            )));
+        };
+
+        // Match on the next character
+        let n = match input[0] {
+            b'1' => 1,
+            b'2' => 2,
+            b'3' => 3,
+            b'4' => 4,
+            _ => {
+                // Not a digit
+                return Err(nom::Err::Error(nom::error::Error::new(
+                    input,
+                    nom::error::ErrorKind::Tag,
+                )));
+            }
+        };
+
+        // Success
+        Ok((&input[1..], n))
     }
 
     fn parse_str(input: &[u8]) -> nom::IResult<&[u8], DataLayout> {
-        match parse_scalartype_str(input) {
-            Err(err) => Err(err),
-            Ok((rest, ty)) => {
-                if rest.len() == 0 {
-                    Ok((&[], DataLayout::Scalar(ty)))
-                } else {
-                    match digit(rest) {
-                        Err(err) => Err(err),
-                        Ok((rest, x)) => {
-                            if rest.len() == 0 {
-                                Ok((&[], DataLayout::Vector(ty, x)))
-                            } else {
-                                match preceded!(rest, tag!("x"), digit) {
-                                    Err(err) => Err(err),
-                                    Ok((rest, y)) => {
-                                        if rest.len() == 0 {
-                                            Ok((&[], DataLayout::Matrix(ty, x, y)))
-                                        } else {
-                                            Err(nom::Err::Error(nom::error::Error::new(
-                                                input,
-                                                nom::error::ErrorKind::Tag,
-                                            )))
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        let (rest, ty) = parse_scalartype_str(input)?;
+        if rest.is_empty() {
+            return Ok((&[], DataLayout::Scalar(ty)));
         }
+
+        let (rest, x) = digit(rest)?;
+        if rest.is_empty() {
+            return Ok((&[], DataLayout::Vector(ty, x)));
+        }
+
+        let rest = match rest.first() {
+            Some(b'x') => &rest[1..],
+            _ => {
+                return Err(nom::Err::Error(nom::error::Error::new(
+                    input,
+                    nom::error::ErrorKind::Tag,
+                )))
+            }
+        };
+
+        let (rest, y) = digit(rest)?;
+        if rest.is_empty() {
+            return Ok((&[], DataLayout::Matrix(ty, x, y)));
+        }
+
+        Err(nom::Err::Error(nom::error::Error::new(
+            input,
+            nom::error::ErrorKind::Tag,
+        )))
     }
 
     match parse_str(&typename[..].as_bytes()) {
@@ -210,44 +254,74 @@ fn parse_datalayout_str(typename: &str) -> Option<DataLayout> {
     }
 }
 
+#[test]
+fn test_parse_datalayout_str() {
+    assert_eq!(
+        parse_datalayout_str("float"),
+        Some(DataLayout::Scalar(ScalarType::Float))
+    );
+    assert_eq!(
+        parse_datalayout_str("uint3"),
+        Some(DataLayout::Vector(ScalarType::UInt, 3))
+    );
+    assert_eq!(
+        parse_datalayout_str("bool2x3"),
+        Some(DataLayout::Matrix(ScalarType::Bool, 2, 3))
+    );
+
+    assert_eq!(parse_datalayout_str(""), None);
+    assert_eq!(parse_datalayout_str("float5"), None);
+    assert_eq!(parse_datalayout_str("float2x"), None);
+}
+
 impl Parse for DataLayout {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], _: &SymbolTable) -> ParseResult<'t, Self> {
         // Parse a vector dimension as a token
         fn parse_digit(input: &[LexToken]) -> ParseResult<u32> {
-            token!(input, LexToken(Token::LiteralInt(i), _) => i as u32)
+            if input.is_empty() {
+                return Err(nom::Err::Incomplete(nom::Needed::new(1)));
+            }
+
+            match input[0] {
+                LexToken(Token::LiteralInt(i), _) => Ok((&input[1..], i as u32)),
+                _ => Err(nom::Err::Error(ParseErrorContext(
+                    input,
+                    ParseErrorReason::WrongToken,
+                ))),
+            }
         }
 
         // Parse scalar type as a full token
         fn parse_scalartype(input: &[LexToken]) -> ParseResult<ScalarType> {
-            if input.len() == 0 {
-                Err(nom::Err::Incomplete(nom::Needed::new(1)))
-            } else {
-                match &input[0] {
-                    &LexToken(Token::Id(Identifier(ref name)), _) => {
-                        match parse_scalartype_str(&name[..].as_bytes()) {
-                            Ok((rest, ty)) => {
-                                if rest.len() == 0 {
-                                    Ok((&input[1..], ty))
-                                } else {
-                                    Err(nom::Err::Error(ParseErrorContext(
-                                        input,
-                                        ParseErrorReason::UnknownType,
-                                    )))
-                                }
+            if input.is_empty() {
+                return Err(nom::Err::Incomplete(nom::Needed::new(1)));
+            }
+
+            match input[0] {
+                LexToken(Token::Id(Identifier(ref name)), _) => {
+                    match parse_scalartype_str(&name[..].as_bytes()) {
+                        Ok((rest, ty)) => {
+                            if rest.len() == 0 {
+                                Ok((&input[1..], ty))
+                            } else {
+                                Err(nom::Err::Error(ParseErrorContext(
+                                    input,
+                                    ParseErrorReason::UnknownType,
+                                )))
                             }
-                            Err(nom::Err::Incomplete(rem)) => Err(nom::Err::Incomplete(rem)),
-                            Err(_) => Err(nom::Err::Error(ParseErrorContext(
-                                input,
-                                ParseErrorReason::UnknownType,
-                            ))),
                         }
+                        Err(nom::Err::Incomplete(rem)) => Err(nom::Err::Incomplete(rem)),
+                        Err(_) => Err(nom::Err::Error(ParseErrorContext(
+                            input,
+                            ParseErrorReason::UnknownType,
+                        ))),
                     }
-                    _ => Err(nom::Err::Error(ParseErrorContext(
-                        input,
-                        ParseErrorReason::WrongToken,
-                    ))),
                 }
+                _ => Err(nom::Err::Error(ParseErrorContext(
+                    input,
+                    ParseErrorReason::WrongToken,
+                ))),
             }
         }
 
@@ -257,28 +331,22 @@ impl Parse for DataLayout {
             match &input[0] {
                 &LexToken(Token::Id(Identifier(ref name)), _) => match &name[..] {
                     "vector" => {
-                        do_parse!(
-                            &input[1..],
-                            token!(Token::LeftAngleBracket(_))
-                                >> scalar: parse_scalartype
-                                >> token!(Token::Comma)
-                                >> x: parse_digit
-                                >> token!(Token::RightAngleBracket(_))
-                                >> (DataLayout::Vector(scalar, x))
-                        )
+                        let (input, _) = match_left_angle_bracket(&input[1..])?;
+                        let (input, scalar) = parse_scalartype(input)?;
+                        let (input, _) = parse_token(Token::Comma)(input)?;
+                        let (input, x) = parse_digit(input)?;
+                        let (input, _) = match_right_angle_bracket(input)?;
+                        Ok((input, DataLayout::Vector(scalar, x)))
                     }
                     "matrix" => {
-                        do_parse!(
-                            &input[1..],
-                            token!(Token::LeftAngleBracket(_))
-                                >> scalar: parse_scalartype
-                                >> token!(Token::Comma)
-                                >> x: parse_digit
-                                >> token!(Token::Comma)
-                                >> y: parse_digit
-                                >> token!(Token::RightAngleBracket(_))
-                                >> (DataLayout::Matrix(scalar, x, y))
-                        )
+                        let (input, _) = match_left_angle_bracket(&input[1..])?;
+                        let (input, scalar) = parse_scalartype(input)?;
+                        let (input, _) = parse_token(Token::Comma)(input)?;
+                        let (input, x) = parse_digit(input)?;
+                        let (input, _) = parse_token(Token::Comma)(input)?;
+                        let (input, y) = parse_digit(input)?;
+                        let (input, _) = match_right_angle_bracket(input)?;
+                        Ok((input, DataLayout::Matrix(scalar, x, y)))
                     }
                     _ => match parse_datalayout_str(&name[..]) {
                         Some(ty) => Ok((&input[1..], ty)),
@@ -311,31 +379,27 @@ impl Parse for DataType {
 impl Parse for StructuredLayout {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        fn custom_type<'t>(
-            input: &'t [LexToken],
-            st: &SymbolTable,
-        ) -> ParseResult<'t, StructuredLayout> {
-            match token!(input, Token::Id(_)) {
-                Ok((rest, LexToken(Token::Id(Identifier(name)), _))) => match st.0.get(&name) {
-                    Some(&SymbolType::Struct) => Ok((rest, StructuredLayout::Custom(name.clone()))),
-                    _ => Err(nom::Err::Error(ParseErrorContext(
-                        input,
-                        ParseErrorReason::SymbolIsNotAStruct,
-                    ))),
-                },
-                Err(err) => Err(err),
-                _ => unreachable!(),
-            }
+        // Attempt to parse a primitive structured type
+        if let Ok((input, ty)) = DataLayout::parse(input, st) {
+            let sl = match ty {
+                DataLayout::Scalar(scalar) => StructuredLayout::Scalar(scalar),
+                DataLayout::Vector(scalar, x) => StructuredLayout::Vector(scalar, x),
+                DataLayout::Matrix(scalar, x, y) => StructuredLayout::Matrix(scalar, x, y),
+            };
+            return Ok((input, sl));
         }
-        alt!(input,
-            parse!(DataLayout, st) => { |ty| { match ty {
-                    DataLayout::Scalar(scalar) => StructuredLayout::Scalar(scalar),
-                    DataLayout::Vector(scalar, x) => StructuredLayout::Vector(scalar, x),
-                    DataLayout::Matrix(scalar, x, y) => StructuredLayout::Matrix(scalar, x, y),
-                }
-            } } |
-            call!(custom_type, st)
-        )
+
+        // Attempt to parse a custom type
+        match match_identifier(input) {
+            Ok((input, Identifier(name))) => match st.0.get(name) {
+                Some(&SymbolType::Struct) => Ok((input, StructuredLayout::Custom(name.clone()))),
+                _ => Err(nom::Err::Error(ParseErrorContext(
+                    input,
+                    ParseErrorReason::SymbolIsNotAStruct,
+                ))),
+            },
+            Err(err) => Err(err),
+        }
     }
 }
 
@@ -456,13 +520,12 @@ impl Parse for ObjectType {
             | ParseType::RWTexture2D
             | ParseType::RWTexture2DArray
             | ParseType::RWTexture3D => {
-                let parse_datatype = |input| DataType::parse(input, &st);
-                let (buffer_arg, rest) = match delimited!(
-                    rest,
-                    token!(Token::LeftAngleBracket(_)),
-                    parse_datatype,
-                    token!(Token::RightAngleBracket(_))
-                ) {
+                let (buffer_arg, rest) = match nom::sequence::delimited(
+                    match_left_angle_bracket,
+                    parse_typed::<DataType>(st),
+                    match_right_angle_bracket,
+                )(rest)
+                {
                     Ok((rest, ty)) => (ty, rest),
                     Err(nom::Err::Incomplete(needed)) => return Err(nom::Err::Incomplete(needed)),
                     Err(_) => (
@@ -500,12 +563,12 @@ impl Parse for ObjectType {
             | ParseType::RWStructuredBuffer
             | ParseType::AppendStructuredBuffer
             | ParseType::ConsumeStructuredBuffer => {
-                let (buffer_arg, rest) = match delimited!(
-                    rest,
-                    token!(Token::LeftAngleBracket(_)),
-                    parse!(StructuredType, st),
-                    token!(Token::RightAngleBracket(_))
-                ) {
+                let (buffer_arg, rest) = match nom::sequence::delimited(
+                    match_left_angle_bracket,
+                    parse_typed::<StructuredType>(st),
+                    match_right_angle_bracket,
+                )(rest)
+                {
                     Ok((rest, ty)) => (ty, rest),
                     Err(nom::Err::Incomplete(needed)) => return Err(nom::Err::Incomplete(needed)),
                     Err(_) => (
@@ -563,62 +626,76 @@ fn parse_voidtype(input: &[LexToken]) -> ParseResult<TypeLayout> {
 impl Parse for TypeLayout {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        alt!(input,
-            parse!(ObjectType, st) => { |ty| { TypeLayout::Object(ty) } } |
-            parse_voidtype |
-            token!(LexToken(Token::SamplerState, _) => TypeLayout::SamplerState) |
-            // Structured types eat everything as user defined types so must come last
-            parse!(StructuredLayout, st) => { |ty| { TypeLayout::from(ty) } }
-        )
+        if let Ok((input, ty)) = ObjectType::parse(input, st) {
+            return Ok((input, TypeLayout::Object(ty)));
+        }
+
+        if let Ok((input, ty)) = parse_voidtype(input) {
+            return Ok((input, ty));
+        }
+
+        if let Ok((input, _)) = parse_token(Token::SamplerState)(input) {
+            return Ok((input, TypeLayout::SamplerState));
+        }
+
+        match StructuredLayout::parse(input, st) {
+            Ok((input, sl)) => Ok((input, TypeLayout::from(sl))),
+            Err(err) => Err(err),
+        }
     }
 }
 
 impl Parse for Type {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        let parse_typelayout = |input| TypeLayout::parse(input, &st);
         // Todo: modifiers that aren't const
-        do_parse!(
-            input,
-            is_const: opt!(token!(Token::Const))
-                >> tl: parse_typelayout
-                >> (Type(
-                    tl,
-                    TypeModifier {
-                        is_const: !is_const.is_none(),
-                        ..TypeModifier::default()
-                    }
-                ))
-        )
+        let (input, is_const) = match parse_token(Token::Const)(input) {
+            Ok((input, _)) => (input, true),
+            Err(_) => (input, false),
+        };
+
+        let (input, tl) = TypeLayout::parse(input, &st)?;
+
+        let tm = TypeModifier {
+            is_const,
+            ..TypeModifier::default()
+        };
+        Ok((input, Type(tl, tm)))
     }
 }
 
 impl Parse for GlobalType {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        let parse_typename = |input| Type::parse(input, &st);
+        if input.is_empty() {
+            return Err(nom::Err::Incomplete(nom::Needed::new(1)));
+        }
         // Interpolation modifiers unimplemented
         // Non-standard combinations of storage classes unimplemented
-        do_parse!(
-            input,
-            gs: opt!(alt!(
-                token!(LexToken(Token::Static, _) => GlobalStorage::Static)
-                    | token!(LexToken(Token::GroupShared, _) => GlobalStorage::GroupShared)
-                    | token!(LexToken(Token::Extern, _) => GlobalStorage::Extern)
-            )) >> ty: parse_typename
-                >> (GlobalType(ty, gs.unwrap_or(GlobalStorage::default()), None))
-        )
+        let (input, gs) = match input[0] {
+            LexToken(Token::Static, _) => ((&input[1..], Some(GlobalStorage::Static))),
+            LexToken(Token::GroupShared, _) => ((&input[1..], Some(GlobalStorage::GroupShared))),
+            LexToken(Token::Extern, _) => ((&input[1..], Some(GlobalStorage::Extern))),
+            _ => (input, None),
+        };
+        let (input, ty) = Type::parse(input, &st)?;
+        let gt = GlobalType(ty, gs.unwrap_or(GlobalStorage::default()), None);
+        Ok((input, gt))
     }
 }
 
 impl Parse for InputModifier {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], _: &SymbolTable) -> ParseResult<'t, Self> {
-        alt!(input,
-            token!(Token::In) => { |_| InputModifier::In } |
-            token!(Token::Out) => { |_| InputModifier::Out } |
-            token!(Token::InOut) => { |_| InputModifier::InOut }
-        )
+        match input {
+            [LexToken(Token::In, _), rest @ ..] => Ok((rest, InputModifier::In)),
+            [LexToken(Token::Out, _), rest @ ..] => Ok((rest, InputModifier::Out)),
+            [LexToken(Token::InOut, _), rest @ ..] => Ok((rest, InputModifier::InOut)),
+            _ => Err(nom::Err::Error(ParseErrorContext(
+                input,
+                ParseErrorReason::WrongToken,
+            ))),
+        }
     }
 }
 
@@ -626,7 +703,7 @@ impl Parse for ParamType {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
         let (input, it) = match InputModifier::parse(input, st) {
-            Ok((rest, it)) => (rest, it),
+            Ok((input, it)) => (input, it),
             Err(nom::Err::Incomplete(needed)) => return Err(nom::Err::Incomplete(needed)),
             Err(_) => (input, InputModifier::default()),
         };
@@ -653,51 +730,64 @@ fn parse_arraydim<'t>(
     input: &'t [LexToken],
     st: &SymbolTable,
 ) -> ParseResult<'t, Option<Located<Expression>>> {
-    do_parse!(
-        input,
-        token!(Token::LeftSquareBracket)
-            >> constant_expression: opt!(parse!(ExpressionNoSeq, st))
-            >> token!(Token::RightSquareBracket)
-            >> (constant_expression)
-    )
+    let (input, _) = parse_token(Token::LeftSquareBracket)(input)?;
+    let (input, constant_expression) = match ExpressionNoSeq::parse(input, st) {
+        Ok((rest, constant_expression)) => (rest, Some(constant_expression)),
+        _ => (input, None),
+    };
+    let (input, _) = parse_token(Token::RightSquareBracket)(input)?;
+    Ok((input, constant_expression))
 }
 
 fn expr_paren<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    alt!(input,
-        do_parse!(
-            start: token!(Token::LeftParen)
-                >> expr: parse!(Expression, st)
-                >> token!(Token::RightParen)
-                >> (Located::new(expr.to_node(), start.to_loc()))
-        ) |
-        parse!(VariableName, st) => {
-            |name: Located<String>| { Located::new(Expression::Variable(name.node), name.location) }
-        } |
-        token!(LexToken(Token::LiteralInt(i), ref loc) =>
-            Located::new(Expression::Literal(Literal::UntypedInt(i)), loc.clone())
-        ) |
-        token!(LexToken(Token::LiteralUInt(i), ref loc) =>
-            Located::new(Expression::Literal(Literal::UInt(i)), loc.clone())
-        ) |
-        token!(LexToken(Token::LiteralLong(i), ref loc) =>
-            Located::new(Expression::Literal(Literal::Long(i)), loc.clone())
-        ) |
-        token!(LexToken(Token::LiteralHalf(i), ref loc) =>
-            Located::new(Expression::Literal(Literal::Half(i)), loc.clone())
-        ) |
-        token!(LexToken(Token::LiteralFloat(i), ref loc) =>
-            Located::new(Expression::Literal(Literal::Float(i)), loc.clone())
-        ) |
-        token!(LexToken(Token::LiteralDouble(i), ref loc) =>
-            Located::new(Expression::Literal(Literal::Double(i)), loc.clone())
-        ) |
-        token!(LexToken(Token::True, ref loc) =>
-            Located::new(Expression::Literal(Literal::Bool(true)), loc.clone())
-        ) |
-        token!(LexToken(Token::False, ref loc) =>
-            Located::new(Expression::Literal(Literal::Bool(false)), loc.clone())
-        )
-    )
+    // Try to parse an expression nested in parenthesis
+    {
+        let res: ParseResult<'t, Located<Expression>> = (|| {
+            let (input, start) = parse_token(Token::LeftParen)(input)?;
+            let (input, expr) = Expression::parse(input, st)?;
+            let (input, _) = parse_token(Token::RightParen)(input)?;
+
+            Ok((input, Located::new(expr.to_node(), start.to_loc())))
+        })();
+        if let Ok(res) = res {
+            return Ok(res);
+        }
+    }
+
+    // Try to parse a variable identifier
+    if let Ok((input, name)) = VariableName::parse(input, st) {
+        return Ok((
+            input,
+            Located::new(Expression::Variable(name.node), name.location),
+        ));
+    }
+
+    // Try to parse a literal
+    match input.first() {
+        Some(LexToken(tok, ref loc)) => {
+            let literal = match *tok {
+                Token::LiteralInt(v) => Literal::UntypedInt(v),
+                Token::LiteralUInt(v) => Literal::UInt(v),
+                Token::LiteralLong(v) => Literal::Long(v),
+                Token::LiteralHalf(v) => Literal::Half(v),
+                Token::LiteralFloat(v) => Literal::Float(v),
+                Token::LiteralDouble(v) => Literal::Double(v),
+                Token::True => Literal::Bool(true),
+                Token::False => Literal::Bool(false),
+                _ => {
+                    return Err(nom::Err::Error(ParseErrorContext(
+                        input,
+                        ParseErrorReason::WrongToken,
+                    )))
+                }
+            };
+            Ok((
+                &input[1..],
+                Located::new(Expression::Literal(literal), loc.clone()),
+            ))
+        }
+        None => Err(nom::Err::Incomplete(nom::Needed::new(1))),
+    }
 }
 
 fn expr_p1<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
@@ -710,68 +800,87 @@ fn expr_p1<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
         Member(String),
     }
 
+    fn expr_p1_increment(input: &[LexToken]) -> ParseResult<Located<Precedence1Postfix>> {
+        // TODO: ++ tokens
+        let (input, start) = parse_token(Token::Plus)(input)?;
+        let (input, _) = parse_token(Token::Plus)(input)?;
+        Ok((
+            input,
+            Located::new(Precedence1Postfix::Increment, start.to_loc()),
+        ))
+    }
+
+    fn expr_p1_decrement(input: &[LexToken]) -> ParseResult<Located<Precedence1Postfix>> {
+        // TODO: -- tokens
+        let (input, start) = parse_token(Token::Minus)(input)?;
+        let (input, _) = parse_token(Token::Minus)(input)?;
+        Ok((
+            input,
+            Located::new(Precedence1Postfix::Decrement, start.to_loc()),
+        ))
+    }
+
+    fn expr_p1_member<'t>(
+        input: &'t [LexToken],
+        st: &SymbolTable,
+    ) -> ParseResult<'t, Located<Precedence1Postfix>> {
+        let (input, _) = parse_token(Token::Period)(input)?;
+        let (input, member) = parse_typed::<VariableName>(st)(input)?;
+        Ok((
+            input,
+            Located::new(
+                Precedence1Postfix::Member(member.node.clone()),
+                member.location.clone(),
+            ),
+        ))
+    }
+
+    fn expr_p1_call<'t>(
+        input: &'t [LexToken],
+        st: &SymbolTable,
+    ) -> ParseResult<'t, Located<Precedence1Postfix>> {
+        let (input, start) = parse_token(Token::LeftParen)(input)?;
+
+        let (input, params) = nom::multi::separated_list0(
+            parse_token(Token::Comma),
+            parse_typed::<ExpressionNoSeq>(st),
+        )(input)?;
+
+        let (input, _) = parse_token(Token::RightParen)(input)?;
+
+        Ok((
+            input,
+            Located::new(Precedence1Postfix::Call(params), start.to_loc()),
+        ))
+    }
+
+    fn expr_p1_subscript<'t>(
+        input: &'t [LexToken],
+        st: &SymbolTable,
+    ) -> ParseResult<'t, Located<Precedence1Postfix>> {
+        let (input, start) = parse_token(Token::LeftSquareBracket)(input)?;
+        let (input, subscript) = parse_typed::<ExpressionNoSeq>(st)(input)?;
+        let (input, _) = parse_token(Token::RightSquareBracket)(input)?;
+        Ok((
+            input,
+            Located::new(
+                Precedence1Postfix::ArraySubscript(subscript),
+                start.to_loc(),
+            ),
+        ))
+    }
+
     fn expr_p1_right<'t>(
         input: &'t [LexToken],
         st: &SymbolTable,
     ) -> ParseResult<'t, Located<Precedence1Postfix>> {
-        do_parse!(
-            input,
-            right:
-                alt!(
-                    do_parse!(
-                        start: token!(Token::Plus)
-                            >> token!(Token::Plus)
-                            >> (Located::new(Precedence1Postfix::Increment, start.to_loc()))
-                    ) | do_parse!(
-                        start: token!(Token::Minus)
-                            >> token!(Token::Minus)
-                            >> (Located::new(Precedence1Postfix::Decrement, start.to_loc()))
-                    ) | do_parse!(
-                        start: token!(Token::LeftParen)
-                            >> params:
-                                opt!(do_parse!(
-                                    first: parse!(ExpressionNoSeq, st)
-                                        >> rest: many0!(do_parse!(
-                                            token!(Token::Comma)
-                                                >> next: parse!(ExpressionNoSeq, st)
-                                                >> (next)
-                                        ))
-                                        >> ({
-                                            let mut v = Vec::new();
-                                            v.push(first);
-                                            for next in rest.iter() {
-                                                v.push(next.clone())
-                                            }
-                                            v
-                                        })
-                                ))
-                            >> token!(Token::RightParen)
-                            >> (Located::new(
-                                Precedence1Postfix::Call(match params.clone() {
-                                    Some(v) => v,
-                                    None => Vec::new(),
-                                }),
-                                start.to_loc()
-                            ))
-                    ) | do_parse!(
-                        token!(Token::Period)
-                            >> member: parse!(VariableName, st)
-                            >> (Located::new(
-                                Precedence1Postfix::Member(member.node.clone()),
-                                member.location.clone()
-                            ))
-                    ) | do_parse!(
-                        start: token!(Token::LeftSquareBracket)
-                            >> subscript: parse!(ExpressionNoSeq, st)
-                            >> token!(Token::RightSquareBracket)
-                            >> (Located::new(
-                                Precedence1Postfix::ArraySubscript(subscript),
-                                start.to_loc()
-                            ))
-                    )
-                )
-                >> (right)
-        )
+        nom::branch::alt((
+            expr_p1_increment,
+            expr_p1_decrement,
+            |input| expr_p1_call(input, st),
+            |input| expr_p1_member(input, st),
+            |input| expr_p1_subscript(input, st),
+        ))(input)
     }
 
     fn cons<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
@@ -780,14 +889,17 @@ fn expr_p1<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
         } else {
             return Err(nom::Err::Incomplete(nom::Needed::new(1)));
         };
-        do_parse!(
+        let (input, dtyl) = DataLayout::parse(input, st)?;
+        let (input, _) = parse_token(Token::LeftParen)(input)?;
+        let (input, list) = nom::multi::separated_list0(
+            parse_token(Token::Comma),
+            parse_typed::<ExpressionNoSeq>(st),
+        )(input)?;
+        let (input, _) = parse_token(Token::RightParen)(input)?;
+        Ok((
             input,
-            dtyl: parse!(DataLayout, st)
-                >> token!(Token::LeftParen)
-                >> list: separated_list0!(token!(Token::Comma), parse!(ExpressionNoSeq, st))
-                >> token!(Token::RightParen)
-                >> (Located::new(Expression::NumericConstructor(dtyl, list), loc))
-        )
+            Located::new(Expression::NumericConstructor(dtyl, list), loc),
+        ))
     }
 
     let input = match cons(input, st) {
@@ -796,86 +908,131 @@ fn expr_p1<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
         Err(_) => input,
     };
 
-    do_parse!(
-        input,
-        left: call!(expr_paren, st)
-            >> rights: many0!(call!(expr_p1_right, st))
-            >> ({
-                let loc = left.location.clone();
-                let mut final_expression = left;
-                for val in rights.iter() {
-                    final_expression = Located::new(
-                        match val.node.clone() {
-                            Precedence1Postfix::Increment => Expression::UnaryOperation(
-                                UnaryOp::PostfixIncrement,
-                                Box::new(final_expression),
-                            ),
-                            Precedence1Postfix::Decrement => Expression::UnaryOperation(
-                                UnaryOp::PostfixDecrement,
-                                Box::new(final_expression),
-                            ),
-                            Precedence1Postfix::Call(params) => {
-                                Expression::Call(Box::new(final_expression), params)
-                            }
-                            Precedence1Postfix::ArraySubscript(expr) => Expression::ArraySubscript(
-                                Box::new(final_expression),
-                                Box::new(expr),
-                            ),
-                            Precedence1Postfix::Member(name) => {
-                                Expression::Member(Box::new(final_expression), name)
-                            }
-                        },
-                        loc.clone(),
-                    )
-                }
-                final_expression
-            })
-    )
+    let (input, left) = expr_paren(input, st)?;
+    let (input, rights) = nom::multi::many0(|input| expr_p1_right(input, st))(input)?;
+
+    let expr = {
+        let loc = left.location.clone();
+        let mut final_expression = left;
+        for val in rights.iter() {
+            final_expression = Located::new(
+                match val.node.clone() {
+                    Precedence1Postfix::Increment => Expression::UnaryOperation(
+                        UnaryOp::PostfixIncrement,
+                        Box::new(final_expression),
+                    ),
+                    Precedence1Postfix::Decrement => Expression::UnaryOperation(
+                        UnaryOp::PostfixDecrement,
+                        Box::new(final_expression),
+                    ),
+                    Precedence1Postfix::Call(params) => {
+                        Expression::Call(Box::new(final_expression), params)
+                    }
+                    Precedence1Postfix::ArraySubscript(expr) => {
+                        Expression::ArraySubscript(Box::new(final_expression), Box::new(expr))
+                    }
+                    Precedence1Postfix::Member(name) => {
+                        Expression::Member(Box::new(final_expression), name)
+                    }
+                },
+                loc.clone(),
+            )
+        }
+        final_expression
+    };
+
+    Ok((input, expr))
 }
 
-fn unaryop_prefix<'t>(input: &'t [LexToken]) -> ParseResult<'t, Located<UnaryOp>> {
-    alt!(input,
-        do_parse!(
-            start: token!(Token::Plus)
-                >> token!(Token::Plus)
-                >> (Located::new(UnaryOp::PrefixIncrement, start.to_loc()))
-        ) |
-        do_parse!(
-            start: token!(Token::Minus)
-                >> token!(Token::Minus)
-                >> (Located::new(UnaryOp::PrefixDecrement, start.to_loc()))
-        ) |
-        token!(Token::Plus) => { |s: LexToken| Located::new(UnaryOp::Plus, s.to_loc()) } |
-        token!(Token::Minus) => { |s: LexToken| Located::new(UnaryOp::Minus, s.to_loc()) } |
-        token!(Token::ExclamationPoint) => {
-            |s: LexToken| Located::new(UnaryOp::LogicalNot, s.to_loc())
-        } |
-        token!(Token::Tilde) => { |s: LexToken| Located::new(UnaryOp::BitwiseNot, s.to_loc()) }
-    )
+fn unaryop_prefix(input: &[LexToken]) -> ParseResult<Located<UnaryOp>> {
+    fn unaryop_increment(input: &[LexToken]) -> ParseResult<Located<UnaryOp>> {
+        // TODO: ++ tokens
+        let (input, start) = parse_token(Token::Plus)(input)?;
+        let (input, _) = parse_token(Token::Plus)(input)?;
+        Ok((
+            input,
+            Located::new(UnaryOp::PrefixIncrement, start.to_loc()),
+        ))
+    }
+
+    fn unaryop_decrement(input: &[LexToken]) -> ParseResult<Located<UnaryOp>> {
+        // TODO: -- tokens
+        let (input, start) = parse_token(Token::Minus)(input)?;
+        let (input, _) = parse_token(Token::Minus)(input)?;
+        Ok((
+            input,
+            Located::new(UnaryOp::PrefixDecrement, start.to_loc()),
+        ))
+    }
+
+    fn unaryop_add(input: &[LexToken]) -> ParseResult<Located<UnaryOp>> {
+        let (input, start) = parse_token(Token::Plus)(input)?;
+        Ok((input, Located::new(UnaryOp::Plus, start.to_loc())))
+    }
+
+    fn unaryop_subtract(input: &[LexToken]) -> ParseResult<Located<UnaryOp>> {
+        let (input, start) = parse_token(Token::Minus)(input)?;
+        Ok((input, Located::new(UnaryOp::Minus, start.to_loc())))
+    }
+
+    fn unaryop_logical_not(input: &[LexToken]) -> ParseResult<Located<UnaryOp>> {
+        let (input, start) = parse_token(Token::ExclamationPoint)(input)?;
+        Ok((input, Located::new(UnaryOp::LogicalNot, start.to_loc())))
+    }
+
+    fn unaryop_bitwise_not(input: &[LexToken]) -> ParseResult<Located<UnaryOp>> {
+        let (input, start) = parse_token(Token::Tilde)(input)?;
+        Ok((input, Located::new(UnaryOp::BitwiseNot, start.to_loc())))
+    }
+
+    nom::branch::alt((
+        unaryop_increment,
+        unaryop_decrement,
+        unaryop_add,
+        unaryop_subtract,
+        unaryop_logical_not,
+        unaryop_bitwise_not,
+    ))(input)
 }
 
 fn expr_p2<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    alt!(
-        input,
-        do_parse!(
-            unary: unaryop_prefix
-                >> expr: call!(expr_p2, st)
-                >> ({
-                    Located::new(
-                        Expression::UnaryOperation(unary.node.clone(), Box::new(expr)),
-                        unary.location.clone(),
-                    )
-                })
-        ) | do_parse!(
-            start: token!(Token::LeftParen)
-                >> cast: parse!(Type, st)
-                >> token!(Token::RightParen)
-                >> expr: call!(expr_p2, st)
-                >> (Located::new(Expression::Cast(cast, Box::new(expr)), start.to_loc()))
-        ) | call!(expr_p1, st)
-    )
+    fn expr_p2_unaryop<'t>(
+        input: &'t [LexToken],
+        st: &SymbolTable,
+    ) -> ParseResult<'t, Located<Expression>> {
+        let (input, unary) = unaryop_prefix(input)?;
+        let (input, expr) = expr_p2(input, st)?;
+        Ok((
+            input,
+            Located::new(
+                Expression::UnaryOperation(unary.node.clone(), Box::new(expr)),
+                unary.location.clone(),
+            ),
+        ))
+    }
+
+    fn expr_p2_cast<'t>(
+        input: &'t [LexToken],
+        st: &SymbolTable,
+    ) -> ParseResult<'t, Located<Expression>> {
+        let (input, start) = parse_token(Token::LeftParen)(input)?;
+        let (input, cast) = parse_typed::<Type>(st)(input)?;
+        let (input, _) = parse_token(Token::RightParen)(input)?;
+        let (input, expr) = expr_p2(input, st)?;
+        Ok((
+            input,
+            Located::new(Expression::Cast(cast, Box::new(expr)), start.to_loc()),
+        ))
+    }
+
+    nom::branch::alt((
+        |input| expr_p2_unaryop(input, st),
+        |input| expr_p2_cast(input, st),
+        |input| expr_p1(input, st),
+    ))(input)
 }
 
+/// Combine binary operations
 fn combine_rights(
     left: Located<Expression>,
     rights: Vec<(BinOp, Located<Expression>)>,
@@ -896,317 +1053,294 @@ fn combine_rights(
     final_expression
 }
 
+/// Parse multiple binary operations
+fn parse_binary_operations<'t>(
+    operator_fn: impl Fn(&'t [LexToken]) -> ParseResult<'t, BinOp>,
+    expression_fn: impl Fn(&'t [LexToken], &SymbolTable) -> ParseResult<'t, Located<Expression>>,
+    input: &'t [LexToken],
+    st: &SymbolTable,
+) -> ParseResult<'t, Located<Expression>> {
+    let (input, left) = expression_fn(input, st)?;
+    let (input, rights) = nom::multi::many0(nom::sequence::tuple((operator_fn, |input| {
+        expression_fn(input, st)
+    })))(input)?;
+    let expr = combine_rights(left, rights);
+    Ok((input, expr))
+}
+
 fn expr_p3<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    fn binop_p3(input: &[LexToken]) -> ParseResult<BinOp> {
-        alt!(input,
-            token!(Token::Asterix) => { |_| BinOp::Multiply } |
-            token!(Token::ForwardSlash) => { |_| BinOp::Divide } |
-            token!(Token::Percent) => { |_| BinOp::Modulus }
-        )
+    fn parse_op(input: &[LexToken]) -> ParseResult<BinOp> {
+        match input.first() {
+            Some(LexToken(tok, _)) => {
+                let op = match *tok {
+                    Token::Asterix => BinOp::Multiply,
+                    Token::ForwardSlash => BinOp::Divide,
+                    Token::Percent => BinOp::Modulus,
+                    _ => {
+                        return Err(nom::Err::Error(ParseErrorContext(
+                            input,
+                            ParseErrorReason::WrongToken,
+                        )))
+                    }
+                };
+                Ok((&input[1..], op))
+            }
+            None => Err(nom::Err::Incomplete(nom::Needed::new(1))),
+        }
     }
 
-    fn expr_p3_right<'t>(
-        input: &'t [LexToken],
-        st: &SymbolTable,
-    ) -> ParseResult<'t, (BinOp, Located<Expression>)> {
-        do_parse!(
-            input,
-            op: binop_p3 >> right: call!(expr_p2, st) >> (op, right)
-        )
-    }
-
-    do_parse!(
-        input,
-        left: call!(expr_p2, st)
-            >> rights: many0!(call!(expr_p3_right, st))
-            >> (combine_rights(left, rights))
-    )
+    parse_binary_operations(parse_op, expr_p2, input, st)
 }
 
 fn expr_p4<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    fn binop_p4(input: &[LexToken]) -> ParseResult<BinOp> {
-        alt!(input,
-            token!(Token::Plus) => { |_| BinOp::Add } |
-            token!(Token::Minus) => { |_| BinOp::Subtract }
-        )
+    fn parse_op(input: &[LexToken]) -> ParseResult<BinOp> {
+        match input.first() {
+            Some(LexToken(tok, _)) => {
+                let op = match *tok {
+                    Token::Plus => BinOp::Add,
+                    Token::Minus => BinOp::Subtract,
+                    _ => {
+                        return Err(nom::Err::Error(ParseErrorContext(
+                            input,
+                            ParseErrorReason::WrongToken,
+                        )))
+                    }
+                };
+                Ok((&input[1..], op))
+            }
+            None => Err(nom::Err::Incomplete(nom::Needed::new(1))),
+        }
     }
 
-    fn expr_p4_right<'t>(
-        input: &'t [LexToken],
-        st: &SymbolTable,
-    ) -> ParseResult<'t, (BinOp, Located<Expression>)> {
-        do_parse!(
-            input,
-            op: binop_p4 >> right: call!(expr_p3, st) >> (op, right)
-        )
-    }
-
-    do_parse!(
-        input,
-        left: call!(expr_p3, st)
-            >> rights: many0!(call!(expr_p4_right, st))
-            >> (combine_rights(left, rights))
-    )
+    parse_binary_operations(parse_op, expr_p3, input, st)
 }
 
 fn expr_p5<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
     fn parse_op(input: &[LexToken]) -> ParseResult<BinOp> {
-        alt!(
-            input,
-            do_parse!(
-                token!(Token::LeftAngleBracket(FollowedBy::Token))
-                    >> token!(Token::LeftAngleBracket(_))
-                    >> (BinOp::LeftShift)
-            ) | do_parse!(
-                token!(Token::RightAngleBracket(FollowedBy::Token))
-                    >> token!(Token::RightAngleBracket(_))
-                    >> (BinOp::RightShift)
-            )
-        )
+        match input {
+            [LexToken(Token::LeftAngleBracket(FollowedBy::Token), _), LexToken(Token::LeftAngleBracket(_), _), rest @ ..] => {
+                Ok((rest, BinOp::LeftShift))
+            }
+            [LexToken(Token::RightAngleBracket(FollowedBy::Token), _), LexToken(Token::RightAngleBracket(_), _), rest @ ..] => {
+                Ok((rest, BinOp::RightShift))
+            }
+            [] => Err(nom::Err::Incomplete(nom::Needed::new(1))),
+            _ => Err(nom::Err::Error(ParseErrorContext(
+                input,
+                ParseErrorReason::WrongToken,
+            ))),
+        }
     }
 
-    fn parse_rights<'t>(
-        input: &'t [LexToken],
-        st: &SymbolTable,
-    ) -> ParseResult<'t, (BinOp, Located<Expression>)> {
-        do_parse!(
-            input,
-            op: parse_op >> right: call!(expr_p4, st) >> (op, right)
-        )
-    }
-
-    do_parse!(
-        input,
-        left: call!(expr_p4, st)
-            >> rights: many0!(call!(parse_rights, st))
-            >> (combine_rights(left, rights))
-    )
+    parse_binary_operations(parse_op, expr_p4, input, st)
 }
 
 fn expr_p6<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
     fn parse_op(input: &[LexToken]) -> ParseResult<BinOp> {
-        alt!(input,
-            do_parse!(
-                token!(Token::LeftAngleBracket(FollowedBy::Token))
-                    >> token!(Token::Equals)
-                    >> (BinOp::LessEqual)
-            ) |
-            do_parse!(
-                token!(Token::RightAngleBracket(FollowedBy::Token))
-                    >> token!(Token::Equals)
-                    >> (BinOp::GreaterEqual)
-            ) |
-            token!(Token::LeftAngleBracket(_)) => { |_| BinOp::LessThan } |
-            token!(Token::RightAngleBracket(_)) => { |_| BinOp::GreaterThan }
-        )
+        match input {
+            [LexToken(Token::LeftAngleBracket(FollowedBy::Token), _), LexToken(Token::Equals, _), rest @ ..] => {
+                Ok((rest, BinOp::LessEqual))
+            }
+            [LexToken(Token::RightAngleBracket(FollowedBy::Token), _), LexToken(Token::Equals, _), rest @ ..] => {
+                Ok((rest, BinOp::GreaterEqual))
+            }
+            [LexToken(Token::LeftAngleBracket(_), _), rest @ ..] => Ok((rest, BinOp::LessThan)),
+            [LexToken(Token::RightAngleBracket(_), _), rest @ ..] => Ok((rest, BinOp::GreaterThan)),
+            [] => Err(nom::Err::Incomplete(nom::Needed::new(1))),
+            _ => Err(nom::Err::Error(ParseErrorContext(
+                input,
+                ParseErrorReason::WrongToken,
+            ))),
+        }
     }
 
-    fn parse_rights<'t>(
-        input: &'t [LexToken],
-        st: &SymbolTable,
-    ) -> ParseResult<'t, (BinOp, Located<Expression>)> {
-        do_parse!(
-            input,
-            op: parse_op >> right: call!(expr_p5, st) >> (op, right)
-        )
-    }
-
-    do_parse!(
-        input,
-        left: call!(expr_p5, st)
-            >> rights: many0!(call!(parse_rights, st))
-            >> (combine_rights(left, rights))
-    )
+    parse_binary_operations(parse_op, expr_p5, input, st)
 }
 
 fn expr_p7<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
     fn parse_op(input: &[LexToken]) -> ParseResult<BinOp> {
-        alt!(input,
-            token!(Token::DoubleEquals) => { |_| BinOp::Equality } |
-            token!(Token::ExclamationEquals) => { |_| BinOp::Inequality }
-        )
+        match input {
+            [LexToken(Token::DoubleEquals, _), rest @ ..] => Ok((rest, BinOp::Equality)),
+            [LexToken(Token::ExclamationEquals, _), rest @ ..] => Ok((rest, BinOp::Inequality)),
+            [] => Err(nom::Err::Incomplete(nom::Needed::new(1))),
+            _ => Err(nom::Err::Error(ParseErrorContext(
+                input,
+                ParseErrorReason::WrongToken,
+            ))),
+        }
     }
 
-    fn parse_rights<'t>(
-        input: &'t [LexToken],
-        st: &SymbolTable,
-    ) -> ParseResult<'t, (BinOp, Located<Expression>)> {
-        do_parse!(
-            input,
-            op: parse_op >> right: call!(expr_p6, st) >> (op, right)
-        )
-    }
-
-    do_parse!(
-        input,
-        left: call!(expr_p6, st)
-            >> rights: many0!(call!(parse_rights, st))
-            >> (combine_rights(left, rights))
-    )
+    parse_binary_operations(parse_op, expr_p6, input, st)
 }
 
 fn expr_p8<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    do_parse!(
-        input,
-        left: call!(expr_p7, st)
-            >> rights:
-                many0!(do_parse!(
-                    op: token!(LexToken(Token::Ampersand(_), _) => BinOp::BitwiseAnd)
-                        >> right: call!(expr_p7, st)
-                        >> (op, right)
-                ))
-            >> (combine_rights(left, rights))
-    )
+    fn parse_op(input: &[LexToken]) -> ParseResult<BinOp> {
+        match input {
+            [LexToken(Token::Ampersand(_), _), rest @ ..] => Ok((rest, BinOp::BitwiseAnd)),
+            [] => Err(nom::Err::Incomplete(nom::Needed::new(1))),
+            _ => Err(nom::Err::Error(ParseErrorContext(
+                input,
+                ParseErrorReason::WrongToken,
+            ))),
+        }
+    }
+
+    parse_binary_operations(parse_op, expr_p7, input, st)
 }
 
 fn expr_p9<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    do_parse!(
-        input,
-        left: call!(expr_p8, st)
-            >> rights:
-                many0!(do_parse!(
-                    op: token!(LexToken(Token::Hat, _) => BinOp::BitwiseXor)
-                        >> right: call!(expr_p8, st)
-                        >> (op, right)
-                ))
-            >> (combine_rights(left, rights))
-    )
+    fn parse_op(input: &[LexToken]) -> ParseResult<BinOp> {
+        match input {
+            [LexToken(Token::Hat, _), rest @ ..] => Ok((rest, BinOp::BitwiseXor)),
+            [] => Err(nom::Err::Incomplete(nom::Needed::new(1))),
+            _ => Err(nom::Err::Error(ParseErrorContext(
+                input,
+                ParseErrorReason::WrongToken,
+            ))),
+        }
+    }
+
+    parse_binary_operations(parse_op, expr_p8, input, st)
 }
 
 fn expr_p10<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    do_parse!(
-        input,
-        left: call!(expr_p9, st)
-            >> rights:
-                many0!(do_parse!(
-                    op: token!(LexToken(Token::VerticalBar(_), _) => BinOp::BitwiseOr)
-                        >> right: call!(expr_p9, st)
-                        >> (op, right)
-                ))
-            >> (combine_rights(left, rights))
-    )
+    fn parse_op(input: &[LexToken]) -> ParseResult<BinOp> {
+        match input {
+            [LexToken(Token::VerticalBar(_), _), rest @ ..] => Ok((rest, BinOp::BitwiseOr)),
+            [] => Err(nom::Err::Incomplete(nom::Needed::new(1))),
+            _ => Err(nom::Err::Error(ParseErrorContext(
+                input,
+                ParseErrorReason::WrongToken,
+            ))),
+        }
+    }
+
+    parse_binary_operations(parse_op, expr_p9, input, st)
 }
 
 fn expr_p11<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    do_parse!(
-        input,
-        left: call!(expr_p10, st)
-            >> rights:
-                many0!(do_parse!(
-                    op: do_parse!(
-                        token!(Token::Ampersand(FollowedBy::Token))
-                            >> token!(Token::Ampersand(_))
-                            >> (BinOp::BooleanAnd)
-                    ) >> right: call!(expr_p10, st)
-                        >> (op, right)
-                ))
-            >> (combine_rights(left, rights))
-    )
+    fn parse_op(input: &[LexToken]) -> ParseResult<BinOp> {
+        match input {
+            [LexToken(Token::Ampersand(FollowedBy::Token), _), LexToken(Token::Ampersand(_), _), rest @ ..] => {
+                Ok((rest, BinOp::BooleanAnd))
+            }
+            [] => Err(nom::Err::Incomplete(nom::Needed::new(1))),
+            _ => Err(nom::Err::Error(ParseErrorContext(
+                input,
+                ParseErrorReason::WrongToken,
+            ))),
+        }
+    }
+
+    parse_binary_operations(parse_op, expr_p10, input, st)
 }
 
 fn expr_p12<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    do_parse!(
-        input,
-        left: call!(expr_p11, st)
-            >> rights:
-                many0!(do_parse!(
-                    op: do_parse!(
-                        token!(Token::VerticalBar(FollowedBy::Token))
-                            >> token!(Token::VerticalBar(_))
-                            >> (BinOp::BooleanOr)
-                    ) >> right: call!(expr_p11, st)
-                        >> (op, right)
-                ))
-            >> (combine_rights(left, rights))
-    )
+    fn parse_op(input: &[LexToken]) -> ParseResult<BinOp> {
+        match input {
+            [LexToken(Token::VerticalBar(FollowedBy::Token), _), LexToken(Token::VerticalBar(_), _), rest @ ..] => {
+                Ok((rest, BinOp::BooleanOr))
+            }
+            [] => Err(nom::Err::Incomplete(nom::Needed::new(1))),
+            _ => Err(nom::Err::Error(ParseErrorContext(
+                input,
+                ParseErrorReason::WrongToken,
+            ))),
+        }
+    }
+
+    parse_binary_operations(parse_op, expr_p11, input, st)
 }
 
 fn expr_p13<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    do_parse!(
-        input,
-        main: call!(expr_p12, st)
-            >> opt: opt!(do_parse!(
-                token!(Token::QuestionMark)
-                    >> left: call!(expr_p13, st)
-                    >> token!(Token::Colon)
-                    >> right: call!(expr_p13, st)
-                    >> (left, right)
-            ))
-            >> ({
-                match opt.clone() {
-                    Some((left, right)) => {
-                        let loc = main.location.clone();
-                        Located::new(
-                            Expression::TernaryConditional(
-                                Box::new(main),
-                                Box::new(left),
-                                Box::new(right),
-                            ),
-                            loc,
-                        )
-                    }
-                    None => main,
-                }
-            })
-    )
+    fn ternary_right<'t>(
+        input: &'t [LexToken],
+        st: &SymbolTable,
+    ) -> ParseResult<'t, (Located<Expression>, Located<Expression>)> {
+        let (input, _) = parse_token(Token::QuestionMark)(input)?;
+        let (input, left) = expr_p13(input, st)?;
+        let (input, _) = parse_token(Token::Colon)(input)?;
+        let (input, right) = expr_p13(input, st)?;
+        Ok((input, (left, right)))
+    }
+
+    let (input, main) = expr_p12(input, st)?;
+    match ternary_right(input, st) {
+        Ok((input, (left, right))) => {
+            let loc = main.location.clone();
+            let expr = Located::new(
+                Expression::TernaryConditional(Box::new(main), Box::new(left), Box::new(right)),
+                loc,
+            );
+            Ok((input, expr))
+        }
+        _ => Ok((input, main)),
+    }
 }
 
 fn expr_p14<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    fn op_p14(input: &[LexToken]) -> ParseResult<BinOp> {
-        alt!(
-            input,
-            token!(LexToken(Token::Equals, _) => BinOp::Assignment)
-                | do_parse!(token!(Token::Plus) >> token!(Token::Equals) >> (BinOp::SumAssignment))
-                | do_parse!(
-                    token!(Token::Minus) >> token!(Token::Equals) >> (BinOp::DifferenceAssignment)
-                )
-                | do_parse!(
-                    token!(Token::Asterix) >> token!(Token::Equals) >> (BinOp::ProductAssignment)
-                )
-                | do_parse!(
-                    token!(Token::ForwardSlash)
-                        >> token!(Token::Equals)
-                        >> (BinOp::QuotientAssignment)
-                )
-                | do_parse!(
-                    token!(Token::Percent) >> token!(Token::Equals) >> (BinOp::RemainderAssignment)
-                )
-        )
+    fn parse_op(input: &[LexToken]) -> ParseResult<BinOp> {
+        match input {
+            [LexToken(Token::Equals, _), rest @ ..] => Ok((rest, BinOp::Assignment)),
+            [LexToken(Token::Plus, _), LexToken(Token::Equals, _), rest @ ..] => {
+                Ok((rest, BinOp::SumAssignment))
+            }
+            [LexToken(Token::Minus, _), LexToken(Token::Equals, _), rest @ ..] => {
+                Ok((rest, BinOp::DifferenceAssignment))
+            }
+            [LexToken(Token::Asterix, _), LexToken(Token::Equals, _), rest @ ..] => {
+                Ok((rest, BinOp::ProductAssignment))
+            }
+            [LexToken(Token::ForwardSlash, _), LexToken(Token::Equals, _), rest @ ..] => {
+                Ok((rest, BinOp::QuotientAssignment))
+            }
+            [LexToken(Token::Percent, _), LexToken(Token::Equals, _), rest @ ..] => {
+                Ok((rest, BinOp::RemainderAssignment))
+            }
+            [] => Err(nom::Err::Incomplete(nom::Needed::new(1))),
+            _ => Err(nom::Err::Error(ParseErrorContext(
+                input,
+                ParseErrorReason::WrongToken,
+            ))),
+        }
     }
 
-    do_parse!(
-        input,
-        lhs: call!(expr_p13, st)
-            >> opt: opt!(do_parse!(
-                op: op_p14 >> rhs: call!(expr_p14, st) >> (op, rhs)
-            ))
-            >> ({
-                match opt.clone() {
-                    Some((op, rhs)) => {
-                        let loc = lhs.location.clone();
-                        Located::new(
-                            Expression::BinaryOperation(op, Box::new(lhs), Box::new(rhs)),
-                            loc,
-                        )
-                    }
-                    None => lhs,
-                }
-            })
-    )
+    fn binary_right<'t>(
+        input: &'t [LexToken],
+        st: &SymbolTable,
+    ) -> ParseResult<'t, (BinOp, Located<Expression>)> {
+        let (input, op) = parse_op(input)?;
+        let (input, rhs) = expr_p14(input, st)?;
+        Ok((input, (op, rhs)))
+    }
+
+    let (input, main) = expr_p13(input, st)?;
+    match binary_right(input, st) {
+        Ok((input, (op, right))) => {
+            let loc = main.location.clone();
+            let expr = Located::new(
+                Expression::BinaryOperation(op, Box::new(main), Box::new(right)),
+                loc,
+            );
+            Ok((input, expr))
+        }
+        _ => Ok((input, main)),
+    }
 }
 
 fn expr_p15<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-    do_parse!(
-        input,
-        left: call!(expr_p14, st)
-            >> rights:
-                many0!(do_parse!(
-                    op: token!(LexToken(Token::Comma, _) => BinOp::Sequence)
-                        >> right: call!(expr_p14, st)
-                        >> (op, right)
-                ))
-            >> (combine_rights(left, rights))
-    )
+    fn parse_op(input: &[LexToken]) -> ParseResult<BinOp> {
+        match input {
+            [LexToken(Token::Comma, _), rest @ ..] => Ok((rest, BinOp::Sequence)),
+            [] => Err(nom::Err::Incomplete(nom::Needed::new(1))),
+            _ => Err(nom::Err::Error(ParseErrorContext(
+                input,
+                ParseErrorReason::WrongToken,
+            ))),
+        }
+    }
+
+    parse_binary_operations(parse_op, expr_p14, input, st)
 }
 
 impl Parse for Expression {
@@ -1214,6 +1348,133 @@ impl Parse for Expression {
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self::Output> {
         expr_p15(input, st)
     }
+}
+
+#[test]
+fn test_expression() {
+    let st = SymbolTable::empty();
+    let a_id = Identifier("a".to_string());
+    let b_id = Identifier("b".to_string());
+    let c_id = Identifier("c".to_string());
+    let d_id = Identifier("d".to_string());
+    let e_id = Identifier("e".to_string());
+    let f_id = Identifier("f".to_string());
+    let g_id = Identifier("g".to_string());
+
+    fn loc(i: u64) -> FileLocation {
+        FileLocation::Known(FileName(String::new()), Line(i), Column(i))
+    }
+
+    // Test `a + b + c` is `((a + b) + c)`
+    let add_chain_tokens = &[
+        LexToken(Token::Id(a_id.clone()), loc(0)),
+        LexToken(Token::Plus, FileLocation::Unknown),
+        LexToken(Token::Id(b_id.clone()), loc(1)),
+        LexToken(Token::Plus, FileLocation::Unknown),
+        LexToken(Token::Id(c_id.clone()), loc(2)),
+        LexToken(Token::Semicolon, FileLocation::Unknown),
+    ];
+    let add_chain_expr = Expression::parse(add_chain_tokens, &st);
+    assert_eq!(
+        add_chain_expr,
+        Ok((
+            &[LexToken(Token::Semicolon, FileLocation::Unknown)][..],
+            Located::new(
+                Expression::BinaryOperation(
+                    BinOp::Add,
+                    Box::new(Located::new(
+                        Expression::BinaryOperation(
+                            BinOp::Add,
+                            Box::new(Located::new(Expression::Variable(a_id.0.clone()), loc(0))),
+                            Box::new(Located::new(Expression::Variable(b_id.0.clone()), loc(1))),
+                        ),
+                        loc(0)
+                    )),
+                    Box::new(Located::new(Expression::Variable(c_id.0.clone()), loc(2))),
+                ),
+                loc(0)
+            )
+        ))
+    );
+
+    // Test `a, b, c` is `((a, b), c)`
+    let comma_chain_tokens = &[
+        LexToken(Token::Id(a_id.clone()), loc(0)),
+        LexToken(Token::Comma, FileLocation::Unknown),
+        LexToken(Token::Id(b_id.clone()), loc(1)),
+        LexToken(Token::Comma, FileLocation::Unknown),
+        LexToken(Token::Id(c_id.clone()), loc(2)),
+        LexToken(Token::Semicolon, FileLocation::Unknown),
+    ];
+    let comma_chain_expr = Expression::parse(comma_chain_tokens, &st);
+    assert_eq!(
+        comma_chain_expr,
+        Ok((
+            &[LexToken(Token::Semicolon, FileLocation::Unknown)][..],
+            Located::new(
+                Expression::BinaryOperation(
+                    BinOp::Sequence,
+                    Box::new(Located::new(
+                        Expression::BinaryOperation(
+                            BinOp::Sequence,
+                            Box::new(Located::new(Expression::Variable(a_id.0.clone()), loc(0))),
+                            Box::new(Located::new(Expression::Variable(b_id.0.clone()), loc(1))),
+                        ),
+                        loc(0)
+                    )),
+                    Box::new(Located::new(Expression::Variable(c_id.0.clone()), loc(2))),
+                ),
+                loc(0)
+            )
+        ))
+    );
+
+    // Test `a ? b ? c : d : e ? f : g` is `a ? (b ? c : d) : (e ? f : g)`
+    let nested_ternary_tokens = &[
+        LexToken(Token::Id(a_id.clone()), loc(0)),
+        LexToken(Token::QuestionMark, FileLocation::Unknown),
+        LexToken(Token::Id(b_id.clone()), loc(1)),
+        LexToken(Token::QuestionMark, FileLocation::Unknown),
+        LexToken(Token::Id(c_id.clone()), loc(2)),
+        LexToken(Token::Colon, FileLocation::Unknown),
+        LexToken(Token::Id(d_id.clone()), loc(3)),
+        LexToken(Token::Colon, FileLocation::Unknown),
+        LexToken(Token::Id(e_id.clone()), loc(4)),
+        LexToken(Token::QuestionMark, FileLocation::Unknown),
+        LexToken(Token::Id(f_id.clone()), loc(5)),
+        LexToken(Token::Colon, FileLocation::Unknown),
+        LexToken(Token::Id(g_id.clone()), loc(6)),
+        LexToken(Token::Semicolon, FileLocation::Unknown),
+    ];
+    let comma_chain_expr = Expression::parse(nested_ternary_tokens, &st);
+    assert_eq!(
+        comma_chain_expr,
+        Ok((
+            &[LexToken(Token::Semicolon, FileLocation::Unknown)][..],
+            Located::new(
+                Expression::TernaryConditional(
+                    Box::new(Located::new(Expression::Variable(a_id.0.clone()), loc(0))),
+                    Box::new(Located::new(
+                        Expression::TernaryConditional(
+                            Box::new(Located::new(Expression::Variable(b_id.0.clone()), loc(1))),
+                            Box::new(Located::new(Expression::Variable(c_id.0.clone()), loc(2))),
+                            Box::new(Located::new(Expression::Variable(d_id.0.clone()), loc(3))),
+                        ),
+                        loc(1)
+                    )),
+                    Box::new(Located::new(
+                        Expression::TernaryConditional(
+                            Box::new(Located::new(Expression::Variable(e_id.0.clone()), loc(4))),
+                            Box::new(Located::new(Expression::Variable(f_id.0.clone()), loc(5))),
+                            Box::new(Located::new(Expression::Variable(g_id.0.clone()), loc(6))),
+                        ),
+                        loc(4)
+                    )),
+                ),
+                loc(0)
+            )
+        ))
+    );
 }
 
 /// Fake node for parsing an expression where the comma has a different meaning
@@ -1231,35 +1492,45 @@ impl Parse for Initializer {
     type Output = Option<Initializer>;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self::Output> {
         fn init_expr<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Initializer> {
-            map!(input, parse!(ExpressionNoSeq, st), |expr| {
-                Initializer::Expression(expr)
-            })
+            let (input, expr) = parse_typed::<ExpressionNoSeq>(st)(input)?;
+            Ok((input, Initializer::Expression(expr)))
         }
 
         fn init_aggregate<'t>(
             input: &'t [LexToken],
             st: &SymbolTable,
         ) -> ParseResult<'t, Initializer> {
-            map!(
-                input,
-                delimited!(
-                    token!(Token::LeftBrace),
-                    separated_list1!(token!(Token::Comma), call!(init_any, st)),
-                    token!(Token::RightBrace)
-                ),
-                |exprs| Initializer::Aggregate(exprs)
-            )
+            let (input, _) = parse_token(Token::LeftBrace)(input)?;
+            let (input, exprs) = nom::multi::separated_list1(parse_token(Token::Comma), |input| {
+                init_any(input, st)
+            })(input)?;
+            let (input, _) = parse_token(Token::RightBrace)(input)?;
+            Ok((input, Initializer::Aggregate(exprs)))
         }
 
         fn init_any<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Initializer> {
-            alt!(input, call!(init_expr, st) | call!(init_aggregate, st))
+            if let Ok((input, expr)) = init_expr(input, st) {
+                return Ok((input, expr));
+            }
+
+            if let Ok((input, expr)) = init_aggregate(input, st) {
+                return Ok((input, expr));
+            }
+
+            Err(nom::Err::Error(ParseErrorContext(
+                input,
+                ParseErrorReason::ErrorKind(nom::error::ErrorKind::Alt),
+            )))
         }
 
         if input.len() == 0 {
             Err(nom::Err::Incomplete(nom::Needed::new(1)))
         } else {
             match input[0].0 {
-                Token::Equals => map!(&input[1..], call!(init_any, st), |init| Some(init)),
+                Token::Equals => match init_any(&input[1..], st) {
+                    Ok((input, init)) => Ok((input, Some(init))),
+                    Err(err) => Err(err),
+                },
                 _ => Ok((input, None)),
             }
         }
@@ -1350,42 +1621,41 @@ fn test_initializer() {
 impl Parse for VarDef {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        do_parse!(
-            input,
-            typename: parse!(LocalType, st)
-                >> defs: separated_list1!(
-                    token!(Token::Comma),
-                    do_parse!(
-                        varname: parse!(VariableName, st)
-                            >> array_dim: opt!(call!(parse_arraydim, st))
-                            >> init: parse!(Initializer, st)
-                            >> (LocalVariableName {
-                                name: varname.to_node(),
-                                bind: match array_dim {
-                                    Some(ref expr) => VariableBind::Array(expr.clone()),
-                                    None => VariableBind::Normal,
-                                },
-                                init: init
-                            })
-                    )
-                )
-                >> ({
-                    VarDef {
-                        local_type: typename,
-                        defs: defs,
-                    }
-                })
-        )
+        let (input, typename) = parse_typed::<LocalType>(st)(input)?;
+        let (input, defs) = nom::multi::separated_list1(parse_token(Token::Comma), |input| {
+            let (input, varname) = parse_typed::<VariableName>(st)(input)?;
+            let (input, array_dim) =
+                nom::combinator::opt(|input| parse_arraydim(input, st))(input)?;
+            let (input, init) = parse_typed::<Initializer>(st)(input)?;
+            let v = LocalVariableName {
+                name: varname.to_node(),
+                bind: match array_dim {
+                    Some(ref expr) => VariableBind::Array(expr.clone()),
+                    None => VariableBind::Normal,
+                },
+                init: init,
+            };
+            Ok((input, v))
+        })(input)?;
+        let defs = VarDef {
+            local_type: typename,
+            defs: defs,
+        };
+        Ok((input, defs))
     }
 }
 
 impl Parse for InitStatement {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        let res: ParseResult<InitStatement> = alt!(input,
-            parse!(VarDef, st) => { |vd| InitStatement::Declaration(vd) } |
-            parse!(Expression, st) => { |e| InitStatement::Expression(e) }
-        );
+        let res = nom::branch::alt((
+            nom::combinator::map(parse_typed::<VarDef>(st), |vd| {
+                InitStatement::Declaration(vd)
+            }),
+            nom::combinator::map(parse_typed::<Expression>(st), |e| {
+                InitStatement::Expression(e)
+            }),
+        ))(input);
         match res {
             Ok((rest, res)) => Ok((rest, res)),
             Err(nom::Err::Incomplete(needed)) => Err(nom::Err::Incomplete(needed)),
@@ -1395,19 +1665,13 @@ impl Parse for InitStatement {
 }
 
 fn statement_attribute<'t>(input: &'t [LexToken], _: &SymbolTable) -> ParseResult<'t, ()> {
-    do_parse!(
-        input,
-        token!(Token::LeftSquareBracket)
-            >> token!(Token::Id(_))
-            >> opt!(do_parse!(
-                token!(Token::LeftParen)
-                    >> separated_list1!(token!(Token::Comma), token!(Token::Id(_)))
-                    >> token!(Token::RightParen)
-                    >> ()
-            ))
-            >> token!(Token::RightSquareBracket)
-            >> ()
-    )
+    let (input, _) = parse_token(Token::LeftSquareBracket)(input)?;
+    let (input, _) = match_identifier(input)?;
+
+    // Currently do not support arguments to attributes
+
+    let (input, _) = parse_token(Token::RightSquareBracket)(input)?;
+    Ok((input, ()))
 }
 
 #[test]
@@ -1425,117 +1689,97 @@ impl Parse for Statement {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
         // Parse and ignore attributes before a statement
-        let input = match many0!(input, call!(statement_attribute, st)) {
+        let input = match nom::multi::many0(|input| statement_attribute(input, st))(input) {
             Ok((rest, _)) => rest,
             Err(err) => return Err(err),
         };
-        if input.len() == 0 {
-            Err(nom::Err::Incomplete(nom::Needed::new(1)))
-        } else {
-            let (head, tail) = (input[0].clone(), &input[1..]);
-            match head {
-                LexToken(Token::Semicolon, _) => Ok((tail, Statement::Empty)),
-                LexToken(Token::If, _) => {
-                    let if_part = do_parse!(
-                        tail,
-                        token!(Token::LeftParen)
-                            >> cond: parse!(Expression, st)
-                            >> token!(Token::RightParen)
-                            >> inner_statement: parse!(Statement, st)
-                            >> (Statement::If(cond, Box::new(inner_statement)))
-                    );
-                    match if_part {
+        if input.is_empty() {
+            return Err(nom::Err::Incomplete(nom::Needed::new(1)));
+        }
+        let (head, tail) = (input[0].clone(), &input[1..]);
+        match head {
+            LexToken(Token::Semicolon, _) => Ok((tail, Statement::Empty)),
+            LexToken(Token::If, _) => {
+                let (input, _) = parse_token(Token::LeftParen)(tail)?;
+                let (input, cond) = parse_typed::<Expression>(st)(input)?;
+                let (input, _) = parse_token(Token::RightParen)(input)?;
+                let (input, inner_statement) = parse_typed::<Statement>(st)(input)?;
+                let inner_statement = Box::new(inner_statement);
+                if input.is_empty() {
+                    return Err(nom::Err::Incomplete(nom::Needed::new(1)));
+                }
+                let (head, tail) = (input[0].clone(), &input[1..]);
+                match head {
+                    LexToken(Token::Else, _) => match Statement::parse(tail, st) {
                         Err(err) => Err(err),
-                        Ok((rest, Statement::If(cond, first))) => {
-                            if input.len() == 0 {
-                                Err(nom::Err::Incomplete(nom::Needed::new(1)))
-                            } else {
-                                let (head, tail) = (rest[0].clone(), &rest[1..]);
-                                match head {
-                                    LexToken(Token::Else, _) => match Statement::parse(tail, st) {
-                                        Err(err) => Err(err),
-                                        Ok((rest, else_part)) => {
-                                            let s =
-                                                Statement::IfElse(cond, first, Box::new(else_part));
-                                            Ok((rest, s))
-                                        }
-                                    },
-                                    _ => Ok((rest, Statement::If(cond, first))),
-                                }
-                            }
+                        Ok((tail, else_part)) => {
+                            let s = Statement::IfElse(cond, inner_statement, Box::new(else_part));
+                            Ok((tail, s))
                         }
-                        _ => unreachable!(),
-                    }
+                    },
+                    _ => Ok((input, Statement::If(cond, inner_statement))),
                 }
-                LexToken(Token::For, _) => {
-                    do_parse!(
-                        tail,
-                        token!(Token::LeftParen)
-                            >> init: parse!(InitStatement, st)
-                            >> token!(Token::Semicolon)
-                            >> cond: parse!(Expression, st)
-                            >> token!(Token::Semicolon)
-                            >> inc: parse!(Expression, st)
-                            >> token!(Token::RightParen)
-                            >> inner: parse!(Statement, st)
-                            >> (Statement::For(init, cond, inc, Box::new(inner)))
-                    )
+            }
+            LexToken(Token::For, _) => {
+                let (input, _) = parse_token(Token::LeftParen)(tail)?;
+                let (input, init) = parse_typed::<InitStatement>(st)(input)?;
+                let (input, _) = parse_token(Token::Semicolon)(input)?;
+                let (input, cond) = parse_typed::<Expression>(st)(input)?;
+                let (input, _) = parse_token(Token::Semicolon)(input)?;
+                let (input, inc) = parse_typed::<Expression>(st)(input)?;
+                let (input, _) = parse_token(Token::RightParen)(input)?;
+                let (input, inner) = parse_typed::<Statement>(st)(input)?;
+                Ok((input, Statement::For(init, cond, inc, Box::new(inner))))
+            }
+            LexToken(Token::While, _) => {
+                let (input, _) = parse_token(Token::LeftParen)(tail)?;
+                let (input, cond) = parse_typed::<Expression>(st)(input)?;
+                let (input, _) = parse_token(Token::RightParen)(input)?;
+                let (input, inner) = parse_typed::<Statement>(st)(input)?;
+                Ok((input, Statement::While(cond, Box::new(inner))))
+            }
+            LexToken(Token::Break, _) => Ok((tail, Statement::Break)),
+            LexToken(Token::Continue, _) => Ok((tail, Statement::Continue)),
+            LexToken(Token::Return, _) => {
+                let (input, expression_statement) = parse_typed::<Expression>(st)(tail)?;
+                let (input, _) = parse_token(Token::Semicolon)(input)?;
+                Ok((input, Statement::Return(expression_statement)))
+            }
+            LexToken(Token::LeftBrace, _) => {
+                let (input, s) = statement_block(input, st)?;
+                Ok((input, Statement::Block(s)))
+            }
+            _ => {
+                // Try parsing a variable definition
+                fn variable_def<'t>(
+                    input: &'t [LexToken],
+                    st: &SymbolTable,
+                ) -> ParseResult<'t, Statement> {
+                    let (input, var) = parse_typed::<VarDef>(st)(input)?;
+                    let (input, _) = parse_token(Token::Semicolon)(input)?;
+                    Ok((input, Statement::Var(var)))
                 }
-                LexToken(Token::While, _) => {
-                    do_parse!(
-                        tail,
-                        token!(Token::LeftParen)
-                            >> cond: parse!(Expression, st)
-                            >> token!(Token::RightParen)
-                            >> inner: parse!(Statement, st)
-                            >> (Statement::While(cond, Box::new(inner)))
-                    )
+                let err = match variable_def(input, st) {
+                    Ok((rest, statement)) => return Ok((rest, statement)),
+                    Err(nom::Err::Incomplete(needed)) => return Err(nom::Err::Incomplete(needed)),
+                    Err(e) => e,
+                };
+                // Try parsing an expression statement
+                fn expr_statement<'t>(
+                    input: &'t [LexToken],
+                    st: &SymbolTable,
+                ) -> ParseResult<'t, Statement> {
+                    let (input, expression_statement) = parse_typed::<Expression>(st)(input)?;
+                    let (input, _) = parse_token(Token::Semicolon)(input)?;
+                    Ok((input, Statement::Expression(expression_statement)))
                 }
-                LexToken(Token::Break, _) => Ok((tail, Statement::Break)),
-                LexToken(Token::Continue, _) => Ok((tail, Statement::Continue)),
-                LexToken(Token::Return, _) => {
-                    do_parse!(
-                        tail,
-                        expression_statement: parse!(Expression, st)
-                            >> token!(Token::Semicolon)
-                            >> (Statement::Return(expression_statement))
-                    )
-                }
-                LexToken(Token::LeftBrace, _) => {
-                    map!(input, call!(statement_block, st), |s| Statement::Block(s))
-                }
-                _ => {
-                    // Try parsing a variable definition
-                    let vd = do_parse!(
-                        input,
-                        var: parse!(VarDef, st)
-                            >> token!(Token::Semicolon)
-                            >> (Statement::Var(var))
-                    );
-                    let err = match vd {
-                        Ok((rest, statement)) => return Ok((rest, statement)),
-                        Err(nom::Err::Incomplete(needed)) => {
-                            return Err(nom::Err::Incomplete(needed))
-                        }
-                        Err(e) => e,
-                    };
-                    // Try parsing an expression statement
-                    let res = do_parse!(
-                        input,
-                        expression_statement: parse!(Expression, st)
-                            >> token!(Token::Semicolon)
-                            >> (Statement::Expression(expression_statement))
-                    );
-                    let err = match res {
-                        Ok((rest, statement)) => return Ok((rest, statement)),
-                        Err(nom::Err::Incomplete(needed)) => {
-                            return Err(nom::Err::Incomplete(needed))
-                        }
-                        Err(e) => get_most_relevant_error(err, e),
-                    };
-                    // Return the most likely error
-                    Err(err)
-                }
+                let err = match expr_statement(input, st) {
+                    Ok((rest, statement)) => return Ok((rest, statement)),
+                    Err(nom::Err::Incomplete(needed)) => return Err(nom::Err::Incomplete(needed)),
+                    Err(e) => get_most_relevant_error(err, e),
+                };
+                // Return the most likely error
+                Err(err)
             }
         }
     }
@@ -1543,7 +1787,7 @@ impl Parse for Statement {
 
 fn statement_block<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Vec<Statement>> {
     let mut statements = Vec::new();
-    let mut rest = match token!(input, Token::LeftBrace) {
+    let mut rest = match parse_token(Token::LeftBrace)(input) {
         Ok((rest, _)) => rest,
         Err(err) => return Err(err),
     };
@@ -1553,7 +1797,7 @@ fn statement_block<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'
             statements.push(root);
             rest = remaining;
         } else {
-            return match token!(rest, Token::RightBrace) {
+            return match parse_token(Token::RightBrace)(rest) {
                 Ok((rest, _)) => Ok((rest, statements)),
                 Err(nom::Err::Incomplete(needed)) => Err(nom::Err::Incomplete(needed)),
                 Err(_) => match last_def {
@@ -1568,106 +1812,106 @@ fn statement_block<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'
 impl Parse for StructMemberName {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        do_parse!(
-            input,
-            name: parse!(VariableName, st)
-                >> array_dim: opt!(call!(parse_arraydim, st))
-                >> (StructMemberName {
-                    name: name.to_node(),
-                    bind: match array_dim {
-                        Some(ref expr) => VariableBind::Array(expr.clone()),
-                        None => VariableBind::Normal,
-                    },
-                })
-        )
+        let (input, name) = parse_typed::<VariableName>(st)(input)?;
+        let (input, array_dim) = match parse_arraydim(input, st) {
+            Ok((input, array_dim)) => ((input, Some(array_dim))),
+            Err(_) => (input, None),
+        };
+        let member_name = StructMemberName {
+            name: name.to_node(),
+            bind: match array_dim {
+                Some(ref expr) => VariableBind::Array(expr.clone()),
+                None => VariableBind::Normal,
+            },
+        };
+        Ok((input, member_name))
     }
 }
 
 impl Parse for StructMember {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        do_parse!(
-            input,
-            typename: parse!(Type, st)
-                >> defs: separated_list1!(token!(Token::Comma), parse!(StructMemberName, st))
-                >> token!(Token::Semicolon)
-                >> (StructMember {
-                    ty: typename,
-                    defs: defs
-                })
-        )
+        let (input, typename) = parse_typed::<Type>(st)(input)?;
+        let (input, defs) = nom::multi::separated_list1(
+            parse_token(Token::Comma),
+            parse_typed::<StructMemberName>(st),
+        )(input)?;
+        let (input, _) = parse_token(Token::Semicolon)(input)?;
+        let sm = StructMember {
+            ty: typename,
+            defs: defs,
+        };
+        Ok((input, sm))
     }
 }
 
 impl Parse for StructDefinition {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        do_parse!(
-            input,
-            token!(Token::Struct)
-                >> structname: parse!(VariableName, st)
-                >> token!(Token::LeftBrace)
-                >> members: many0!(parse!(StructMember, st))
-                >> token!(Token::RightBrace)
-                >> token!(Token::Semicolon)
-                >> (StructDefinition {
-                    name: structname.to_node(),
-                    members: members
-                })
-        )
+        let (input, _) = parse_token(Token::Struct)(input)?;
+        let (input, structname) = parse_typed::<VariableName>(st)(input)?;
+        let (input, _) = parse_token(Token::LeftBrace)(input)?;
+        let (input, members) = nom::multi::many0(parse_typed::<StructMember>(st))(input)?;
+        let (input, _) = parse_token(Token::RightBrace)(input)?;
+        let (input, _) = parse_token(Token::Semicolon)(input)?;
+        let sd = StructDefinition {
+            name: structname.to_node(),
+            members: members,
+        };
+        Ok((input, sd))
     }
 }
 
 impl Parse for ConstantVariableName {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        do_parse!(
-            input,
-            name: parse!(VariableName, st)
-                >> array_dim: opt!(call!(parse_arraydim, st))
-                >> (ConstantVariableName {
-                    name: name.to_node(),
-                    bind: match array_dim {
-                        Some(ref expr) => VariableBind::Array(expr.clone()),
-                        None => VariableBind::Normal,
-                    },
-                    offset: None,
-                })
-        )
+        let (input, name) = parse_typed::<VariableName>(st)(input)?;
+        let (input, array_dim) = nom::combinator::opt(|input| parse_arraydim(input, st))(input)?;
+        let v = ConstantVariableName {
+            name: name.to_node(),
+            bind: match array_dim {
+                Some(ref expr) => VariableBind::Array(expr.clone()),
+                None => VariableBind::Normal,
+            },
+            offset: None,
+        };
+        Ok((input, v))
     }
 }
 
 impl Parse for ConstantVariable {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        do_parse!(
-            input,
-            typename: parse!(Type, st)
-                >> defs: separated_list1!(token!(Token::Comma), parse!(ConstantVariableName, st))
-                >> token!(Token::Semicolon)
-                >> (ConstantVariable {
-                    ty: typename,
-                    defs: defs
-                })
-        )
+        let (input, typename) = parse_typed::<Type>(st)(input)?;
+        let (input, defs) = nom::multi::separated_list1(
+            parse_token(Token::Comma),
+            parse_typed::<ConstantVariableName>(st),
+        )(input)?;
+        let (input, _) = parse_token(Token::Semicolon)(input)?;
+        let var = ConstantVariable {
+            ty: typename,
+            defs: defs,
+        };
+        Ok((input, var))
     }
 }
 
 impl Parse for ConstantSlot {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], _: &SymbolTable) -> ParseResult<'t, Self> {
-        match preceded!(input, token!(Token::Colon), token!(Token::Register(_))) {
-            Ok((input, reg)) => match reg {
-                LexToken(Token::Register(RegisterSlot::B(slot)), _) => {
-                    Ok((input, ConstantSlot(slot)))
-                }
-                LexToken(Token::Register(_), _) => Err(nom::Err::Error(ParseErrorContext(
+        match input {
+            [LexToken(Token::Colon, _), LexToken(Token::Register(reg), _), rest @ ..] => match *reg
+            {
+                RegisterSlot::B(slot) => Ok((rest, ConstantSlot(slot))),
+                _ => Err(nom::Err::Error(ParseErrorContext(
                     input,
                     ParseErrorReason::WrongSlotType,
                 ))),
-                _ => unreachable!(),
             },
-            Err(err) => Err(err),
+            _ => Err(nom::Err::Error(ParseErrorContext(
+                input,
+                ParseErrorReason::WrongToken,
+            ))),
         }
     }
 }
@@ -1675,47 +1919,41 @@ impl Parse for ConstantSlot {
 impl Parse for ConstantBuffer {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        do_parse!(
-            input,
-            token!(Token::ConstantBuffer)
-                >> name: parse!(VariableName, st)
-                >> slot: opt!(parse!(ConstantSlot, st))
-                >> members:
-                    delimited!(
-                        token!(Token::LeftBrace),
-                        many0!(parse!(ConstantVariable, st)),
-                        token!(Token::RightBrace)
-                    )
-                >> (ConstantBuffer {
-                    name: name.to_node(),
-                    slot: slot,
-                    members: members
-                })
-        )
+        let (input, _) = parse_token(Token::ConstantBuffer)(input)?;
+        let (input, name) = parse_typed::<VariableName>(st)(input)?;
+        let (input, slot) = nom::combinator::opt(parse_typed::<ConstantSlot>(st))(input)?;
+        let (input, members) = nom::sequence::delimited(
+            parse_token(Token::LeftBrace),
+            nom::multi::many0(parse_typed::<ConstantVariable>(st)),
+            parse_token(Token::RightBrace),
+        )(input)?;
+        let cb = ConstantBuffer {
+            name: name.to_node(),
+            slot: slot,
+            members: members,
+        };
+        Ok((input, cb))
     }
 }
 
 impl Parse for GlobalSlot {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], _: &SymbolTable) -> ParseResult<'t, Self> {
-        match preceded!(input, token!(Token::Colon), token!(Token::Register(_))) {
-            Ok((rest, reg)) => match reg {
-                LexToken(Token::Register(RegisterSlot::T(slot)), _) => {
-                    Ok((rest, GlobalSlot::ReadSlot(slot)))
-                }
-                LexToken(Token::Register(RegisterSlot::U(slot)), _) => {
-                    Ok((rest, GlobalSlot::ReadWriteSlot(slot)))
-                }
-                LexToken(Token::Register(RegisterSlot::S(slot)), _) => {
-                    Ok((rest, GlobalSlot::SamplerSlot(slot)))
-                }
-                LexToken(Token::Register(_), _) => Err(nom::Err::Error(ParseErrorContext(
+        match input {
+            [LexToken(Token::Colon, _), LexToken(Token::Register(reg), _), rest @ ..] => match *reg
+            {
+                RegisterSlot::T(slot) => Ok((rest, GlobalSlot::ReadSlot(slot))),
+                RegisterSlot::U(slot) => Ok((rest, GlobalSlot::ReadWriteSlot(slot))),
+                RegisterSlot::S(slot) => Ok((rest, GlobalSlot::SamplerSlot(slot))),
+                _ => Err(nom::Err::Error(ParseErrorContext(
                     input,
                     ParseErrorReason::WrongSlotType,
                 ))),
-                _ => unreachable!(),
             },
-            Err(err) => Err(err),
+            _ => Err(nom::Err::Error(ParseErrorContext(
+                input,
+                ParseErrorReason::WrongToken,
+            ))),
         }
     }
 }
@@ -1723,38 +1961,37 @@ impl Parse for GlobalSlot {
 impl Parse for GlobalVariableName {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        do_parse!(
-            input,
-            name: parse!(VariableName, st)
-                >> array_dim: opt!(call!(parse_arraydim, st))
-                >> slot: opt!(parse!(GlobalSlot, st))
-                >> init: parse!(Initializer, st)
-                >> (GlobalVariableName {
-                    name: name.to_node(),
-                    bind: match array_dim {
-                        Some(ref expr) => VariableBind::Array(expr.clone()),
-                        None => VariableBind::Normal,
-                    },
-                    slot: slot,
-                    init: init
-                })
-        )
+        let (input, name) = parse_typed::<VariableName>(st)(input)?;
+        let (input, array_dim) = nom::combinator::opt(|input| parse_arraydim(input, st))(input)?;
+        let (input, slot) = nom::combinator::opt(parse_typed::<GlobalSlot>(st))(input)?;
+        let (input, init) = parse_typed::<Initializer>(st)(input)?;
+        let v = GlobalVariableName {
+            name: name.to_node(),
+            bind: match array_dim {
+                Some(ref expr) => VariableBind::Array(expr.clone()),
+                None => VariableBind::Normal,
+            },
+            slot: slot,
+            init: init,
+        };
+        Ok((input, v))
     }
 }
 
 impl Parse for GlobalVariable {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        do_parse!(
-            input,
-            typename: parse!(GlobalType, st)
-                >> defs: separated_list1!(token!(Token::Comma), parse!(GlobalVariableName, st))
-                >> token!(Token::Semicolon)
-                >> (GlobalVariable {
-                    global_type: typename,
-                    defs: defs
-                })
-        )
+        let (input, typename) = parse_typed::<GlobalType>(st)(input)?;
+        let (input, defs) = nom::multi::separated_list1(
+            parse_token(Token::Comma),
+            parse_typed::<GlobalVariableName>(st),
+        )(input)?;
+        let (input, _) = parse_token(Token::Semicolon)(input)?;
+        let var = GlobalVariable {
+            global_type: typename,
+            defs: defs,
+        };
+        Ok((input, var))
     }
 }
 
@@ -1777,23 +2014,21 @@ fn parse_numthreads(input: &[LexToken]) -> ParseResult<()> {
 impl Parse for FunctionAttribute {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        do_parse!(
-            input,
-            token!(Token::LeftSquareBracket)
-                >> attr: alt!(do_parse!(
-                    parse_numthreads
-                        >> token!(Token::LeftParen)
-                        >> x: parse!(ExpressionNoSeq, st)
-                        >> token!(Token::Comma)
-                        >> y: parse!(ExpressionNoSeq, st)
-                        >> token!(Token::Comma)
-                        >> z: parse!(ExpressionNoSeq, st)
-                        >> token!(Token::RightParen)
-                        >> (FunctionAttribute::NumThreads(x, y, z))
-                ))
-                >> token!(Token::RightSquareBracket)
-                >> (attr)
-        )
+        let (input, _) = parse_token(Token::LeftSquareBracket)(input)?;
+
+        // Only currently support [numthreads]
+        let (input, _) = parse_numthreads(input)?;
+        let (input, _) = parse_token(Token::LeftParen)(input)?;
+        let (input, x) = parse_typed::<ExpressionNoSeq>(st)(input)?;
+        let (input, _) = parse_token(Token::Comma)(input)?;
+        let (input, y) = parse_typed::<ExpressionNoSeq>(st)(input)?;
+        let (input, _) = parse_token(Token::Comma)(input)?;
+        let (input, z) = parse_typed::<ExpressionNoSeq>(st)(input)?;
+        let (input, _) = parse_token(Token::RightParen)(input)?;
+        let attr = FunctionAttribute::NumThreads(x, y, z);
+
+        let (input, _) = parse_token(Token::RightSquareBracket)(input)?;
+        Ok((input, attr))
     }
 }
 
@@ -1819,46 +2054,50 @@ fn parse_semantic(input: &[LexToken]) -> ParseResult<Semantic> {
 impl Parse for FunctionParam {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        do_parse!(
-            input,
-            ty: parse!(ParamType, st)
-                >> param: parse!(VariableName, st)
-                >> semantic:
-                    opt!(do_parse!(
-                        token!(Token::Colon) >> tok: parse_semantic >> (tok)
-                    ))
-                >> (FunctionParam {
-                    name: param.to_node(),
-                    param_type: ty,
-                    semantic: semantic
-                })
-        )
+        let (input, ty) = parse_typed::<ParamType>(st)(input)?;
+        let (input, param) = parse_typed::<VariableName>(st)(input)?;
+
+        // Parse semantic if present
+        let (input, semantic) = match parse_token(Token::Colon)(input) {
+            Ok((input, _)) => match parse_semantic(input) {
+                Ok((input, semantic)) => (input, Some(semantic)),
+                Err(err) => return Err(err),
+            },
+            Err(_) => (input, None),
+        };
+
+        let param = FunctionParam {
+            name: param.to_node(),
+            param_type: ty,
+            semantic: semantic,
+        };
+        Ok((input, param))
     }
 }
 
 impl Parse for FunctionDefinition {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        do_parse!(
-            input,
-            attributes: many0!(parse!(FunctionAttribute, st))
-                >> ret: parse!(Type, st)
-                >> func_name: parse!(VariableName, st)
-                >> params:
-                    delimited!(
-                        token!(Token::LeftParen),
-                        separated_list0!(token!(Token::Comma), parse!(FunctionParam, st)),
-                        token!(Token::RightParen)
-                    )
-                >> body: call!(statement_block, st)
-                >> (FunctionDefinition {
-                    name: func_name.to_node(),
-                    returntype: ret,
-                    params: params,
-                    body: body,
-                    attributes: attributes
-                })
-        )
+        let (input, attributes) = nom::multi::many0(parse_typed::<FunctionAttribute>(st))(input)?;
+        let (input, ret) = parse_typed::<Type>(st)(input)?;
+        let (input, func_name) = parse_typed::<VariableName>(st)(input)?;
+        let (input, params) = nom::sequence::delimited(
+            parse_token(Token::LeftParen),
+            nom::multi::separated_list0(
+                parse_token(Token::Comma),
+                parse_typed::<FunctionParam>(st),
+            ),
+            parse_token(Token::RightParen),
+        )(input)?;
+        let (input, body) = statement_block(input, st)?;
+        let def = FunctionDefinition {
+            name: func_name.to_node(),
+            returntype: ret,
+            params: params,
+            body: body,
+            attributes: attributes,
+        };
+        Ok((input, def))
     }
 }
 
@@ -1899,11 +2138,9 @@ fn rootdefinition_with_semicolon<'t>(
     input: &'t [LexToken],
     st: &SymbolTable,
 ) -> ParseResult<'t, RootDefinition> {
-    terminated!(
-        input,
-        parse!(RootDefinition, st),
-        many0!(token!(Token::Semicolon))
-    )
+    let (input, def) = parse_typed::<RootDefinition>(st)(input)?;
+    let (input, _) = nom::multi::many0(parse_token(Token::Semicolon))(input)?;
+    Ok((input, def))
 }
 
 // Find the error with the longest tokens used
