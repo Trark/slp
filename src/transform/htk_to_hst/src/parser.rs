@@ -245,7 +245,7 @@ fn parse_datalayout_str(typename: &str) -> Option<DataLayout> {
         )))
     }
 
-    match parse_str(&typename[..].as_bytes()) {
+    match parse_str(typename[..].as_bytes()) {
         Ok((rest, ty)) => {
             assert_eq!(rest.len(), 0);
             Some(ty)
@@ -300,9 +300,9 @@ impl Parse for DataLayout {
 
             match input[0] {
                 LexToken(Token::Id(Identifier(ref name)), _) => {
-                    match parse_scalartype_str(&name[..].as_bytes()) {
+                    match parse_scalartype_str(name[..].as_bytes()) {
                         Ok((rest, ty)) => {
-                            if rest.len() == 0 {
+                            if rest.is_empty() {
                                 Ok((&input[1..], ty))
                             } else {
                                 Err(nom::Err::Error(ParseErrorContext(
@@ -325,7 +325,7 @@ impl Parse for DataLayout {
             }
         }
 
-        if input.len() == 0 {
+        if input.is_empty() {
             Err(nom::Err::Incomplete(nom::Needed::new(1)))
         } else {
             match &input[0] {
@@ -417,7 +417,7 @@ impl Parse for StructuredType {
 impl Parse for ObjectType {
     type Output = Self;
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
-        if input.len() == 0 {
+        if input.is_empty() {
             return Err(nom::Err::Incomplete(nom::Needed::new(1)));
         }
 
@@ -601,7 +601,7 @@ impl Parse for ObjectType {
 }
 
 fn parse_voidtype(input: &[LexToken]) -> ParseResult<TypeLayout> {
-    if input.len() == 0 {
+    if input.is_empty() {
         Err(nom::Err::Incomplete(nom::Needed::new(1)))
     } else {
         match &input[0] {
@@ -654,7 +654,7 @@ impl Parse for Type {
             Err(_) => (input, false),
         };
 
-        let (input, tl) = TypeLayout::parse(input, &st)?;
+        let (input, tl) = TypeLayout::parse(input, st)?;
 
         let tm = TypeModifier {
             is_const,
@@ -673,13 +673,13 @@ impl Parse for GlobalType {
         // Interpolation modifiers unimplemented
         // Non-standard combinations of storage classes unimplemented
         let (input, gs) = match input[0] {
-            LexToken(Token::Static, _) => ((&input[1..], Some(GlobalStorage::Static))),
-            LexToken(Token::GroupShared, _) => ((&input[1..], Some(GlobalStorage::GroupShared))),
-            LexToken(Token::Extern, _) => ((&input[1..], Some(GlobalStorage::Extern))),
+            LexToken(Token::Static, _) => (&input[1..], Some(GlobalStorage::Static)),
+            LexToken(Token::GroupShared, _) => (&input[1..], Some(GlobalStorage::GroupShared)),
+            LexToken(Token::Extern, _) => (&input[1..], Some(GlobalStorage::Extern)),
             _ => (input, None),
         };
-        let (input, ty) = Type::parse(input, &st)?;
-        let gt = GlobalType(ty, gs.unwrap_or(GlobalStorage::default()), None);
+        let (input, ty) = Type::parse(input, st)?;
+        let gt = GlobalType(ty, gs.unwrap_or_default(), None);
         Ok((input, gt))
     }
 }
@@ -830,7 +830,7 @@ fn expr_p1<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
             input,
             Located::new(
                 Precedence1Postfix::Member(member.node.clone()),
-                member.location.clone(),
+                member.location,
             ),
         ))
     }
@@ -884,7 +884,7 @@ fn expr_p1<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
     }
 
     fn cons<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Located<Expression>> {
-        let loc = if input.len() > 0 {
+        let loc = if !input.is_empty() {
             input[0].1.clone()
         } else {
             return Err(nom::Err::Incomplete(nom::Needed::new(1)));
@@ -1006,7 +1006,7 @@ fn expr_p2<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Locat
             input,
             Located::new(
                 Expression::UnaryOperation(unary.node.clone(), Box::new(expr)),
-                unary.location.clone(),
+                unary.location,
             ),
         ))
     }
@@ -1453,20 +1453,20 @@ fn test_expression() {
             &[LexToken(Token::Semicolon, FileLocation::Unknown)][..],
             Located::new(
                 Expression::TernaryConditional(
-                    Box::new(Located::new(Expression::Variable(a_id.0.clone()), loc(0))),
+                    Box::new(Located::new(Expression::Variable(a_id.0), loc(0))),
                     Box::new(Located::new(
                         Expression::TernaryConditional(
-                            Box::new(Located::new(Expression::Variable(b_id.0.clone()), loc(1))),
-                            Box::new(Located::new(Expression::Variable(c_id.0.clone()), loc(2))),
-                            Box::new(Located::new(Expression::Variable(d_id.0.clone()), loc(3))),
+                            Box::new(Located::new(Expression::Variable(b_id.0), loc(1))),
+                            Box::new(Located::new(Expression::Variable(c_id.0), loc(2))),
+                            Box::new(Located::new(Expression::Variable(d_id.0), loc(3))),
                         ),
                         loc(1)
                     )),
                     Box::new(Located::new(
                         Expression::TernaryConditional(
-                            Box::new(Located::new(Expression::Variable(e_id.0.clone()), loc(4))),
-                            Box::new(Located::new(Expression::Variable(f_id.0.clone()), loc(5))),
-                            Box::new(Located::new(Expression::Variable(g_id.0.clone()), loc(6))),
+                            Box::new(Located::new(Expression::Variable(e_id.0), loc(4))),
+                            Box::new(Located::new(Expression::Variable(f_id.0), loc(5))),
+                            Box::new(Located::new(Expression::Variable(g_id.0), loc(6))),
                         ),
                         loc(4)
                     )),
@@ -1523,7 +1523,7 @@ impl Parse for Initializer {
             )))
         }
 
-        if input.len() == 0 {
+        if input.is_empty() {
             Err(nom::Err::Incomplete(nom::Needed::new(1)))
         } else {
             match input[0].0 {
@@ -1610,7 +1610,7 @@ fn test_initializer() {
         LexToken::with_no_loc(Token::Equals),
         LexToken::with_no_loc(Token::LeftBrace),
         LexToken::with_no_loc(Token::RightBrace),
-        semicolon.clone(),
+        semicolon,
     ];
     assert!(match initializer(&aggr_0) {
         Err(_) => true,
@@ -1633,13 +1633,13 @@ impl Parse for VarDef {
                     Some(ref expr) => VariableBind::Array(expr.clone()),
                     None => VariableBind::Normal,
                 },
-                init: init,
+                init,
             };
             Ok((input, v))
         })(input)?;
         let defs = VarDef {
             local_type: typename,
-            defs: defs,
+            defs,
         };
         Ok((input, defs))
     }
@@ -1814,7 +1814,7 @@ impl Parse for StructMemberName {
     fn parse<'t>(input: &'t [LexToken], st: &SymbolTable) -> ParseResult<'t, Self> {
         let (input, name) = parse_typed::<VariableName>(st)(input)?;
         let (input, array_dim) = match parse_arraydim(input, st) {
-            Ok((input, array_dim)) => ((input, Some(array_dim))),
+            Ok((input, array_dim)) => (input, Some(array_dim)),
             Err(_) => (input, None),
         };
         let member_name = StructMemberName {
@@ -1837,10 +1837,7 @@ impl Parse for StructMember {
             parse_typed::<StructMemberName>(st),
         )(input)?;
         let (input, _) = parse_token(Token::Semicolon)(input)?;
-        let sm = StructMember {
-            ty: typename,
-            defs: defs,
-        };
+        let sm = StructMember { ty: typename, defs };
         Ok((input, sm))
     }
 }
@@ -1856,7 +1853,7 @@ impl Parse for StructDefinition {
         let (input, _) = parse_token(Token::Semicolon)(input)?;
         let sd = StructDefinition {
             name: structname.to_node(),
-            members: members,
+            members,
         };
         Ok((input, sd))
     }
@@ -1888,10 +1885,7 @@ impl Parse for ConstantVariable {
             parse_typed::<ConstantVariableName>(st),
         )(input)?;
         let (input, _) = parse_token(Token::Semicolon)(input)?;
-        let var = ConstantVariable {
-            ty: typename,
-            defs: defs,
-        };
+        let var = ConstantVariable { ty: typename, defs };
         Ok((input, var))
     }
 }
@@ -1929,8 +1923,8 @@ impl Parse for ConstantBuffer {
         )(input)?;
         let cb = ConstantBuffer {
             name: name.to_node(),
-            slot: slot,
-            members: members,
+            slot,
+            members,
         };
         Ok((input, cb))
     }
@@ -1971,8 +1965,8 @@ impl Parse for GlobalVariableName {
                 Some(ref expr) => VariableBind::Array(expr.clone()),
                 None => VariableBind::Normal,
             },
-            slot: slot,
-            init: init,
+            slot,
+            init,
         };
         Ok((input, v))
     }
@@ -1989,7 +1983,7 @@ impl Parse for GlobalVariable {
         let (input, _) = parse_token(Token::Semicolon)(input)?;
         let var = GlobalVariable {
             global_type: typename,
-            defs: defs,
+            defs,
         };
         Ok((input, var))
     }
@@ -2069,7 +2063,7 @@ impl Parse for FunctionParam {
         let param = FunctionParam {
             name: param.to_node(),
             param_type: ty,
-            semantic: semantic,
+            semantic,
         };
         Ok((input, param))
     }
@@ -2093,9 +2087,9 @@ impl Parse for FunctionDefinition {
         let def = FunctionDefinition {
             name: func_name.to_node(),
             returntype: ret,
-            params: params,
-            body: body,
-            attributes: attributes,
+            params,
+            body,
+            attributes,
         };
         Ok((input, def))
     }
@@ -2188,13 +2182,13 @@ pub fn parse(entry_point: String, source: &[LexToken]) -> Result<Module, ParseEr
     let parse_result = module(source);
 
     match parse_result {
-        Ok((rest, _)) if rest.len() != 0 => Err(ParseError(
+        Ok((rest, _)) if !rest.is_empty() => Err(ParseError(
             ParseErrorReason::FailedToParse,
             Some(rest.to_vec()),
             None,
         )),
         Ok((_, hlsl)) => Ok(Module {
-            entry_point: entry_point,
+            entry_point,
             root_definitions: hlsl,
         }),
         Err(nom::Err::Error(ParseErrorContext(_, err))) => Err(ParseError(err, None, None)),
@@ -2312,7 +2306,7 @@ fn node_with_symbols<'t, T>(
 where
     T: Parse,
 {
-    T::parse(input, &st)
+    T::parse(input, st)
 }
 
 #[cfg(test)]
@@ -3476,13 +3470,10 @@ fn test_rootdefinition() {
             },
         ],
     };
-    assert_eq!(
-        structdefinition_str(test_struct_str),
-        test_struct_ast.clone()
-    );
+    assert_eq!(structdefinition_str(test_struct_str), test_struct_ast);
     assert_eq!(
         rootdefinition_str(test_struct_str),
-        RootDefinition::Struct(test_struct_ast.clone())
+        RootDefinition::Struct(test_struct_ast)
     );
 
     let functiondefinition_str = parse_from_str::<FunctionDefinition>();
@@ -3499,10 +3490,10 @@ fn test_rootdefinition() {
         body: vec![],
         attributes: vec![],
     };
-    assert_eq!(functiondefinition_str(test_func_str), test_func_ast.clone());
+    assert_eq!(functiondefinition_str(test_func_str), test_func_ast);
     assert_eq!(
         rootdefinition_str(test_func_str),
-        RootDefinition::Function(test_func_ast.clone())
+        RootDefinition::Function(test_func_ast)
     );
     let untyped_int = Literal::UntypedInt;
     let elit = Expression::Literal;
@@ -3540,7 +3531,7 @@ fn test_rootdefinition() {
     };
     assert_eq!(
         constantvariable_str(test_cbuffervar_str),
-        test_cbuffervar_ast.clone()
+        test_cbuffervar_ast
     );
 
     let cbuffer_str = parse_from_str::<ConstantBuffer>();
@@ -3558,10 +3549,10 @@ fn test_rootdefinition() {
             }],
         }],
     };
-    assert_eq!(cbuffer_str(test_cbuffer1_str), test_cbuffer1_ast.clone());
+    assert_eq!(cbuffer_str(test_cbuffer1_str), test_cbuffer1_ast);
     assert_eq!(
         rootdefinition_str(test_cbuffer1_str),
-        RootDefinition::ConstantBuffer(test_cbuffer1_ast.clone())
+        RootDefinition::ConstantBuffer(test_cbuffer1_ast)
     );
 
     let cbuffer_register_str = parse_from_str::<ConstantSlot>();
@@ -3599,10 +3590,10 @@ fn test_rootdefinition() {
         slot: Some(ConstantSlot(12)),
         members: vec![test_cbuffer2_ast_wvp, test_cbuffer2_ast_xy],
     };
-    assert_eq!(cbuffer_str(test_cbuffer2_str), test_cbuffer2_ast.clone());
+    assert_eq!(cbuffer_str(test_cbuffer2_str), test_cbuffer2_ast);
     assert_eq!(
         rootdefinition_str(test_cbuffer2_str),
-        RootDefinition::ConstantBuffer(test_cbuffer2_ast.clone())
+        RootDefinition::ConstantBuffer(test_cbuffer2_ast)
     );
 
     let globalvariable_str = parse_from_str::<GlobalVariable>();
@@ -3622,13 +3613,10 @@ fn test_rootdefinition() {
             init: None,
         }],
     };
-    assert_eq!(
-        globalvariable_str(test_buffersrv_str),
-        test_buffersrv_ast.clone()
-    );
+    assert_eq!(globalvariable_str(test_buffersrv_str), test_buffersrv_ast);
     assert_eq!(
         rootdefinition_str(test_buffersrv_str),
-        RootDefinition::GlobalVariable(test_buffersrv_ast.clone())
+        RootDefinition::GlobalVariable(test_buffersrv_ast)
     );
 
     let test_buffersrv2_str = "Buffer<uint4> g_myBuffer : register(t1);";
@@ -3645,13 +3633,10 @@ fn test_rootdefinition() {
             init: None,
         }],
     };
-    assert_eq!(
-        globalvariable_str(test_buffersrv2_str),
-        test_buffersrv2_ast.clone()
-    );
+    assert_eq!(globalvariable_str(test_buffersrv2_str), test_buffersrv2_ast);
     assert_eq!(
         rootdefinition_str(test_buffersrv2_str),
-        RootDefinition::GlobalVariable(test_buffersrv2_ast.clone())
+        RootDefinition::GlobalVariable(test_buffersrv2_ast)
     );
 
     let test_buffersrv3_str = "Buffer<vector<int, 4>> g_myBuffer : register(t1);";
@@ -3668,13 +3653,10 @@ fn test_rootdefinition() {
             init: None,
         }],
     };
-    assert_eq!(
-        globalvariable_str(test_buffersrv3_str),
-        test_buffersrv3_ast.clone()
-    );
+    assert_eq!(globalvariable_str(test_buffersrv3_str), test_buffersrv3_ast);
     assert_eq!(
         rootdefinition_str(test_buffersrv3_str),
-        RootDefinition::GlobalVariable(test_buffersrv3_ast.clone())
+        RootDefinition::GlobalVariable(test_buffersrv3_ast)
     );
 
     let test_buffersrv4_str = "StructuredBuffer<CustomType> g_myBuffer : register(t1);";
@@ -3698,11 +3680,11 @@ fn test_rootdefinition() {
     });
     assert_eq!(
         globalvariable_str_with_symbols(test_buffersrv4_str, &test_buffersrv4_symbols),
-        test_buffersrv4_ast.clone()
+        test_buffersrv4_ast
     );
     assert_eq!(
         rootdefinition_str_with_symbols(test_buffersrv4_str, &test_buffersrv4_symbols),
-        RootDefinition::GlobalVariable(test_buffersrv4_ast.clone())
+        RootDefinition::GlobalVariable(test_buffersrv4_ast)
     );
 
     let test_static_const_str = "static const int c_numElements = 4;";
@@ -3731,11 +3713,11 @@ fn test_rootdefinition() {
     };
     assert_eq!(
         globalvariable_str(test_static_const_str),
-        test_static_const_ast.clone()
+        test_static_const_ast
     );
     assert_eq!(
         rootdefinition_str(test_static_const_str),
-        RootDefinition::GlobalVariable(test_static_const_ast.clone())
+        RootDefinition::GlobalVariable(test_static_const_ast)
     );
 
     let test_const_arr_str = "static const int data[4] = { 0, 1, 2, 3 };";
@@ -3769,13 +3751,10 @@ fn test_rootdefinition() {
         ),
         defs: vec![test_const_arr_ast_gvn],
     };
-    assert_eq!(
-        globalvariable_str(test_const_arr_str),
-        test_const_arr_ast.clone()
-    );
+    assert_eq!(globalvariable_str(test_const_arr_str), test_const_arr_ast);
     assert_eq!(
         rootdefinition_str(test_const_arr_str),
-        RootDefinition::GlobalVariable(test_const_arr_ast.clone())
+        RootDefinition::GlobalVariable(test_const_arr_ast)
     );
 
     let test_groupshared_str = "groupshared float4 local_data[32];";
@@ -3795,10 +3774,10 @@ fn test_rootdefinition() {
     };
     assert_eq!(
         globalvariable_str(test_groupshared_str),
-        test_groupshared_ast.clone()
+        test_groupshared_ast
     );
     assert_eq!(
         rootdefinition_str(test_groupshared_str),
-        RootDefinition::GlobalVariable(test_groupshared_ast.clone())
+        RootDefinition::GlobalVariable(test_groupshared_ast)
     );
 }
