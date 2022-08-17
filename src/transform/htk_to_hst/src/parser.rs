@@ -1350,133 +1350,6 @@ impl Parse for Expression {
     }
 }
 
-#[test]
-fn test_expression() {
-    let st = SymbolTable::empty();
-    let a_id = Identifier("a".to_string());
-    let b_id = Identifier("b".to_string());
-    let c_id = Identifier("c".to_string());
-    let d_id = Identifier("d".to_string());
-    let e_id = Identifier("e".to_string());
-    let f_id = Identifier("f".to_string());
-    let g_id = Identifier("g".to_string());
-
-    fn loc(i: u64) -> FileLocation {
-        FileLocation::Known(FileName(String::new()), Line(i), Column(i))
-    }
-
-    // Test `a + b + c` is `((a + b) + c)`
-    let add_chain_tokens = &[
-        LexToken(Token::Id(a_id.clone()), loc(0)),
-        LexToken(Token::Plus, FileLocation::Unknown),
-        LexToken(Token::Id(b_id.clone()), loc(1)),
-        LexToken(Token::Plus, FileLocation::Unknown),
-        LexToken(Token::Id(c_id.clone()), loc(2)),
-        LexToken(Token::Semicolon, FileLocation::Unknown),
-    ];
-    let add_chain_expr = Expression::parse(add_chain_tokens, &st);
-    assert_eq!(
-        add_chain_expr,
-        Ok((
-            &[LexToken(Token::Semicolon, FileLocation::Unknown)][..],
-            Located::new(
-                Expression::BinaryOperation(
-                    BinOp::Add,
-                    Box::new(Located::new(
-                        Expression::BinaryOperation(
-                            BinOp::Add,
-                            Box::new(Located::new(Expression::Variable(a_id.0.clone()), loc(0))),
-                            Box::new(Located::new(Expression::Variable(b_id.0.clone()), loc(1))),
-                        ),
-                        loc(0)
-                    )),
-                    Box::new(Located::new(Expression::Variable(c_id.0.clone()), loc(2))),
-                ),
-                loc(0)
-            )
-        ))
-    );
-
-    // Test `a, b, c` is `((a, b), c)`
-    let comma_chain_tokens = &[
-        LexToken(Token::Id(a_id.clone()), loc(0)),
-        LexToken(Token::Comma, FileLocation::Unknown),
-        LexToken(Token::Id(b_id.clone()), loc(1)),
-        LexToken(Token::Comma, FileLocation::Unknown),
-        LexToken(Token::Id(c_id.clone()), loc(2)),
-        LexToken(Token::Semicolon, FileLocation::Unknown),
-    ];
-    let comma_chain_expr = Expression::parse(comma_chain_tokens, &st);
-    assert_eq!(
-        comma_chain_expr,
-        Ok((
-            &[LexToken(Token::Semicolon, FileLocation::Unknown)][..],
-            Located::new(
-                Expression::BinaryOperation(
-                    BinOp::Sequence,
-                    Box::new(Located::new(
-                        Expression::BinaryOperation(
-                            BinOp::Sequence,
-                            Box::new(Located::new(Expression::Variable(a_id.0.clone()), loc(0))),
-                            Box::new(Located::new(Expression::Variable(b_id.0.clone()), loc(1))),
-                        ),
-                        loc(0)
-                    )),
-                    Box::new(Located::new(Expression::Variable(c_id.0.clone()), loc(2))),
-                ),
-                loc(0)
-            )
-        ))
-    );
-
-    // Test `a ? b ? c : d : e ? f : g` is `a ? (b ? c : d) : (e ? f : g)`
-    let nested_ternary_tokens = &[
-        LexToken(Token::Id(a_id.clone()), loc(0)),
-        LexToken(Token::QuestionMark, FileLocation::Unknown),
-        LexToken(Token::Id(b_id.clone()), loc(1)),
-        LexToken(Token::QuestionMark, FileLocation::Unknown),
-        LexToken(Token::Id(c_id.clone()), loc(2)),
-        LexToken(Token::Colon, FileLocation::Unknown),
-        LexToken(Token::Id(d_id.clone()), loc(3)),
-        LexToken(Token::Colon, FileLocation::Unknown),
-        LexToken(Token::Id(e_id.clone()), loc(4)),
-        LexToken(Token::QuestionMark, FileLocation::Unknown),
-        LexToken(Token::Id(f_id.clone()), loc(5)),
-        LexToken(Token::Colon, FileLocation::Unknown),
-        LexToken(Token::Id(g_id.clone()), loc(6)),
-        LexToken(Token::Semicolon, FileLocation::Unknown),
-    ];
-    let comma_chain_expr = Expression::parse(nested_ternary_tokens, &st);
-    assert_eq!(
-        comma_chain_expr,
-        Ok((
-            &[LexToken(Token::Semicolon, FileLocation::Unknown)][..],
-            Located::new(
-                Expression::TernaryConditional(
-                    Box::new(Located::new(Expression::Variable(a_id.0), loc(0))),
-                    Box::new(Located::new(
-                        Expression::TernaryConditional(
-                            Box::new(Located::new(Expression::Variable(b_id.0), loc(1))),
-                            Box::new(Located::new(Expression::Variable(c_id.0), loc(2))),
-                            Box::new(Located::new(Expression::Variable(d_id.0), loc(3))),
-                        ),
-                        loc(1)
-                    )),
-                    Box::new(Located::new(
-                        Expression::TernaryConditional(
-                            Box::new(Located::new(Expression::Variable(e_id.0), loc(4))),
-                            Box::new(Located::new(Expression::Variable(f_id.0), loc(5))),
-                            Box::new(Located::new(Expression::Variable(g_id.0), loc(6))),
-                        ),
-                        loc(4)
-                    )),
-                ),
-                loc(0)
-            )
-        ))
-    );
-}
-
 /// Fake node for parsing an expression where the comma has a different meaning
 /// at the top level, so skip that node
 struct ExpressionNoSeq;
@@ -2366,7 +2239,7 @@ fn test_loc(line: u64, column: u64, node: Expression) -> Located<Expression> {
 }
 
 #[test]
-fn test_expr() {
+fn test_expression() {
     let expr = node::<Expression>;
 
     assert_eq!(
@@ -2388,6 +2261,129 @@ fn test_expr() {
                     bexp_var("a", 1, 1),
                     bexp_var("b", 1, 3)
                 )
+            )
+        ))
+    );
+
+    let a_id = Identifier("a".to_string());
+    let b_id = Identifier("b".to_string());
+    let c_id = Identifier("c".to_string());
+    let d_id = Identifier("d".to_string());
+    let e_id = Identifier("e".to_string());
+    let f_id = Identifier("f".to_string());
+    let g_id = Identifier("g".to_string());
+
+    fn loc(i: u64) -> FileLocation {
+        FileLocation::Known(FileName(String::new()), Line(i), Column(i))
+    }
+
+    // Test `a + b + c` is `((a + b) + c)`
+    let add_chain_tokens = &[
+        LexToken(Token::Id(a_id.clone()), loc(0)),
+        LexToken(Token::Plus, FileLocation::Unknown),
+        LexToken(Token::Id(b_id.clone()), loc(1)),
+        LexToken(Token::Plus, FileLocation::Unknown),
+        LexToken(Token::Id(c_id.clone()), loc(2)),
+        LexToken(Token::Semicolon, FileLocation::Unknown),
+    ];
+    let add_chain_expr = expr(add_chain_tokens);
+    assert_eq!(
+        add_chain_expr,
+        Ok((
+            &[LexToken(Token::Semicolon, FileLocation::Unknown)][..],
+            Located::new(
+                Expression::BinaryOperation(
+                    BinOp::Add,
+                    Box::new(Located::new(
+                        Expression::BinaryOperation(
+                            BinOp::Add,
+                            Box::new(Located::new(Expression::Variable(a_id.0.clone()), loc(0))),
+                            Box::new(Located::new(Expression::Variable(b_id.0.clone()), loc(1))),
+                        ),
+                        loc(0)
+                    )),
+                    Box::new(Located::new(Expression::Variable(c_id.0.clone()), loc(2))),
+                ),
+                loc(0)
+            )
+        ))
+    );
+
+    // Test `a, b, c` is `((a, b), c)`
+    let comma_chain_tokens = &[
+        LexToken(Token::Id(a_id.clone()), loc(0)),
+        LexToken(Token::Comma, FileLocation::Unknown),
+        LexToken(Token::Id(b_id.clone()), loc(1)),
+        LexToken(Token::Comma, FileLocation::Unknown),
+        LexToken(Token::Id(c_id.clone()), loc(2)),
+        LexToken(Token::Semicolon, FileLocation::Unknown),
+    ];
+    let comma_chain_expr = expr(comma_chain_tokens);
+    assert_eq!(
+        comma_chain_expr,
+        Ok((
+            &[LexToken(Token::Semicolon, FileLocation::Unknown)][..],
+            Located::new(
+                Expression::BinaryOperation(
+                    BinOp::Sequence,
+                    Box::new(Located::new(
+                        Expression::BinaryOperation(
+                            BinOp::Sequence,
+                            Box::new(Located::new(Expression::Variable(a_id.0.clone()), loc(0))),
+                            Box::new(Located::new(Expression::Variable(b_id.0.clone()), loc(1))),
+                        ),
+                        loc(0)
+                    )),
+                    Box::new(Located::new(Expression::Variable(c_id.0.clone()), loc(2))),
+                ),
+                loc(0)
+            )
+        ))
+    );
+
+    // Test `a ? b ? c : d : e ? f : g` is `a ? (b ? c : d) : (e ? f : g)`
+    let nested_ternary_tokens = &[
+        LexToken(Token::Id(a_id.clone()), loc(0)),
+        LexToken(Token::QuestionMark, FileLocation::Unknown),
+        LexToken(Token::Id(b_id.clone()), loc(1)),
+        LexToken(Token::QuestionMark, FileLocation::Unknown),
+        LexToken(Token::Id(c_id.clone()), loc(2)),
+        LexToken(Token::Colon, FileLocation::Unknown),
+        LexToken(Token::Id(d_id.clone()), loc(3)),
+        LexToken(Token::Colon, FileLocation::Unknown),
+        LexToken(Token::Id(e_id.clone()), loc(4)),
+        LexToken(Token::QuestionMark, FileLocation::Unknown),
+        LexToken(Token::Id(f_id.clone()), loc(5)),
+        LexToken(Token::Colon, FileLocation::Unknown),
+        LexToken(Token::Id(g_id.clone()), loc(6)),
+        LexToken(Token::Semicolon, FileLocation::Unknown),
+    ];
+    let comma_chain_expr = expr(nested_ternary_tokens);
+    assert_eq!(
+        comma_chain_expr,
+        Ok((
+            &[LexToken(Token::Semicolon, FileLocation::Unknown)][..],
+            Located::new(
+                Expression::TernaryConditional(
+                    Box::new(Located::new(Expression::Variable(a_id.0), loc(0))),
+                    Box::new(Located::new(
+                        Expression::TernaryConditional(
+                            Box::new(Located::new(Expression::Variable(b_id.0), loc(1))),
+                            Box::new(Located::new(Expression::Variable(c_id.0), loc(2))),
+                            Box::new(Located::new(Expression::Variable(d_id.0), loc(3))),
+                        ),
+                        loc(1)
+                    )),
+                    Box::new(Located::new(
+                        Expression::TernaryConditional(
+                            Box::new(Located::new(Expression::Variable(e_id.0), loc(4))),
+                            Box::new(Located::new(Expression::Variable(f_id.0), loc(5))),
+                            Box::new(Located::new(Expression::Variable(g_id.0), loc(6))),
+                        ),
+                        loc(4)
+                    )),
+                ),
+                loc(0)
             )
         ))
     );
